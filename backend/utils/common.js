@@ -205,8 +205,9 @@ const notFound = () => returnResult(false, 404, "Document not found.");
 // (isActive = false -> status 'I') and records who did it and when. A deleted
 // document (status 'D') is never matched, so it can't be brought back this way.
 // One atomic update, so two admins clicking at once can't overwrite each other.
-// The updated document is in meta.document.
-const toggleActiveStatus = async (Model, id, userId, isActive, vendorId = null) => {
+// extraFilter narrows the match further (e.g. { masterId } - a value only
+// through its own master). The updated document is in meta.document.
+const toggleActiveStatus = async (Model, id, userId, isActive, vendorId = null, extraFilter = {}) => {
   const failure = checkIdAndModel(Model, id);
   if (failure) return failure;
 
@@ -216,7 +217,7 @@ const toggleActiveStatus = async (Model, id, userId, isActive, vendorId = null) 
 
   // auditUserId: who to record in AuditLog (see models/plugins/auditPlugin.js).
   const document = await Model.findOneAndUpdate(
-    { ...buildIdFilter(id, vendorId), status: { $ne: 'D' } },
+    { ...extraFilter, ...buildIdFilter(id, vendorId), status: { $ne: 'D' } },
     { $set: update },
     { returnDocument: 'after', auditUserId: userId }
   );
@@ -225,13 +226,14 @@ const toggleActiveStatus = async (Model, id, userId, isActive, vendorId = null) 
   return returnResult(true, 200, isActive ? "Marked as active." : "Marked as inactive.", { document });
 };
 
-// Soft delete - sets status to 'D'. The deleted document is in meta.document.
-const softDelete = async (Model, id, userId, vendorId = null) => {
+// Soft delete - sets status to 'D'. extraFilter as in toggleActiveStatus.
+// The deleted document is in meta.document.
+const softDelete = async (Model, id, userId, vendorId = null, extraFilter = {}) => {
   const failure = checkIdAndModel(Model, id);
   if (failure) return failure;
 
   const document = await Model.findOneAndUpdate(
-    { ...buildIdFilter(id, vendorId), status: { $ne: 'D' } },
+    { ...extraFilter, ...buildIdFilter(id, vendorId), status: { $ne: 'D' } },
     { $set: { status: 'D', deletedBy: userId, deletedDate: new Date() } },
     { returnDocument: 'after', auditUserId: userId }
   );

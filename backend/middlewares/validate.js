@@ -30,7 +30,9 @@ const validate = (schema, property = "body") => {
       return sendError(res, 400, "Validation failed", errors);
     }
 
-    req[property] = value;
+    // Express 5 makes req.query a getter, so a plain assignment would be
+    // silently ignored there - defined as a normal property instead.
+    Object.defineProperty(req, property, { value, writable: true, configurable: true, enumerable: true });
     next();
   };
 };

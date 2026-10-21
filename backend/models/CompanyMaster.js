@@ -67,6 +67,29 @@ const companyMasterSchema = new mongoose.Schema({
         default: 'This feature is not enabled for your account. Please contact support.'
     },
 
+    // ---- Master module ----------------------------------------------------
+    // The vendor's own dropdown lists (models/Master.js). Off until the
+    // platform owner switches it on for this vendor.
+    isMasterModuleFeatureOn: {
+        type: Boolean,
+        default: false
+    },
+    // How many masters / values per master the vendor may have (active +
+    // inactive; deleted ones don't count). No default on purpose: set per
+    // vendor - while empty, nothing can be created.
+    numberOfMastersAllowed: {
+        type: Number,
+        min: 0,
+        validate: { validator: (value) => value === null || Number.isInteger(value), message: 'numberOfMastersAllowed must be a whole number' },
+        default: null
+    },
+    numberOfValuesAllowedInMaster: {
+        type: Number,
+        min: 0,
+        validate: { validator: (value) => value === null || Number.isInteger(value), message: 'numberOfValuesAllowedInMaster must be a whole number' },
+        default: null
+    },
+
     // ---- Storage ----------------------------------------------------------
     // Where this vendor's images go. null = WebsiteMaster.mainImageService
     // (with the platform's own account). Overridden for everyone while

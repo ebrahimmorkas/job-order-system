@@ -14,6 +14,8 @@ const WEBSITE_MASTER = {
     // Login rate limiting
     maxLoginAttempts: 5,
     loginLockoutMinutes: 15,
+    // Feature switches - each also has to be on in the vendor's CompanyMaster
+    isMasterModuleFeatureOn: true,
     // Image storage - 'local' = this server's disk
     mainImageService: 'local',
     enforceMainImageService: false

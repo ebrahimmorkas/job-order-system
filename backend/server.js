@@ -20,6 +20,8 @@ const authenticate = require('./middlewares/authenticate');
 const authRoutes = require('./routes/authRoutes');
 const publicRoutes = require('./routes/publicRoutes');
 const companySettingsRoutes = require('./routes/companySettingsRoutes');
+const featureAccessRoutes = require('./routes/featureAccessRoutes');
+const masterRoutes = require('./routes/masterRoutes');
 const storageProviderConfig = require('./config/storageProviderConfig');
 
 // Every model must carry the audit history (or be listed as exempt) - refuse
@@ -83,6 +85,8 @@ app.use('/api/public', publicRoutes);
 app.use('/api', authenticate);
 
 app.use('/api/company-settings', companySettingsRoutes);
+app.use('/api/feature-access', featureAccessRoutes);
+app.use('/api/masters', masterRoutes);
 
 // No route matched: the same JSON shape as every other error, instead of
 // Express's default HTML page.

@@ -1,10 +1,11 @@
-import { DashboardIcon, UsersIcon, CompanySettingsIcon } from './icons';
+import { DashboardIcon, MastersIcon, UsersIcon, CompanySettingsIcon } from './icons';
 
 // The sidebar's default menu. Add each new module here as it is built.
 // featureFlag (optional) names a feature that must be on - see
 // filterNavItemsByFeatureAccess below.
 export const DEFAULT_NAV_ITEMS = [
   { key: 'dashboard', label: 'Dashboard', icon: DashboardIcon },
+  { key: 'masters', label: 'Masters', icon: MastersIcon, featureFlag: 'isMasterModuleFeatureOn' },
   { key: 'users', label: 'Users', icon: UsersIcon, featureFlag: 'isRbacFeatureOn' },
   { key: 'companySettings', label: 'Company Settings', icon: CompanySettingsIcon },
 ];

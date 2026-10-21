@@ -23,6 +23,35 @@ name, login tagline) and its owner login (password from `SEED_ADMIN_PASSWORD`).
 Safe to re-run: an existing vendor, Company Settings or owner is left as it
 is. WebsiteMaster and Company Master, however, get the seed's values again.
 
+## Feature switches
+
+A feature works for a vendor only when it is on in **WebsiteMaster** (for the
+whole platform) **and** in that vendor's **CompanyMaster**. While it is off on
+either side, every request of that feature is refused and the frontend hides
+it (`GET /api/feature-access`). The flags are listed in
+`constants/featureConstants.js`.
+
+| Feature | Flag | Also needs (CompanyMaster) |
+| --- | --- | --- |
+| Masters | `isMasterModuleFeatureOn` | `numberOfMastersAllowed`, `numberOfValuesAllowedInMaster` |
+
+## Masters
+
+A master is a vendor's own dropdown list for the job order form, e.g. "My
+Services" with the values Polishing, Cutting, Edging.
+
+- Master: `name` (unique per vendor, ignoring capital letters), `shortName`
+  (optional, unique the same way), `isMultiselectAllowed`, `precedence`
+  (order on the job order form).
+- Values (`MasterValue`): `name` (unique inside the master), `precedence`.
+- Masters and values are each active / inactive, and deleted softly
+  (`status: 'D'`). Deleting a master deletes its values. A deleted name can be
+  used again. A master always keeps at least one value.
+- Limits come only from CompanyMaster and count active + inactive (never
+  deleted). They have no default: while either is empty, nothing can be
+  created.
+- Needs MongoDB 6.0 or newer (the unique-name indexes).
+
 ## Image storage (logos and later images)
 
 Where an upload goes:
@@ -63,6 +92,20 @@ uploader's file name is never used. Replacing an image deletes the old file.
 | POST | `/api/auth/refresh-token` | the refresh-token cookie |
 | POST | `/api/auth/logout` | the refresh-token cookie |
 | PUT | `/api/company-settings/logo` | owner - multipart, image in the `logo` field |
+| GET | `/api/feature-access` | logged in - which features are on |
+| GET / POST | `/api/masters` | owner - list (search, status, page, limit) / create with values |
+| GET / PUT / DELETE | `/api/masters/:id` | owner - one master with its values / save details and the full values list / delete |
+| PATCH | `/api/masters/:id/status` | owner - `{ isActive }` |
+| POST | `/api/masters/bulk` | owner - `{ action: activate|deactivate|delete, ids }` |
+| PATCH | `/api/masters/:id/move` | owner - `{ direction: up|down }`, one place in the whole list |
+| PATCH | `/api/masters/:id/values/:valueId/move` | owner - `{ direction: up|down }`, one place inside the master |
+| DELETE | `/api/masters/:id/values/:valueId` | owner - delete a value |
+| PATCH | `/api/masters/:id/values/:valueId/status` | owner - `{ isActive }` |
+
+`PUT /api/masters/:id` takes `{ name, shortName, isMultiselectAllowed, values }`.
+`values` is the whole list in order: `{ _id, name, status }` for a value that
+already exists, `{ name, status }` for a new one. Existing values left out are
+deleted. Everything is checked first, then saved together.
 
 After `maxLoginAttempts` wrong passwords in a row (WebsiteMaster, default 5),
 that login is locked for `loginLockoutMinutes` (default 15).

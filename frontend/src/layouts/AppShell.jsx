@@ -1,13 +1,17 @@
-import { useState } from 'react';
-import Sidebar, { DEFAULT_NAV_ITEMS } from '../components/ui/Sidebar';
+import { useMemo, useState } from 'react';
+import Sidebar, { DEFAULT_NAV_ITEMS, filterNavItemsByFeatureAccess } from '../components/ui/Sidebar';
 import EmptyState from '../components/common/EmptyState';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { useBranding } from '../features/branding/hooks/useBranding';
+import { useConfirmLeave } from '../components/common/UnsavedChanges';
+import { useFeatureAccess } from '../features/featureAccess/hooks/useFeatureAccess';
 import DashboardPage from '../features/dashboard/pages/DashboardPage';
+import MastersPage from '../features/masters/pages/MastersPage';
 
 // Sidebar key -> page. Keys without a page yet show a placeholder.
 const PAGES = {
   dashboard: DashboardPage,
+  masters: MastersPage,
 };
 
 /**
@@ -17,20 +21,26 @@ const PAGES = {
 const AppShell = () => {
   const { user, logout } = useAuth();
   const { branding } = useBranding();
+  const featureAccess = useFeatureAccess();
+  // Leaving a page with unsaved changes (menu, logout) asks first.
+  const confirmLeave = useConfirmLeave();
   const [activeKey, setActiveKey] = useState('dashboard');
+  // Menu items of switched-off features are hidden.
+  const navItems = useMemo(() => filterNavItemsByFeatureAccess(DEFAULT_NAV_ITEMS, featureAccess), [featureAccess]);
 
   const Page = PAGES[activeKey];
-  const activeLabel = DEFAULT_NAV_ITEMS.find((item) => item.key === activeKey)?.label;
+  const activeLabel = navItems.find((item) => item.key === activeKey)?.label;
 
   return (
     <div className="min-h-screen bg-gray-50 md:flex">
       <Sidebar
         brand={branding.companyName || ''}
         logoUrl={branding.logoUrl}
+        items={navItems}
         activeKey={activeKey}
-        onNavigate={setActiveKey}
+        onNavigate={(key) => confirmLeave(() => setActiveKey(key))}
         user={user}
-        onLogout={logout}
+        onLogout={() => confirmLeave(logout)}
       />
       <main className="flex-1 min-w-0 px-4 py-6 sm:px-6 lg:px-8">
         {Page ? <Page /> : <EmptyState title={activeLabel} description="This section is coming soon." />}

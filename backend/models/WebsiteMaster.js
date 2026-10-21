@@ -30,6 +30,12 @@ const websiteMasterSchema = mongoose.Schema({
         default: 15
     },
 
+    // ---- Feature switches (same names in CompanyMaster) --------------------
+    isMasterModuleFeatureOn: {
+        type: Boolean,
+        default: true
+    },
+
     // ---- Storage ----------------------------------------------------------
     // The platform's default image storage: used (with the platform's own
     // .env account) by every vendor whose CompanyMaster.imageService is not
