@@ -22,6 +22,11 @@ export default defineConfig({
         // how the backend tells vendors apart (vendorDetection).
         changeOrigin: false,
       },
+      // Uploaded files stored on the server itself (local storage, e.g. logos).
+      '/uploads': {
+        target: 'http://localhost:5000',
+        changeOrigin: false,
+      },
     },
   },
 })

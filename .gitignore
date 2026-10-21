@@ -33,6 +33,9 @@ pnpm-debug.log*
 # Uploads (server-side file storage)
 uploads/
 
+# Real storage-account credentials for scripts/manageVendorStorageCredentials.js
+backend/seeds/private/
+
 # OS files
 .DS_Store
 Thumbs.db

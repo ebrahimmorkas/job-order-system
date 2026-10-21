@@ -19,7 +19,8 @@ const authenticate = async (req, res, next) => {
       return sendError(res, 401, "Please Login Again");
     }
 
-    const user = await User.findById(decoded.userId);
+    // Runs on every request: only the three fields it needs, as a plain object.
+    const user = await User.findById(decoded.userId).select("role status vendorId").lean();
 
     if (!user || user.status === "D")
       return sendError(res, 401, "User not found");

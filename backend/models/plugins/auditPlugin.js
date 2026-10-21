@@ -151,7 +151,10 @@ const auditPlugin = (schema, { vendorScoped = true, exclude = [] } = {}) => {
     // Fields a model already defines itself (e.g. a unique vendorId) are kept as they are.
     const fields = { ...auditFields };
     if (vendorScoped) {
-        fields.vendorId = { type: mongoose.Types.ObjectId, required: true, index: true };
+        // No index of its own: the { vendorId, status } index below already
+        // serves every query on vendorId, and each extra index costs RAM and
+        // slows every write.
+        fields.vendorId = { type: mongoose.Types.ObjectId, required: true };
     }
     for (const [path, definition] of Object.entries(fields)) {
         if (!schema.path(path)) schema.add({ [path]: definition });

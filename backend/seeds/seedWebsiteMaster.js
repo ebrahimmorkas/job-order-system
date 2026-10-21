@@ -13,7 +13,10 @@ const WEBSITE_MASTER = {
     temporaryFeatureOffMessage: 'This feature is temporarily unavailable. Please check back later.',
     // Login rate limiting
     maxLoginAttempts: 5,
-    loginLockoutMinutes: 15
+    loginLockoutMinutes: 15,
+    // Image storage - 'local' = this server's disk
+    mainImageService: 'local',
+    enforceMainImageService: false
 };
 
 async function seedWebsiteMaster() {

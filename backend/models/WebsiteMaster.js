@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const auditPlugin = require('./plugins/auditPlugin');
 const cacheInvalidationPlugin = require('./plugins/cacheInvalidationPlugin');
 const redisKeys = require('../utils/redisKeys');
+const { VALID_STORAGE_PROVIDERS } = require('../constants/storageConstants');
 
 // Platform-wide switchboard - a single document for the whole website. A
 // feature works for a vendor only when it is on here AND in that vendor's
@@ -27,6 +28,21 @@ const websiteMasterSchema = mongoose.Schema({
         type: Number,
         min: 1,
         default: 15
+    },
+
+    // ---- Storage ----------------------------------------------------------
+    // The platform's default image storage: used (with the platform's own
+    // .env account) by every vendor whose CompanyMaster.imageService is not
+    // set, and by every vendor while enforceMainImageService is on.
+    mainImageService: {
+        type: String,
+        enum: VALID_STORAGE_PROVIDERS,
+        required: true,
+        default: 'local'
+    },
+    enforceMainImageService: {
+        type: Boolean,
+        default: false
     }
 }, {
   timestamps: true

@@ -11,7 +11,19 @@ npm run build    # production build in dist/
 ```
 
 The backend must be running too (`cd ../backend && npm run dev`, port 5000).
-In development, Vite forwards every `/api` request to it.
+In development, Vite forwards every `/api` request (and `/uploads`, the
+images stored on the server itself, such as logos) to it.
+
+## What the app shows
+
+- **Login page** - the company name, login tagline and logo come from the
+  vendor's Company Settings (`GET /api/public/branding`); nothing about the
+  company is written in the code. The company name is also the browser tab
+  title, and the logo the tab icon. Without a logo, the first letter of the
+  name is shown instead.
+- **After login** - the sidebar (company name + logo, the user, logout) and
+  the dashboard. Menu items whose page is not built yet show "coming soon".
+- An unknown host name shows "No account is set up for this domain".
 
 ## Vendors in local development
 
@@ -30,7 +42,8 @@ To try a second vendor on the same computer:
    or use a `*.localhost` name such as `vendor1.localhost`, which needs no
    hosts-file entry. New names must also be added to `allowedHosts` in
    `vite.config.js`.
-2. Seed it: `cd ../backend && SEED_VENDOR_DOMAIN=localhost1 npm run seed`
+2. Seed it: `cd ../backend && SEED_VENDOR_DOMAIN=localhost1 SEED_COMPANY_NAME="Company name" npm run seed`
+   (`SEED_LOGIN_TAGLINE` is optional).
 3. Open `http://localhost1:5173`.
 
 ## Folders
@@ -46,8 +59,10 @@ To try a second vendor on the same computer:
   `navItems.jsx`).
 - `src/components/errors/` - the error screens (404, status errors, and the
   full-page 500 shown for any unexpected server error).
-- `src/features/<feature>/` - one folder per feature: its `api/`, `context/`
-  and `hooks/`.
+- `src/features/<feature>/` - one folder per feature: its `api/`, `context/`,
+  `hooks/` and `pages/`. `auth` (session, login page), `branding` (company
+  name / tagline / logo, loaded once per page load) and `dashboard`.
+- `src/layouts/AppShell.jsx` - the logged-in layout: sidebar + current page.
 - `src/utils/apiClient.js` - every API call goes through it (access token,
   refresh on 401, error handling).
 - `src/utils/validations.js` - field validators for InputField/TextArea/Form

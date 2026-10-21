@@ -13,11 +13,20 @@ const getInitials = (label) => {
 
 const capitalize = (value) => (value ? value.charAt(0).toUpperCase() + value.slice(1) : '');
 
-const BrandMark = ({ brand, subtitle }) => (
-  <div className="min-h-16 py-2 flex items-center gap-2.5 px-4 shrink-0">
-    <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-base shrink-0 ${theme.brand.mark}`}>
-      {brand?.[0]?.toUpperCase() || 'A'}
+// The company logo when there is one, otherwise the first letter of the name.
+// The image is decorative - the name is always shown next to it.
+const BrandLogo = ({ brand, logoUrl, className }) =>
+  logoUrl ? (
+    <img src={logoUrl} alt="" className={`object-contain shrink-0 ${className}`} />
+  ) : (
+    <div className={`flex items-center justify-center font-bold shrink-0 ${theme.brand.mark} ${className}`}>
+      {brand?.[0]?.toUpperCase()}
     </div>
+  );
+
+const BrandMark = ({ brand, logoUrl, subtitle }) => (
+  <div className="min-h-16 py-2 flex items-center gap-2.5 px-4 shrink-0">
+    <BrandLogo brand={brand} logoUrl={logoUrl} className="w-9 h-9 rounded-xl text-base" />
     <div className="min-w-0">
       {/* A long company name wraps to two lines before it is cut off; the full name is in the tooltip. */}
       <p title={brand} className={`text-base font-bold leading-tight line-clamp-2 break-words ${theme.brand.text}`}>{brand}</p>
@@ -88,7 +97,8 @@ const UserFooter = ({ user, onLogout }) => {
  * (the hamburger trigger itself only exists below the md breakpoint).
  *
  * @param {Object} props
- * @param {string} [props.brand] - Text shown as the brand/logo.
+ * @param {string} [props.brand] - Company name shown at the top.
+ * @param {string|null} [props.logoUrl] - Company logo; the name's first letter is shown when absent.
  * @param {string} [props.subtitle] - Small text shown under the brand name.
  * @param {Array<{key: string, label: string, icon?: Function}>} [props.items] - Nav links, defaults to DEFAULT_NAV_ITEMS.
  * @param {string} props.activeKey - Key of the currently active item.
@@ -97,7 +107,8 @@ const UserFooter = ({ user, onLogout }) => {
  * @param {Function} [props.onLogout] - Called when the footer's logout button is clicked.
  */
 const Sidebar = ({
-  brand = 'Job Order',
+  brand = '',
+  logoUrl = null,
   subtitle,
   items = DEFAULT_NAV_ITEMS,
   activeKey,
@@ -147,9 +158,7 @@ const Sidebar = ({
         className={`md:hidden flex items-center justify-between px-4 h-14 ${theme.sidebar.background} border-b ${theme.sidebar.border}`}
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 ${theme.brand.mark}`}>
-            {brand?.[0]?.toUpperCase() || 'A'}
-          </div>
+          <BrandLogo brand={brand} logoUrl={logoUrl} className="w-8 h-8 rounded-lg text-sm" />
           <span title={brand} className={`text-base font-bold leading-tight line-clamp-2 break-words ${theme.brand.text}`}>{brand}</span>
         </div>
         <button
@@ -168,7 +177,7 @@ const Sidebar = ({
       <aside
         className={`hidden md:flex md:flex-col md:w-64 md:shrink-0 md:h-screen md:sticky md:top-0 ${theme.sidebar.background} border-r ${theme.sidebar.border}`}
       >
-        <BrandMark brand={brand} subtitle={subtitle} />
+        <BrandMark brand={brand} logoUrl={logoUrl} subtitle={subtitle} />
         <NavLinks items={items} activeKey={activeKey} onSelect={handleSelect} />
         <UserFooter user={user} onLogout={onLogout} />
       </aside>
@@ -194,9 +203,7 @@ const Sidebar = ({
         >
           <div className={`h-14 flex items-center justify-between px-4 border-b ${theme.drawer.border} shrink-0`}>
             <div className="flex items-center gap-2.5">
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 ${theme.brand.mark}`}>
-                {brand?.[0]?.toUpperCase() || 'A'}
-              </div>
+              <BrandLogo brand={brand} logoUrl={logoUrl} className="w-8 h-8 rounded-lg text-sm" />
               <span className={`text-base font-bold ${theme.brand.text}`}>{brand}</span>
             </div>
             <button

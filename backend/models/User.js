@@ -3,10 +3,10 @@ const auditPlugin = require('./plugins/auditPlugin');
 const { ROLES, ROLE_VALUES } = require('../constants/roleConstants');
 
 const userSchema = mongoose.Schema({
+    // Indexed through the { vendorId, username / email / phone_no } indexes below.
     vendorId: {
         type: mongoose.Types.ObjectId,
-        required: true,
-        index: true
+        required: true
     },
     name: {
         type: String,
@@ -34,11 +34,11 @@ const userSchema = mongoose.Schema({
         default: 'local',
         required: true
     },
+    // For Google sign-in (not built yet). Add its index together with that
+    // feature - indexing it now would store an entry for every user.
     googleId: {
         type: String,
-        default: null,
-        index: true,
-        sparse: true // allows multiple docs with googleId: null without violating uniqueness if you later add unique: true
+        default: null
     },
     // ----------------------------------------------------------------
     phone_no: {

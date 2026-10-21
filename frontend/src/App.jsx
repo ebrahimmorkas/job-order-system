@@ -1,6 +1,24 @@
-import { NotFoundPage } from './components/errors'
+import { NotFoundPage, StatusErrorPage } from './components/errors'
+import Spinner from './components/common/Spinner'
+import { useAuth } from './features/auth/hooks/useAuth'
+import { useBranding } from './features/branding/hooks/useBranding'
+import LoginPage from './features/auth/pages/LoginPage'
+import AppShell from './layouts/AppShell'
 
-// No pages yet - every path shows the 404 page until routes are added.
-const App = () => <NotFoundPage />
+// No router yet: the app lives at "/" - the login screen until logged in,
+// then the shell. Any other path is a 404 once logged in.
+const App = () => {
+  const { isAuthenticated, isLoading } = useAuth()
+  const { isLoading: isBrandingLoading, error: brandingError, retry } = useBranding()
+
+  // e.g. 404 "No account is set up for this domain", or the server unreachable.
+  if (brandingError) {
+    return <StatusErrorPage statusCode={brandingError.statusCode} message={brandingError.message} onRetry={retry} />
+  }
+  if (isLoading || isBrandingLoading) return <Spinner size="lg" fullScreen />
+  if (!isAuthenticated) return <LoginPage />
+  if (window.location.pathname !== '/') return <NotFoundPage />
+  return <AppShell />
+}
 
 export default App

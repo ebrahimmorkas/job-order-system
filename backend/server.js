@@ -18,6 +18,9 @@ const ensureVendorDataCached = require('./middlewares/ensureVendorDataCached');
 const authenticate = require('./middlewares/authenticate');
 // Routes
 const authRoutes = require('./routes/authRoutes');
+const publicRoutes = require('./routes/publicRoutes');
+const companySettingsRoutes = require('./routes/companySettingsRoutes');
+const storageProviderConfig = require('./config/storageProviderConfig');
 
 // Every model must carry the audit history (or be listed as exempt) - refuse
 // to start otherwise.
@@ -50,7 +53,15 @@ app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
 
 connectDB();
 
-app.use(express.json());
+// Images stored on this server's disk (the 'local' storage provider). Served
+// before vendor detection, so a file costs no DB query; file names are random
+// and never reused, so browsers may cache them for good. In production nginx
+// should serve this folder itself.
+app.use(storageProviderConfig.local.baseUrl, express.static(storageProviderConfig.local.basePath, {
+    maxAge: '30d', immutable: true, index: false, dotfiles: 'deny', fallthrough: false
+}));
+
+app.use(express.json({ limit: '100kb' }));
 app.use(cookieParser(process.env.COOKIE_SECRET));
 
 // Apply middlewares to all routes
@@ -65,10 +76,13 @@ app.use(ensureVendorDataCached);
 
 // Public routes - the only ones reachable without logging in.
 app.use('/api/auth', authRoutes);
+app.use('/api/public', publicRoutes);
 
 // Everything mounted below this line requires a logged-in user. New routes go
 // below it unless they truly must be public.
 app.use('/api', authenticate);
+
+app.use('/api/company-settings', companySettingsRoutes);
 
 // No route matched: the same JSON shape as every other error, instead of
 // Express's default HTML page.

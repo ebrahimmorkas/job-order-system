@@ -66,7 +66,7 @@ const refreshToken = async (req, res) => {
         logInfo(1, 0, result.message, {});
         return sendSuccess(res, result.statusCode, result.message, { accessToken, user: formatAuthUserForResponse(user) });
     } catch (err) {
-        res.clearCookie('refreshToken', refreshTokenCookieOptions);
+        // The cookie is left alone: a transient server error must not log the user out.
         logException('Error while refreshing access token', err);
     }
 };

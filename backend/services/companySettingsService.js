@@ -1,18 +1,77 @@
 const CompanySettings = require('../models/CompanySettings');
+const imageUploadService = require('./imageUploadService');
+const { IMAGE_MODULES } = require('../constants/storageConstants');
+const common = require('../utils/common');
 const logger = require('../utils/logger');
 
 // The vendor's CompanySettings document, or null if it hasn't been created yet.
+// Used by ensureVendorDataCached to fill the cache.
 const fetchCompanySettingsByVendorId = async (vendorId) => {
-    logger.logInfo(null, null, 'Fetching company settings from DB', { vendorId });
-    const settings = await CompanySettings.findOne({ vendorId });
-    if (!settings) {
-        logger.logInfo(0, 1, 'Company settings not found', { vendorId });
-        return null;
+    try {
+        logger.logInfo(null, null, 'Fetching company settings from DB', { vendorId });
+        const settings = await CompanySettings.findOne({ vendorId }).lean();
+        if (!settings) {
+            logger.logInfo(0, 1, 'Company settings not found', { vendorId });
+            return null;
+        }
+        logger.logInfo(1, 0, 'Company settings fetched successfully', { vendorId });
+        return settings;
+    } catch (err) {
+        throw err;
     }
-    logger.logInfo(1, 0, 'Company settings fetched successfully', { vendorId });
-    return settings;
+};
+
+// What the login page shows before anyone is logged in - only these three,
+// never the rest of the settings. Read from the cached settings
+// (req.companySettingsData), so it costs no DB query. Fields not set up yet
+// come back as null and the page simply leaves them out.
+const getBranding = (companySettingsData) => {
+    try {
+        return common.returnResult(true, 200, 'Branding fetched successfully.', {
+            branding: {
+                companyName: companySettingsData?.companyName || null,
+                loginTagline: companySettingsData?.loginTagline || null,
+                logoUrl: companySettingsData?.logo?.url || null
+            }
+        });
+    } catch (err) {
+        throw err;
+    }
+};
+
+// Replaces the vendor's logo: store the new image, point the settings at it,
+// then delete the old one. If the settings can't be updated, the new image is
+// removed again so nothing is left orphaned. Success meta: { logoUrl }.
+const updateLogo = async ({ vendorId, userId, file, companyMasterData, websiteMasterData }) => {
+    try {
+        const upload = await imageUploadService.uploadImage({
+            vendorId, userId, module: IMAGE_MODULES.COMPANY_LOGO, file, companyMasterData, websiteMasterData
+        });
+        if (!upload.isSuccess) return upload;
+        const { image } = upload.meta;
+
+        const previous = await CompanySettings.findOneAndUpdate(
+            { vendorId },
+            { $set: { logo: { url: image.url, imageId: image._id } } },
+            { returnDocument: 'before', projection: { logo: 1 }, auditUserId: userId }
+        ).lean();
+
+        if (!previous) {
+            await imageUploadService.deleteImage({ vendorId, userId, imageId: image._id });
+            return common.returnResult(false, 404, 'Company settings have not been set up yet.');
+        }
+        if (previous.logo?.imageId) {
+            await imageUploadService.deleteImage({ vendorId, userId, imageId: previous.logo.imageId });
+        }
+
+        return common.returnResult(true, 200, 'Logo updated successfully.', { logoUrl: image.url });
+    } catch (err) {
+        throw err;
+    }
 };
 
 module.exports = {
-    fetchCompanySettingsByVendorId
+    fetchCompanySettingsByVendorId,
+    getBranding,
+    updateLogo
 };

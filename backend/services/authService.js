@@ -1,4 +1,6 @@
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const RefreshToken = require('../models/RefreshToken');
 const { generateAccessToken, generateRefreshToken, verifyRefreshToken, hashToken } = require('../utils/token');
@@ -9,75 +11,93 @@ const INACTIVE_ACCOUNT_MESSAGE = 'Your account has been deactivated. Please cont
 const lockedMessage = (minutes) =>
     `Too many failed login attempts. Please try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`;
 
+// Only what login and refresh need from a user - never the whole document.
+const AUTH_USER_FIELDS = '_id vendorId name username email role status authProvider password';
+
+const toAuthUser = (user) => {
+    try {
+        return { _id: user._id, name: user.name, username: user.username, email: user.email, role: user.role };
+    } catch (err) {
+        throw err;
+    }
+};
+
+// A real bcrypt hash of a random value, made once on first use. Compared
+// against when the user doesn't exist, so a wrong username takes as long as
+// a wrong password - otherwise the response time would tell an attacker which
+// usernames exist. Same cost factor as real passwords.
+let dummyPasswordHash = null;
+const getDummyPasswordHash = async () => {
+    try {
+        dummyPasswordHash ??= await bcrypt.hash(crypto.randomUUID(), Number(process.env.SALT_ROUNDS) || 10);
+        return dummyPasswordHash;
+    } catch (err) {
+        throw err;
+    }
+};
+
+// The refresh token's expiry, read from the token we just signed ourselves -
+// decode only, no second signature check.
+const refreshTokenExpiry = (refreshToken) => {
+    try {
+        return new Date(jwt.decode(refreshToken).exp * 1000);
+    } catch (err) {
+        throw err;
+    }
+};
+
 const loginUser = async ({ identifier, password }, deviceMeta, vendorId, websiteMasterData) => {
     try {
         if (!vendorId) {
             // Vendor detection fails
-            return common.returnResult(false, 401, `Invalid credentials`);
+            return common.returnResult(false, 401, 'Invalid credentials');
         }
         // username and email are stored lowercase; a phone number is unaffected.
         const normalizedIdentifier = String(identifier).trim().toLowerCase();
 
         const limits = loginAttemptService.getLimits(websiteMasterData);
+        const limitOn = limits.maxAttempts > 0;
         const attemptKey = { vendorId, identifier: normalizedIdentifier, ip: deviceMeta.ip };
-        if (limits.maxAttempts > 0) {
-            const minutesLeft = await loginAttemptService.getLockMinutesLeft(attemptKey);
-            if (minutesLeft > 0) {
-                return common.returnResult(false, 429, lockedMessage(minutesLeft));
-            }
+        const attempt = limitOn ? await loginAttemptService.getAttempt(attemptKey) : { exists: false, minutesLeft: 0 };
+        // Locked: refused before any user lookup or password hashing.
+        if (attempt.minutesLeft > 0) {
+            return common.returnResult(false, 429, lockedMessage(attempt.minutesLeft));
         }
-        const failLogin = async () => {
-            if (limits.maxAttempts > 0) await loginAttemptService.recordFailure(attemptKey, limits);
-            return common.returnResult(false, 401, 'Invalid credentials');
-        };
 
+        // One indexed read: each $or branch uses its own { vendorId, ... } unique index.
         const user = await User.findOne({
             vendorId,
             $or: [{ username: normalizedIdentifier }, { email: normalizedIdentifier }, { phone_no: normalizedIdentifier }],
             status: { $ne: 'D' }
-        });
+        }).select(AUTH_USER_FIELDS).lean();
 
-        if (!user) {
-            return failLogin();
+        const canUsePassword = !!user && user.authProvider === 'local' && !!user.password;
+        const isPasswordValid = await bcrypt.compare(password, canUsePassword ? user.password : await getDummyPasswordHash());
+        if (!canUsePassword || !isPasswordValid) {
+            if (limitOn) await loginAttemptService.recordFailure(attemptKey, limits);
+            return common.returnResult(false, 401, 'Invalid credentials');
         }
 
-        if (user.authProvider !== 'local' || !user.password) {
-            return failLogin();
-        }
-
-        const isPasswordValid = await bcrypt.compare(password, user.password);
-        if (!isPasswordValid) {
-            return failLogin();
-        }
-
-        // The password was right, so the count starts again from zero.
-        await loginAttemptService.clearFailures(attemptKey);
+        // The password was right, so the count starts again - only if there is one.
+        if (attempt.exists) await loginAttemptService.clearFailures(attemptKey);
 
         // Checked only after the password, so it never reveals which accounts exist.
         if (user.status === 'I') {
             return common.returnResult(false, 403, INACTIVE_ACCOUNT_MESSAGE);
         }
 
-        const accessToken = generateAccessToken({
-            userId: user._id,
-            role: user.role,
-            vendorId: user.vendorId
-        });
-
+        const accessToken = generateAccessToken({ userId: user._id, role: user.role, vendorId: user.vendorId });
         const refreshToken = generateRefreshToken({ userId: user._id });
-        const decodedRefresh = verifyRefreshToken(refreshToken);
 
         await RefreshToken.create({
             userId: user._id,
             tokenHash: hashToken(refreshToken),
             userAgent: deviceMeta.userAgent,
             ip: deviceMeta.ip,
-            expiresAt: new Date(decodedRefresh.exp * 1000)
+            expiresAt: refreshTokenExpiry(refreshToken)
         });
 
-        return common.returnResult(true, 200, `Login Success`, { accessToken, refreshToken,
-            user: { _id: user._id, name: user.name, username: user.username, email: user.email, role: user.role }
-        });
+        return common.returnResult(true, 200, 'Login successful', { accessToken, refreshToken, user: toAuthUser(user) });
     } catch (err) {
         throw err;
     }
@@ -115,7 +135,7 @@ const REFRESH_LOST_RESPONSE_GRACE_MS = 30 * 60 * 1000;
  * - Verify JWT signature/expiry of the incoming refresh token.
  * - Find the session by the token's hash - either as its current token, or as the token it
  *   most recently rotated away from (still inside REFRESH_LOST_RESPONSE_GRACE_MS).
- * - Rotate with one atomic findOneAndUpdate guarded on the state we just read, so of any
+ * - Rotate with one atomic updateOne guarded on the state we just read, so of any
  *   number of concurrent refreshes exactly one rotates. Losers - and anyone presenting the
  *   previous token within REFRESH_CONCURRENT_WINDOW_MS of a rotation, whose new cookie is
  *   already on its way - get an access token only (`refreshToken: null`): the cookie the
@@ -138,21 +158,17 @@ const refreshAccessToken = async (incomingRefreshToken, deviceMeta) => {
 
         const incomingHash = hashToken(incomingRefreshToken);
 
-        let session = await RefreshToken.findOne({
+        // One read finds the session whether the token is its current one or
+        // the one it just rotated away from (still inside the grace period).
+        const session = await RefreshToken.findOne({
             userId: decoded.userId,
-            tokenHash: incomingHash,
-            isValid: true
-        });
-        const isCurrentToken = !!session;
-
-        if (!session) {
-            session = await RefreshToken.findOne({
-                userId: decoded.userId,
-                previousTokenHash: incomingHash,
-                previousTokenExpiresAt: { $gt: new Date() },
-                isValid: true
-            });
-        }
+            isValid: true,
+            $or: [
+                { tokenHash: incomingHash },
+                { previousTokenHash: incomingHash, previousTokenExpiresAt: { $gt: new Date() } }
+            ]
+        }).select('tokenHash rotatedAt expiresAt').lean();
+        const isCurrentToken = !!session && session.tokenHash === incomingHash;
 
         if (!session) {
             return common.returnResult(false, 401, 'Session not found. Please login again');
@@ -163,7 +179,7 @@ const refreshAccessToken = async (incomingRefreshToken, deviceMeta) => {
             return common.returnResult(false, 401, 'Session expired. Please login again');
         }
 
-        const user = await User.findById(decoded.userId);
+        const user = await User.findById(decoded.userId).select('_id vendorId name username email role status').lean();
         if (!user || user.status === 'D') {
             await RefreshToken.deleteOne({ _id: session._id });
             return common.returnResult(false, 401, 'User not found or inactive');
@@ -184,7 +200,6 @@ const refreshAccessToken = async (incomingRefreshToken, deviceMeta) => {
 
         if (!isRacingRotation) {
             const candidateToken = generateRefreshToken({ userId: user._id });
-            const candidateDecoded = verifyRefreshToken(candidateToken);
 
             // Guard = exactly the state we read above. If anything rotated in between, this
             // matches nothing and we lose the race.
@@ -193,7 +208,7 @@ const refreshAccessToken = async (incomingRefreshToken, deviceMeta) => {
                 : { _id: session._id, tokenHash: session.tokenHash, previousTokenHash: incomingHash, isValid: true };
 
             const now = new Date();
-            const rotated = await RefreshToken.findOneAndUpdate(guard, {
+            const rotated = await RefreshToken.updateOne(guard, {
                 $set: {
                     tokenHash: hashToken(candidateToken),
                     // Rotating away from the current token -> it becomes the previous one.
@@ -202,14 +217,14 @@ const refreshAccessToken = async (incomingRefreshToken, deviceMeta) => {
                     previousTokenHash: isCurrentToken ? session.tokenHash : incomingHash,
                     previousTokenExpiresAt: new Date(now.getTime() + REFRESH_LOST_RESPONSE_GRACE_MS),
                     rotatedAt: now,
-                    expiresAt: new Date(candidateDecoded.exp * 1000),
+                    expiresAt: refreshTokenExpiry(candidateToken),
                     lastUsedAt: now,
                     userAgent: deviceMeta.userAgent,
                     ip: deviceMeta.ip
                 }
             });
 
-            if (rotated) {
+            if (rotated.modifiedCount === 1) {
                 newRefreshToken = candidateToken;
             } else {
                 // Lost the race (someone else rotated first) - or the session was just logged
@@ -232,7 +247,7 @@ const refreshAccessToken = async (incomingRefreshToken, deviceMeta) => {
             // null when this request did not rotate - the controller must then leave the
             // browser's cookie alone.
             refreshToken: newRefreshToken,
-            user: { _id: user._id, name: user.name, username: user.username, email: user.email, role: user.role }
+            user: toAuthUser(user)
         });
     } catch (err) {
         // Rotation is a single atomic update, so a failure here can never leave the session
