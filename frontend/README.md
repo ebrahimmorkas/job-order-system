@@ -35,9 +35,23 @@ To try a second vendor on the same computer:
 
 ## Folders
 
+- `src/components/common/` - the reusable building blocks every module uses:
+  Accordion, Alert, Autocomplete, Avatar, Badge, Breadcrumbs, BulkActionBar,
+  Button, Card, Checkbox, DatePicker, Divider, Dropdown, EmptyState,
+  FileUpload, Form, HtmlEditor, InputField, Menu, Modal, Pagination,
+  ProgressBar, Radio, SearchInput, Skeleton, Slider, Spinner, Stepper, Switch,
+  Table, Tabs, TextArea, Toast. Reuse these; when something is missing, add it
+  here as a new reusable component rather than inside one module.
+- `src/components/ui/Sidebar/` - the app's left-hand menu (menu items in
+  `navItems.jsx`).
 - `src/components/errors/` - the error screens (404, status errors, and the
   full-page 500 shown for any unexpected server error).
 - `src/features/<feature>/` - one folder per feature: its `api/`, `context/`
   and `hooks/`.
 - `src/utils/apiClient.js` - every API call goes through it (access token,
   refresh on 401, error handling).
+- `src/utils/validations.js` - field validators for InputField/TextArea/Form
+  (email, Indian mobile number, PIN code, password strength...).
+- `src/utils/searchFilter.js` - the matching used by SearchInput lists.
+- `src/utils/scrollLock.js` - the page-scroll lock shared by Modal and the
+  mobile Sidebar.
