@@ -1,0 +1,243 @@
+/**
+ * Shared fetch-based API client.
+ * Centralizes the base URL, auth header attachment, refresh-on-401 retry,
+ * and response/error normalization so every feature's api/ module can stay
+ * a thin wrapper.
+ */
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+
+// In-memory only - never persisted to localStorage/sessionStorage, so it can't be
+// read by injected scripts or extensions after the fact. Lost on reload by design;
+// AuthProvider re-mints it from the httpOnly refresh-token cookie on mount.
+let accessToken = null;
+
+export const getAccessToken = () => accessToken;
+export const setAccessToken = (token) => { accessToken = token; };
+export const clearAccessToken = () => { accessToken = null; };
+
+// A plain (non-httpOnly) localStorage flag mirroring "a refresh-token cookie
+// was issued at some point". The actual refresh token is httpOnly and can't
+// be read from JS, so this is only a hint - never trusted for security - that
+// lets AuthProvider skip the silent /auth/refresh-token call (and its 401)
+// for a browser that has never logged in, instead of firing it unconditionally
+// on every page load.
+const HAS_SESSION_KEY = 'jobOrder.hasSession';
+
+export const hasSessionHint = () => {
+  try {
+    return localStorage.getItem(HAS_SESSION_KEY) === '1';
+  } catch {
+    // Storage unavailable (private browsing, etc.) - fall back to always checking.
+    return true;
+  }
+};
+
+export const setSessionHint = () => {
+  try {
+    localStorage.setItem(HAS_SESSION_KEY, '1');
+  } catch {
+    // ignore - best effort only
+  }
+};
+
+export const clearSessionHint = () => {
+  try {
+    localStorage.removeItem(HAS_SESSION_KEY);
+  } catch {
+    // ignore - best effort only
+  }
+};
+
+/**
+ * A normalized error thrown for any non-success API response.
+ * Carries the HTTP status and any field-level `errors` array the backend sent.
+ */
+export class ApiError extends Error {
+  constructor(message, statusCode, errors = null, reference = null) {
+    super(message);
+    this.name = 'ApiError';
+    this.statusCode = statusCode;
+    this.errors = errors;
+    // The backend's error reference (ErrorLog.requestId) on an unexpected server error.
+    this.reference = reference;
+  }
+}
+
+// Notified when the backend reports an unexpected server error - a 500 sent by
+// its logException() with data.errorReference (backend/utils/logger.js).
+// ServerErrorScreen subscribes to this to show the full-page error.
+let serverErrorHandler = null;
+export const onServerError = (handler) => {
+  serverErrorHandler = handler;
+};
+
+// Returns the error reference and tells ServerErrorScreen when the response is
+// one of logException()'s 500s; null for any other failure.
+const reportServerError = (status, payload) => {
+  const reference = status >= 500 ? payload?.data?.errorReference : null;
+  if (!reference) return null;
+  serverErrorHandler?.({ reference, message: payload?.message || null, details: payload?.data?.errorDetails || null });
+  return reference;
+};
+
+// Endpoints that must never trigger a refresh-and-retry: refreshing on a failed
+// login makes no sense (there's no session yet), and retrying the refresh call
+// itself on its own 401 would loop forever.
+const AUTH_EXEMPT_PATHS = ['/auth/login', '/auth/refresh-token', '/auth/logout'];
+
+// Notified when a refresh attempt fails, i.e. the session is truly over.
+// AuthContext subscribes to this to clear its user state and show the login screen.
+let sessionExpiredHandler = null;
+export const onSessionExpired = (handler) => {
+  sessionExpiredHandler = handler;
+};
+
+// Dedupe concurrent refresh attempts: if several requests 401 at once, only one
+// refresh call goes out and every caller awaits the same in-flight promise.
+let refreshPromise = null;
+
+const performRefresh = async () => {
+  if (!refreshPromise) {
+    refreshPromise = fetch(`${API_BASE_URL}/auth/refresh-token`, {
+      method: 'POST',
+      credentials: 'include',
+    })
+      .then(async (res) => {
+        const payload = await res.json().catch(() => null);
+        if (!res.ok || !payload?.success) return null;
+        return payload.data?.accessToken || null;
+      })
+      .catch(() => null)
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+};
+
+/**
+ * Mints a fresh access token from the refresh-token cookie (shared with the
+ * 401 retry above). For callers that need a valid token without making an API
+ * request first.
+ * @returns {Promise<boolean>} whether a new token was obtained
+ */
+export const renewAccessToken = async () => {
+  const newToken = await performRefresh();
+  if (newToken) setAccessToken(newToken);
+  return !!newToken;
+};
+
+/**
+ * @param {string} path - Path relative to the API base URL, e.g. '/auth/login'
+ * @param {Object} options
+ * @param {string} options.method - HTTP method (default 'GET')
+ * @param {Object} options.body - Request body, JSON-serialized automatically
+ * @param {boolean} options.auth - Attach the Authorization: Bearer header (default true)
+ * @param {Object} options.headers - Additional headers
+ */
+export const apiRequest = async (path, { method = 'GET', body, auth = true, headers = {}, signal, _isRetry = false } = {}) => {
+  // FormData (file uploads) must NOT get a JSON Content-Type or be stringified -
+  // the browser needs to set its own multipart/form-data boundary.
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+  const requestHeaders = { ...(isFormData ? {} : { 'Content-Type': 'application/json' }), ...headers };
+
+  if (auth) {
+    const token = getAccessToken();
+    if (token) requestHeaders.Authorization = `Bearer ${token}`;
+  }
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers: requestHeaders,
+      credentials: 'include',
+      body: body !== undefined ? (isFormData ? body : JSON.stringify(body)) : undefined,
+      signal,
+    });
+  } catch (err) {
+    // A caller-initiated abort (e.g. a newer search keystroke) is not a network failure.
+    if (err?.name === 'AbortError') throw err;
+    throw new ApiError('Unable to reach the server. Please check your connection.', 0);
+  }
+
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+    // Non-JSON response body; fall through with payload = null
+  }
+
+  const isAuthExempt = AUTH_EXEMPT_PATHS.some((exempt) => path.startsWith(exempt));
+
+  if (response.status === 401 && auth && !_isRetry && !isAuthExempt) {
+    const newToken = await performRefresh();
+    if (newToken) {
+      setAccessToken(newToken);
+      return apiRequest(path, { method, body, auth, headers, signal, _isRetry: true });
+    }
+    clearAccessToken();
+    sessionExpiredHandler?.();
+  }
+
+  if (!response.ok || !payload?.success) {
+    const message = payload?.message || `Request failed with status ${response.status}`;
+    const reference = reportServerError(response.status, payload);
+    throw new ApiError(message, response.status, payload?.errors || null, reference);
+  }
+
+  return payload.data;
+};
+
+/**
+ * Downloads a binary response (e.g. a PDF or an export) with the same auth header and
+ * single refresh-and-retry on 401 as apiRequest. Errors still arrive as the API's
+ * usual JSON, so they surface as an ApiError with the server's message.
+ *
+ * @param {string} path - relative to the API base URL
+ * @param {Object} options
+ * @param {boolean} options.auth - attach the Authorization: Bearer header (default true)
+ * @returns {Promise<{ blob: Blob, filename: string|null }>} filename comes from Content-Disposition
+ */
+export const apiDownload = async (path, { auth = true, _isRetry = false } = {}) => {
+  const requestHeaders = {};
+  if (auth) {
+    const token = getAccessToken();
+    if (token) requestHeaders.Authorization = `Bearer ${token}`;
+  }
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, { headers: requestHeaders, credentials: 'include' });
+  } catch {
+    throw new ApiError('Unable to reach the server. Please check your connection.', 0);
+  }
+
+  if (response.status === 401 && auth && !_isRetry) {
+    const newToken = await performRefresh();
+    if (newToken) {
+      setAccessToken(newToken);
+      return apiDownload(path, { auth, _isRetry: true });
+    }
+    clearAccessToken();
+    sessionExpiredHandler?.();
+  }
+
+  if (!response.ok) {
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      // Non-JSON error body; fall back to the status text below
+    }
+    const reference = reportServerError(response.status, payload);
+    throw new ApiError(payload?.message || `Request failed with status ${response.status}`, response.status, payload?.errors || null, reference);
+  }
+
+  const disposition = response.headers.get('Content-Disposition') || '';
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
+  return { blob: await response.blob(), filename: match ? decodeURIComponent(match[1]) : null, headers: response.headers };
+};
+
+export default apiRequest;

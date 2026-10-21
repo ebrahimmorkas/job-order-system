@@ -1,0 +1,27 @@
+# Local services for development.
+#
+#   docker compose up -d redis     start Redis in the background
+#   docker compose ps              see whether it is running / healthy
+#   docker compose down            stop it (the data volume is kept)
+#
+# Then set IS_REDIS_SERVER_ON=1 in backend/.env (REDIS_URL defaults to
+# redis://localhost:6379, which matches the port below).
+services:
+  redis:
+    image: redis:7.4-alpine
+    container_name: job-order-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    # appendonly: the cache survives a container restart.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  redis-data:
