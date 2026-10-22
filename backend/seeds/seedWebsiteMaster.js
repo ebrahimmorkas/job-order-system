@@ -17,6 +17,7 @@ const WEBSITE_MASTER = {
     // Feature switches - each also has to be on in the vendor's CompanyMaster
     isMasterModuleFeatureOn: true,
     isControlsFeatureOn: true,
+    isTaxFeatureOn: true,
     // Image storage - 'local' = this server's disk
     mainImageService: 'local',
     enforceMainImageService: false

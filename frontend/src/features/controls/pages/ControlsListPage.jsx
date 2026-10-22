@@ -105,6 +105,8 @@ const ControlsListPage = ({ onCreate, onEdit, onClone }) => {
   const canCreate = assignedTypes.some((t) => !isTypeFull(limits, t));
   const isFiltered = debouncedSearch !== '' || status !== 'all' || type !== 'all';
   const limitedTypes = assignedTypes.filter((t) => limits.controlsAllowed[t] !== null);
+  // Tax is charged on a price only while tax is available to the vendor.
+  const isTaxed = (control) => control.isPriceIncludedInTax && limits?.isTaxAvailable === true;
 
   const toggleStatus = async (control) => {
     setBusyId(control._id);
@@ -217,7 +219,7 @@ const ControlsListPage = ({ onCreate, onEdit, onClone }) => {
       render: (control) => (
         <span className="inline-flex flex-wrap items-center gap-1.5">
           <Badge variant="blue" size="sm">{CONTROL_TYPES[control.type].label}</Badge>
-          {control.isPrice && <Badge variant={control.isPriceIncludedInTax ? 'green' : 'gray'} size="sm">{control.isPriceIncludedInTax ? 'Price + tax' : 'Price'}</Badge>}
+          {control.isPrice && (isTaxed(control) ? <Badge variant="green" size="sm">Price + tax</Badge> : <Badge variant="gray" size="sm">Price</Badge>)}
         </span>
       ),
     },

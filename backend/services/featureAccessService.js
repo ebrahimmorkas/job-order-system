@@ -1,5 +1,6 @@
 const common = require('../utils/common');
 const { assignedTypesOf } = require('./controlService');
+const { isTaxOn } = require('./taxSettingsService');
 const { FEATURE_FLAGS, FEATURE_FLAG_VALUES, FEATURE_READ_OVERRIDES } = require('../constants/featureConstants');
 
 // Which features are on for this vendor - on in WebsiteMaster AND in its
@@ -16,6 +17,8 @@ const getFeatureAccess = (websiteMasterData, companyMasterData) => {
         const assignedControls = featureAccess[FEATURE_FLAGS.CONTROLS] ? assignedTypes : [];
         featureAccess[FEATURE_FLAGS.CONTROLS] = assignedControls.length > 0;
         featureAccess.assignedControls = assignedControls;
+        // Tax: on only with at least one country assigned.
+        featureAccess[FEATURE_FLAGS.TAX] = isTaxOn(websiteMasterData, companyMasterData);
         // Whether the job order form gets the controls (same rule as the route).
         featureAccess.canFetchControlsForJobOrder = featureAccess[FEATURE_FLAGS.CONTROLS]
             || (websiteMasterData?.[FEATURE_FLAGS.CONTROLS] === true

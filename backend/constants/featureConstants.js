@@ -4,7 +4,8 @@
 // Add a new flag here and to both schemas.
 const FEATURE_FLAGS = {
     MASTER_MODULE: 'isMasterModuleFeatureOn',
-    CONTROLS: 'isControlsFeatureOn'
+    CONTROLS: 'isControlsFeatureOn',
+    TAX: 'isTaxFeatureOn'
 };
 
 // CompanyMaster-only switches that keep ONE read action of a feature

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node --watch server.js",
     "start": "node server.js",
-    "seed": "node seeds/seedVendor.js && node seeds/seedWebsiteMaster.js && node seeds/seedCompanyMaster.js && node seeds/seedCompanySettings.js && node seeds/seedUser.js"
+    "seed": "node seeds/seedVendor.js && node seeds/seedWebsiteMaster.js && node seeds/seedLocationMasters.js && node seeds/seedTaxMaster.js && node seeds/seedCompanyMaster.js && node seeds/seedCompanySettings.js && node seeds/seedUser.js"
   },
   "keywords": [],
   "author": "",

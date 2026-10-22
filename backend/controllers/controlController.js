@@ -14,6 +14,13 @@ const respond = (res, result, meta) => {
     return sendResult(res, result);
 };
 
+// The vendor's cached documents the limits come from (tax: are its details filled).
+const vendorData = (req) => ({
+    companyMasterData: req.companyMasterData,
+    websiteMasterData: req.websiteMasterData,
+    companySettingsData: req.companySettingsData
+});
+
 // GET /api/controls/for-job-order
 const getControlsForJobOrder = async (req, res) => {
     try {
@@ -27,7 +34,7 @@ const getControlsForJobOrder = async (req, res) => {
 // GET /api/controls
 const listControls = async (req, res) => {
     try {
-        const result = await controlService.listControls({ vendorId: req.vendorId, ...req.query, companyMasterData: req.companyMasterData });
+        const result = await controlService.listControls({ vendorId: req.vendorId, ...req.query, ...vendorData(req) });
         return sendResult(res, result);
     } catch (err) {
         logException('Error while fetching controls', err);
@@ -37,7 +44,7 @@ const listControls = async (req, res) => {
 // GET /api/controls/:id
 const getControl = async (req, res) => {
     try {
-        const result = await controlService.getControl({ vendorId: req.vendorId, id: req.params.id, companyMasterData: req.companyMasterData });
+        const result = await controlService.getControl({ vendorId: req.vendorId, id: req.params.id, ...vendorData(req) });
         return sendResult(res, result);
     } catch (err) {
         logException('Error while fetching the control', err);
@@ -48,7 +55,7 @@ const getControl = async (req, res) => {
 const createControl = async (req, res) => {
     try {
         const result = await controlService.createControl({
-            vendorId: req.vendorId, userId: req.user._id, data: req.body, companyMasterData: req.companyMasterData
+            vendorId: req.vendorId, userId: req.user._id, data: req.body, ...vendorData(req)
         });
         return respond(res, result, { vendorId: req.vendorId });
     } catch (err) {
@@ -60,7 +67,7 @@ const createControl = async (req, res) => {
 const updateControl = async (req, res) => {
     try {
         const result = await controlService.updateControl({
-            vendorId: req.vendorId, userId: req.user._id, id: req.params.id, data: req.body, companyMasterData: req.companyMasterData
+            vendorId: req.vendorId, userId: req.user._id, id: req.params.id, data: req.body, ...vendorData(req)
         });
         return respond(res, result, { vendorId: req.vendorId, controlId: req.params.id });
     } catch (err) {

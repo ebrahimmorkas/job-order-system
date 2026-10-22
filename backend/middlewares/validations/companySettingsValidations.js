@@ -1,4 +1,15 @@
 const Joi = require('joi');
+const { TAX_FIELD_KEY_PATTERN, TAX_FIELD_VALUE_MAX_LENGTH, ADDRESS_LINE_MAX_LENGTH, POSTAL_CODE_MAX_LENGTH } = require('../../constants/taxConstants');
+
+// The rules of each country (its tax fields, postal code, states, cities,
+// rates) are checked in services/taxSettingsService.js; only the fixed rules
+// are here.
+
+const objectId = (label) => Joi.string().hex().length(24).label(label)
+    .messages({ 'string.hex': `${label} is invalid`, 'string.length': `${label} is invalid` });
+
+// Optional text: '' and null are saved as null.
+const optionalText = (label, max) => Joi.string().trim().max(max).allow('', null).empty(['', null]).default(null).label(label);
 
 // PUT /api/company-settings/logo. The image itself (req.file) is checked by
 // middlewares/imageUpload.js (type, hard size cap, one file) and
@@ -6,6 +17,36 @@ const Joi = require('joi');
 // multipart body carries no text fields, so anything sent alongside is refused.
 const logoUploadSchema = Joi.object({}).unknown(false);
 
+// PUT /api/company-settings/general
+const generalSettingsSchema = Joi.object({
+    companyName: Joi.string().trim().min(2).max(100).required().label('Company name'),
+    loginTagline: optionalText('Login tagline', 150)
+});
+
+// PUT /api/company-settings/tax/:countryId
+const countryIdParamSchema = Joi.object({
+    countryId: objectId('Country id').required()
+});
+
+const taxDetailsSchema = Joi.object({
+    address: Joi.object({
+        line1: optionalText('Address line 1', ADDRESS_LINE_MAX_LENGTH),
+        line2: optionalText('Address line 2', ADDRESS_LINE_MAX_LENGTH),
+        stateId: objectId('State').allow(null).default(null),
+        cityId: objectId('City').allow(null).default(null),
+        postalCode: optionalText('Postal code', POSTAL_CODE_MAX_LENGTH)
+    }).required().label('Address'),
+    isTaxRegistered: Joi.boolean().default(false).label('Registered for tax'),
+    taxFieldValues: Joi.object()
+        .pattern(TAX_FIELD_KEY_PATTERN, Joi.string().trim().max(TAX_FIELD_VALUE_MAX_LENGTH).allow('', null))
+        .default({})
+        .label('Tax fields'),
+    defaultTaxId: objectId('Default rate').allow(null).default(null)
+});
+
 module.exports = {
-    logoUploadSchema
+    logoUploadSchema,
+    generalSettingsSchema,
+    countryIdParamSchema,
+    taxDetailsSchema
 };

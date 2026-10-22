@@ -115,6 +115,8 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
   const isCheckbox = type === 'checkbox';
   const isRadio = type === 'radio';
   const isPrice = type === 'textfield' && fields.isPrice;
+  // Only with the tax feature on and the tax details of a country filled in.
+  const isTaxAvailable = limits?.isTaxAvailable === true;
   // null = no limit
   const labelMax = limits?.maxLabelLength[type] ?? null;
   const placeholderMax = isText ? (limits?.maxPlaceholderLength[type] ?? null) : null;
@@ -174,7 +176,7 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
 
     const payload = { type, label: fields.label.trim(), isRequired: fields.isRequired };
     if (isText) Object.assign(payload, { placeholder: fields.placeholder.trim() || null, defaultText: (isPrice ? fields.defaultText.trim() : fields.defaultText) || null });
-    if (type === 'textfield') Object.assign(payload, { isPrice: fields.isPrice, isPriceIncludedInTax: isPrice && fields.isPriceIncludedInTax });
+    if (type === 'textfield') Object.assign(payload, { isPrice: fields.isPrice, isPriceIncludedInTax: isPrice && isTaxAvailable && fields.isPriceIncludedInTax });
     if (isCheckbox) payload.defaultChecked = fields.defaultChecked;
     if (isRadio) {
       payload.options = optionsToSave.map(({ _id, name, isDefault }) => (_id ? { _id, name, isDefault } : { name, isDefault }));
@@ -328,7 +330,7 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
                         }}
                         disabled={isSaving}
                       />
-                      {isPrice && (
+                      {isPrice && isTaxAvailable && (
                         <div className="pl-7">
                           <Checkbox
                             name="isPriceIncludedInTax"
@@ -387,7 +389,7 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
               )}
 
               <Card variant="outlined" title="Preview" subtitle="How it will look on the job order.">
-                <ControlPreview type={type} options={options} {...fields} />
+                <ControlPreview type={type} options={options} {...fields} isPriceIncludedInTax={isTaxAvailable && fields.isPriceIncludedInTax} />
               </Card>
             </>
           )}

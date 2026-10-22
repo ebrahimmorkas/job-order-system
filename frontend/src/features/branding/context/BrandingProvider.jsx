@@ -43,9 +43,15 @@ const BrandingProvider = ({ children }) => {
     setAttempt((n) => n + 1);
   }, []);
 
+  // After Company Settings saves the name / tagline / logo, so the sidebar
+  // and the browser tab show it at once.
+  const updateBranding = useCallback((changes) => {
+    setBranding((prev) => ({ ...prev, ...changes }));
+  }, []);
+
   const value = useMemo(
-    () => ({ branding, isLoading: !branding && !error, error, retry }),
-    [branding, error, retry]
+    () => ({ branding, isLoading: !branding && !error, error, retry, updateBranding }),
+    [branding, error, retry, updateBranding]
   );
 
   return <BrandingContext.Provider value={value}>{children}</BrandingContext.Provider>;

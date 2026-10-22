@@ -153,6 +153,22 @@ const companyMasterSchema = new mongoose.Schema({
     maxTextForPlaceholderInTextareaControl: wholeNumberOrNull('maxTextForPlaceholderInTextareaControl', 1),
     maxTextForLabelInRadioButtonControl: wholeNumberOrNull('maxTextForLabelInRadioButtonControl', 1),
 
+    // ---- Tax --------------------------------------------------------------
+    // Tax on the job order, the Tax tab of Company Settings and the "Include
+    // this price in tax" tick of a price text field. Off until the platform
+    // owner switches it on for this vendor.
+    isTaxFeatureOn: {
+        type: Boolean,
+        default: false
+    },
+    // The countries whose tax system applies to the vendor (CountryMaster
+    // ids). None = no tax at all. With two or more, the job order asks which
+    // country it is for.
+    assignedCountries: {
+        type: [{ type: mongoose.Types.ObjectId, ref: 'CountryMaster' }],
+        default: []
+    },
+
     // ---- Storage ----------------------------------------------------------
     // Where this vendor's images go. null = WebsiteMaster.mainImageService
     // (with the platform's own account). Overridden for everyone while

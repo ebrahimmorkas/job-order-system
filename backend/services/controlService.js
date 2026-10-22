@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Control = require('../models/Control');
 const common = require('../utils/common');
+const { taxReadyCountryIds } = require('./taxSettingsService');
 const { LIVE_STATUSES } = require('../constants/masterConstants');
 const { CONTROL_TYPES, CONTROL_TYPE_VALUES, TEXT_CONTROL_TYPES } = require('../constants/controlConstants');
 
@@ -27,11 +28,14 @@ const assignedTypesOf = (companyMasterData) => {
     return Array.isArray(assigned) ? CONTROL_TYPE_VALUES.filter((type) => assigned.includes(type)) : [...CONTROL_TYPE_VALUES];
 };
 
-// Everything the vendor's CompanyMaster says about controls (null = no limit).
-const limitsOf = (companyMasterData) => {
+// Everything the vendor's CompanyMaster says about controls (null = no limit),
+// and whether a price text field may be included in tax: only with the tax
+// feature on and the tax details of at least one country filled in.
+const limitsOf = ({ companyMasterData, websiteMasterData, companySettingsData }) => {
     const allowed = companyMasterData?.numberOfControlsAllowed || {};
     return {
         assignedTypes: assignedTypesOf(companyMasterData),
+        isTaxAvailable: taxReadyCountryIds(websiteMasterData, companyMasterData, companySettingsData).length > 0,
         controlsAllowed: Object.fromEntries(CONTROL_TYPE_VALUES.map((type) => [type, allowed[type] ?? null])),
         // Typed on the job order (and the default text), one radio choice.
         maxLength: {
@@ -106,7 +110,9 @@ const duplicateResult = (err, data) => {
 
 // The fields to store for the control's type. Radio choices keep their _id
 // (new ones get one here, so the default can point at it).
-const toStored = (data) => {
+// keepTaxOf: while tax isn't available the tick is hidden, so a control
+// being edited keeps the one it had (null on create = not included).
+const toStored = (data, { isTaxAvailable, keepTaxOf = null }) => {
     try {
         const stored = { label: data.label, isRequired: data.isRequired };
         if (TEXT_CONTROL_TYPES.includes(data.type)) {
@@ -115,7 +121,8 @@ const toStored = (data) => {
         }
         if (data.type === CONTROL_TYPES.TEXTFIELD) {
             stored.isPrice = data.isPrice;
-            stored.isPriceIncludedInTax = data.isPrice && data.isPriceIncludedInTax;
+            const includedInTax = isTaxAvailable ? data.isPriceIncludedInTax : keepTaxOf?.isPriceIncludedInTax === true;
+            stored.isPriceIncludedInTax = data.isPrice && includedInTax;
         }
         if (data.type === CONTROL_TYPES.CHECKBOX) stored.defaultChecked = data.defaultChecked;
         if (data.type === CONTROL_TYPES.RADIO) {
@@ -133,9 +140,9 @@ const toStored = (data) => {
 
 // GET /api/controls - one page, in job order form order, with the vendor's
 // limits and how many controls of each type are used.
-const listControls = async ({ vendorId, search, status, type, page, limit, companyMasterData }) => {
+const listControls = async ({ vendorId, search, status, type, page, limit, companyMasterData, websiteMasterData, companySettingsData }) => {
     try {
-        const limits = limitsOf(companyMasterData);
+        const limits = limitsOf({ companyMasterData, websiteMasterData, companySettingsData });
         const filter = { vendorId, type: { $in: type ? limits.assignedTypes.filter((t) => t === type) : limits.assignedTypes }, status: status || LIVE };
         if (search) filter.label = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
 
@@ -160,9 +167,9 @@ const listControls = async ({ vendorId, search, status, type, page, limit, compa
 };
 
 // GET /api/controls/:id
-const getControl = async ({ vendorId, id, companyMasterData }) => {
+const getControl = async ({ vendorId, id, companyMasterData, websiteMasterData, companySettingsData }) => {
     try {
-        const limits = limitsOf(companyMasterData);
+        const limits = limitsOf({ companyMasterData, websiteMasterData, companySettingsData });
         const control = await Control.findOne({ _id: id, vendorId, type: { $in: limits.assignedTypes }, status: LIVE }).select(CONTROL_FIELDS).lean();
         if (!control) return common.returnResult(false, 404, 'Control not found.');
         return common.returnResult(true, 200, 'Control fetched successfully.', { control, limits });
@@ -172,9 +179,9 @@ const getControl = async ({ vendorId, id, companyMasterData }) => {
 };
 
 // POST /api/controls (also used to save a copy).
-const createControl = async ({ vendorId, userId, data, companyMasterData }) => {
+const createControl = async ({ vendorId, userId, data, companyMasterData, websiteMasterData, companySettingsData }) => {
     try {
-        const limits = limitsOf(companyMasterData);
+        const limits = limitsOf({ companyMasterData, websiteMasterData, companySettingsData });
         if (!limits.assignedTypes.includes(data.type)) return notAvailable();
         const errors = checkVendorLimits(data, limits);
         if (errors.length > 0) return invalid(errors);
@@ -190,7 +197,7 @@ const createControl = async ({ vendorId, userId, data, companyMasterData }) => {
 
         let control;
         try {
-            control = await Control.create({ vendorId, type: data.type, ...toStored(data), precedence });
+            control = await Control.create({ vendorId, type: data.type, ...toStored(data, limits), precedence });
         } catch (err) {
             const duplicate = duplicateResult(err, data);
             if (duplicate) return duplicate;
@@ -203,10 +210,10 @@ const createControl = async ({ vendorId, userId, data, companyMasterData }) => {
 };
 
 // PUT /api/controls/:id - every field at once; the type can't change.
-const updateControl = async ({ vendorId, userId, id, data, companyMasterData }) => {
+const updateControl = async ({ vendorId, userId, id, data, companyMasterData, websiteMasterData, companySettingsData }) => {
     try {
-        const limits = limitsOf(companyMasterData);
-        const current = await Control.findOne({ _id: id, vendorId, type: { $in: limits.assignedTypes }, status: LIVE }).select('type options').lean();
+        const limits = limitsOf({ companyMasterData, websiteMasterData, companySettingsData });
+        const current = await Control.findOne({ _id: id, vendorId, type: { $in: limits.assignedTypes }, status: LIVE }).select('type options isPriceIncludedInTax').lean();
         if (!current) return common.returnResult(false, 404, 'Control not found.');
         if (current.type !== data.type) return common.returnResult(false, 400, 'The type of a control cannot be changed.');
         const errors = checkVendorLimits(data, limits);
@@ -223,7 +230,7 @@ const updateControl = async ({ vendorId, userId, id, data, companyMasterData }) 
         try {
             control = await Control.findOneAndUpdate(
                 { _id: id, vendorId, status: LIVE },
-                { $set: toStored(data) },
+                { $set: toStored(data, { isTaxAvailable: limits.isTaxAvailable, keepTaxOf: current }) },
                 { returnDocument: 'after', runValidators: true, auditUserId: userId, projection: CONTROL_FIELDS }
             ).lean();
         } catch (err) {
@@ -299,7 +306,7 @@ const moveControl = async ({ vendorId, userId, id, direction, companyMasterData 
 // price (an amount added to the total) and whether tax is charged on it.
 const getControlsForJobOrder = async ({ vendorId, companyMasterData }) => {
     try {
-        const limits = limitsOf(companyMasterData);
+        const limits = limitsOf({ companyMasterData });
         const controls = limits.assignedTypes.length === 0 ? [] : await Control.find({ vendorId, type: { $in: limits.assignedTypes }, status: 'A' })
             .select('_id type label isRequired placeholder defaultText isPrice isPriceIncludedInTax defaultChecked options defaultOptionId').sort({ precedence: 1 }).lean();
 

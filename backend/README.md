@@ -23,6 +23,11 @@ name, login tagline) and its owner login (password from `SEED_ADMIN_PASSWORD`).
 Safe to re-run: an existing vendor, Company Settings or owner is left as it
 is. WebsiteMaster and Company Master, however, get the seed's values again.
 
+The seed also fills the platform-wide location and tax masters (the same for
+every vendor): `seeds/seedLocationMasters.js` (currencies, countries with their
+tax fields, states, cities - updated in place on a re-run) and
+`seeds/seedTaxMaster.js` (tax rates - a rate already there is never changed).
+
 ## Feature switches
 
 A feature works for a vendor only when it is on in **WebsiteMaster** (for the
@@ -35,6 +40,7 @@ it (`GET /api/feature-access`). The flags are listed in
 | --- | --- | --- |
 | Masters | `isMasterModuleFeatureOn` | `numberOfMastersAllowed`, `numberOfValuesAllowedInMaster` |
 | Controls | `isControlsFeatureOn` | `assignedControls` (see Controls) |
+| Tax | `isTaxFeatureOn` | `assignedCountries` (see Tax) |
 
 `CompanyMaster.fetchMastersEvenWhenBitIsOff` (default false) only matters while
 the vendor's `isMasterModuleFeatureOn` is off: the Masters page stays hidden and
@@ -77,7 +83,10 @@ Fields the vendor adds to the job order form (`models/Control.js`): a
   the job order form). Text controls: `placeholder`, `defaultText`. Text field
   only: `isPrice` (the answer is an amount - no minus, at most 2 decimals, also
   the default - added to the job order total) and `isPriceIncludedInTax` (tax is
-  charged on it; only with `isPrice`). Checkbox:
+  charged on it; only with `isPrice`, and only while tax is available to the
+  vendor - the tax feature on and the tax details of at least one country
+  filled in; while it isn't, the tick is hidden and an edited control keeps
+  the one it had). Checkbox:
   `defaultChecked`. Radio: `options` (at least 2, in order, each with its own
   `_id`) and `defaultOptionId` (optional). The type never changes.
 - Active / inactive, deleted softly (`status: 'D'`); a deleted label can be used again.
@@ -95,6 +104,39 @@ Fields the vendor adds to the job order form (`models/Control.js`): a
     `maxTextForLabelInTextareaControl`, `maxTextForPlaceholderInTextareaControl`,
     `maxTextForLabelInRadioButtonControl` - longest label / placeholder the
     vendor may set (a checkbox's label: `maxLengthOfCheckboxText`).
+
+## Tax
+
+Platform-wide masters, kept by the platform owner only (seeded; no screens):
+
+- `CurrencyMaster` - code (INR, AED), symbol, decimal places.
+- `CountryMaster` - code (IN, AE), phone code, currency, `taxName` (GST, VAT),
+  `taxFields` (the registration numbers a business fills in, e.g. GSTIN / PAN,
+  TRN: label, required, max length, pattern, `startsWithStateTaxCode`) and
+  `postalCode` rules (PIN code required in India; P.O. Box optional in the UAE).
+  A new country needs only data, no code.
+- `StateMaster` (India: every state / UT with its GST state code; UAE: the
+  seven emirates) and `CityMaster` (Mumbai; the main UAE cities).
+- `TaxMaster` - a country's rates, e.g. GST 18% = CGST 9% + SGST 9%. Tax is
+  always worked out on `totalRate`; components only show the split. Never
+  change a rate in use: close it (`applicableTo`) and add a new one.
+  `isDefault` = picked in advance for a vendor without its own default.
+
+Per vendor:
+
+- CompanyMaster `isTaxFeatureOn` (also in WebsiteMaster) and
+  `assignedCountries` (CountryMaster ids; none = no tax). The Tax tab and the
+  "Include this price in tax" tick are hidden while the feature is off or no
+  country is assigned.
+- CompanySettings `taxDetails` - one entry per country: the business address
+  there (state / city from the masters), `isTaxRegistered`, `taxFieldValues`
+  (by the country's field keys, in capitals) and `defaultTaxId` (null = the
+  platform default). Registered requires the address, the postal code where
+  the country needs one and the required tax fields; an Indian GSTIN must
+  start with the state's GST code.
+- A country is "tax ready" while it is assigned and saved as registered. Only
+  then is tax charged on a job order for it; a job order for a country not
+  ready is made without tax.
 
 ## Image storage (logos and later images)
 
@@ -135,7 +177,11 @@ uploader's file name is never used. Replacing an image deletes the old file.
 | POST | `/api/auth/login` | anyone - username, email or phone + password |
 | POST | `/api/auth/refresh-token` | the refresh-token cookie |
 | POST | `/api/auth/logout` | the refresh-token cookie |
+| GET | `/api/company-settings` | owner - company name, login tagline, logo |
+| PUT | `/api/company-settings/general` | owner - `{ companyName, loginTagline }` |
 | PUT | `/api/company-settings/logo` | owner - multipart, image in the `logo` field |
+| GET | `/api/company-settings/tax` | owner, tax on - every assigned country with its fields, states, cities, current rates, currency and saved details |
+| PUT | `/api/company-settings/tax/:countryId` | owner, tax on - `{ address, isTaxRegistered, taxFieldValues, defaultTaxId }` of one country |
 | GET | `/api/feature-access` | logged in - which features are on |
 | GET | `/api/masters/for-job-order` | logged in - active masters with their active values and default, for the job order form |
 | GET / POST | `/api/masters` | owner - list (search, status, page, limit) / create with values |

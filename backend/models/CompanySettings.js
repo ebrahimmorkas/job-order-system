@@ -2,6 +2,47 @@ const mongoose = require('mongoose');
 const auditPlugin = require('./plugins/auditPlugin');
 const cacheInvalidationPlugin = require('./plugins/cacheInvalidationPlugin');
 const redisKeys = require('../utils/redisKeys');
+const { ADDRESS_LINE_MAX_LENGTH, POSTAL_CODE_MAX_LENGTH, TAX_FIELD_VALUE_MAX_LENGTH } = require('../constants/taxConstants');
+
+// The business in one of the vendor's countries (CompanyMaster.assignedCountries):
+// its address there and its tax registration. Company Settings > Tax.
+const taxDetailSchema = new mongoose.Schema({
+    countryId: {
+        type: mongoose.Types.ObjectId,
+        ref: 'CountryMaster',
+        required: true
+    },
+    // State / city from StateMaster / CityMaster of this country.
+    address: {
+        line1: { type: String, trim: true, maxlength: ADDRESS_LINE_MAX_LENGTH, default: null },
+        line2: { type: String, trim: true, maxlength: ADDRESS_LINE_MAX_LENGTH, default: null },
+        stateId: { type: mongoose.Types.ObjectId, ref: 'StateMaster', default: null },
+        cityId: { type: mongoose.Types.ObjectId, ref: 'CityMaster', default: null },
+        postalCode: { type: String, trim: true, maxlength: POSTAL_CODE_MAX_LENGTH, default: null }
+    },
+    // "I am registered for GST / VAT here". Only then is tax charged on job
+    // orders of this country - and the address and the country's required
+    // tax fields must be filled.
+    isTaxRegistered: {
+        type: Boolean,
+        default: false
+    },
+    // The country's tax fields (CountryMaster.taxFields), by key - e.g.
+    // { gstin: '27ABCDE1234F1Z5', pan: 'ABCDE1234F' }.
+    taxFieldValues: {
+        type: Map,
+        of: { type: String, maxlength: TAX_FIELD_VALUE_MAX_LENGTH },
+        default: {}
+    },
+    // The rate picked in advance on a new job order (a TaxMaster of this
+    // country); null = the platform's default rate for the country. The
+    // owner can still pick another one on the job order.
+    defaultTaxId: {
+        type: mongoose.Types.ObjectId,
+        ref: 'TaxMaster',
+        default: null
+    }
+}, { _id: false });
 
 // The vendor's own settings, set by the vendor - company name, logo, what the
 // login page says, etc. Cached in Redis with the other vendor data
@@ -32,6 +73,13 @@ const companySettingsSchema = new mongoose.Schema({
     logo: {
         url: { type: String, default: null },
         imageId: { type: mongoose.Types.ObjectId, ref: 'ImageAsset', default: null }
+    },
+    // One per country the vendor has filled in (Company Settings > Tax).
+    // Entries of a country no longer assigned are kept, and used again if it
+    // is given back.
+    taxDetails: {
+        type: [taxDetailSchema],
+        default: []
     }
 }, {
   timestamps: true

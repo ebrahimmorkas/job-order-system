@@ -39,6 +39,40 @@ const getBranding = (companySettingsData) => {
     }
 };
 
+// GET /api/company-settings - Company Settings > General. Read from the
+// cached settings, so it costs no DB query.
+const getGeneralSettings = (companySettingsData) => {
+    try {
+        if (!companySettingsData) return common.returnResult(false, 404, 'Company settings have not been set up yet.');
+        return common.returnResult(true, 200, 'Company settings fetched successfully.', {
+            settings: {
+                companyName: companySettingsData.companyName,
+                loginTagline: companySettingsData.loginTagline || null,
+                logoUrl: companySettingsData.logo?.url || null
+            }
+        });
+    } catch (err) {
+        throw err;
+    }
+};
+
+// PUT /api/company-settings/general - company name and login tagline.
+const updateGeneralSettings = async ({ vendorId, userId, data }) => {
+    try {
+        const settings = await CompanySettings.findOneAndUpdate(
+            { vendorId },
+            { $set: { companyName: data.companyName, loginTagline: data.loginTagline } },
+            { returnDocument: 'after', runValidators: true, projection: { companyName: 1, loginTagline: 1, logo: 1 }, auditUserId: userId }
+        ).lean();
+        if (!settings) return common.returnResult(false, 404, 'Company settings have not been set up yet.');
+        return common.returnResult(true, 200, 'Company settings saved.', {
+            settings: { companyName: settings.companyName, loginTagline: settings.loginTagline || null, logoUrl: settings.logo?.url || null }
+        });
+    } catch (err) {
+        throw err;
+    }
+};
+
 // Replaces the vendor's logo: store the new image, point the settings at it,
 // then delete the old one. If the settings can't be updated, the new image is
 // removed again so nothing is left orphaned. Success meta: { logoUrl }.
@@ -73,5 +107,7 @@ const updateLogo = async ({ vendorId, userId, file, companyMasterData, websiteMa
 module.exports = {
     fetchCompanySettingsByVendorId,
     getBranding,
+    getGeneralSettings,
+    updateGeneralSettings,
     updateLogo
 };

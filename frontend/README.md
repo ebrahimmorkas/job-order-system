@@ -35,7 +35,14 @@ images stored on the server itself, such as logos) to it.
   area, checkbox, radio buttons), only the types assigned to the vendor: the
   same list as Masters plus a type filter and a usage pill per limited type;
   create (pick the type), copy and edit with a live preview; radio choices
-  with a default.
+  with a default. "Include this price in tax" shows only while tax is
+  available (the tax feature on and one country's tax details filled in).
+- **Company Settings** - tabs: General (company name, login tagline, logo -
+  the menu and browser tab update at once) and Tax (only with the tax feature
+  on): one form per assigned country - business address with state / city
+  dropdowns, "I am registered for GST / VAT" with that country's own fields,
+  and the default tax rate. Tabs keep what was typed; leaving with unsaved
+  changes asks first.
 - An unknown host name shows "No account is set up for this domain".
 
 ## Vendors in local development

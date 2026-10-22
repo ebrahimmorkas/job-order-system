@@ -5,7 +5,7 @@ import { BrandingContext } from '../context/BrandingContext';
  * Hook to read the vendor's branding from anywhere below <BrandingProvider>.
  *
  * Usage:
- *   const { branding, isLoading, error, retry } = useBranding();
+ *   const { branding, isLoading, error, retry, updateBranding } = useBranding();
  *   // branding: { companyName, loginTagline, logoUrl } - any of them may be null
  */
 export const useBranding = () => {

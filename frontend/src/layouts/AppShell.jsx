@@ -8,12 +8,14 @@ import { useFeatureAccess } from '../features/featureAccess/hooks/useFeatureAcce
 import DashboardPage from '../features/dashboard/pages/DashboardPage';
 import MastersPage from '../features/masters/pages/MastersPage';
 import ControlsPage from '../features/controls/pages/ControlsPage';
+import CompanySettingsPage from '../features/companySettings/pages/CompanySettingsPage';
 
 // Sidebar key -> page. Keys without a page yet show a placeholder.
 const PAGES = {
   dashboard: DashboardPage,
   masters: MastersPage,
   controls: ControlsPage,
+  companySettings: CompanySettingsPage,
 };
 
 /**
@@ -45,7 +47,7 @@ const AppShell = () => {
         onLogout={() => confirmLeave(logout)}
       />
       <main className="flex-1 min-w-0 px-4 py-6 sm:px-6 lg:px-8">
-        {Page ? <Page /> : <EmptyState title={activeLabel} description="This section is coming soon." />}
+        {Page ? <Page featureAccess={featureAccess} /> : <EmptyState title={activeLabel} description="This section is coming soon." />}
       </main>
     </div>
   );

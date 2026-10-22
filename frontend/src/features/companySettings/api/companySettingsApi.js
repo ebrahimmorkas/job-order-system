@@ -1,0 +1,37 @@
+import { apiRequest } from '../../../utils/apiClient';
+
+const BASE = '/company-settings';
+
+/** @returns {Promise<{ settings: { companyName: string, loginTagline: string|null, logoUrl: string|null } }>} */
+export const getGeneralSettings = ({ signal } = {}) => apiRequest(BASE, { signal });
+
+/** data: { companyName, loginTagline } -> { settings } */
+export const updateGeneralSettings = (data) => apiRequest(`${BASE}/general`, { method: 'PUT', body: data });
+
+/** The image file -> { logoUrl } */
+export const uploadLogo = (file) => {
+  const body = new FormData();
+  body.append('logo', file);
+  return apiRequest(`${BASE}/logo`, { method: 'PUT', body });
+};
+
+/**
+ * Every country assigned to the vendor, with what its form needs and what was saved.
+ * @returns {Promise<{ countries: Array<{ _id, name, code, taxName, currency, taxFields, postalCode,
+ *   states, cities, taxes, details: { address, isTaxRegistered, taxFieldValues, defaultTaxId }, isTaxReady }> }>}
+ */
+export const getTaxSettings = ({ signal } = {}) => apiRequest(`${BASE}/tax`, { signal });
+
+/**
+ * data: { address: { line1, line2, stateId, cityId, postalCode }, isTaxRegistered, taxFieldValues, defaultTaxId }
+ * @returns {Promise<{ details: Object, isTaxReady: boolean }>}
+ */
+export const updateTaxDetails = (countryId, data) => apiRequest(`${BASE}/tax/${countryId}`, { method: 'PUT', body: data });
+
+export default {
+  getGeneralSettings,
+  updateGeneralSettings,
+  uploadLogo,
+  getTaxSettings,
+  updateTaxDetails,
+};
