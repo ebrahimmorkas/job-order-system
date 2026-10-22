@@ -1,22 +1,24 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import InputField from '../../../components/common/InputField';
 import Button from '../../../components/common/Buttons';
 import Switch from '../../../components/common/Switch';
 import { useToast } from '../../../components/common/Toast';
 import IconButton from './IconButton';
+import DefaultChoice from './DefaultChoice';
+import UsagePill from './UsagePill';
 import { MoveUpIcon, MoveDownIcon, EditIcon, TrashIcon, PlusIcon } from './icons';
 import { VALUE_NAME_MAX_LENGTH, checkValueName } from '../utils/valueName';
 
 /**
  * The editable list of a master's values: add, rename, active / inactive,
- * delete and move up / down. Nothing is saved here - every change goes to
+ * default, delete and move up / down. Nothing is saved here - every change goes to
  * `onChange`, and the page saves the whole list with its Save button.
  *
  * The "add a value" text is controlled by the page (newName), so a value
  * typed but not added yet can still be saved with the master.
  *
  * @param {Object} props
- * @param {Array<{ key: string, _id?: string, name: string, status: 'A'|'I' }>} props.values - In dropdown order
+ * @param {Array<{ key: string, _id?: string, name: string, status: 'A'|'I', isDefault: boolean }>} props.values - In dropdown order
  * @param {(values: Array) => void} props.onChange
  * @param {() => string} props.createKey - A new unique key for an added value
  * @param {number|null} props.valuesAllowed - The vendor's limit per master
@@ -33,6 +35,7 @@ const MasterValuesEditor = ({
   error = '', disabled = false,
 }) => {
   const toast = useToast();
+  const groupId = useId();
   const [editingKey, setEditingKey] = useState(null);
   const [editName, setEditName] = useState('');
   const [editError, setEditError] = useState('');
@@ -42,7 +45,7 @@ const MasterValuesEditor = ({
   const handleAdd = () => {
     const failure = checkValueName(values, newName, valuesAllowed);
     if (failure) return onAddError(failure);
-    onChange([...values, { key: createKey(), name: newName.trim(), status: 'A' }]);
+    onChange([...values, { key: createKey(), name: newName.trim(), status: 'A', isDefault: false }]);
     onNewNameChange('');
   };
 
@@ -61,8 +64,16 @@ const MasterValuesEditor = ({
 
   const toggle = (value) => {
     const status = value.status === 'A' ? 'I' : 'A';
-    onChange(values.map((v) => (v.key === value.key ? { ...v, status } : v)));
-    toast.info(`"${value.name}" marked as ${status === 'A' ? 'active' : 'inactive'}. Save to keep this change.`);
+    // An inactive value can't stay the default.
+    onChange(values.map((v) => (v.key === value.key ? { ...v, status, isDefault: status === 'A' && v.isDefault } : v)));
+    const wasDefault = status === 'I' && value.isDefault ? ' It is no longer the default.' : '';
+    toast.info(`"${value.name}" marked as ${status === 'A' ? 'active' : 'inactive'}.${wasDefault} Save to keep this change.`);
+  };
+
+  const toggleDefault = (value) => {
+    const isDefault = !value.isDefault;
+    onChange(values.map((v) => ({ ...v, isDefault: v.key === value.key ? isDefault : false })));
+    toast.info(isDefault ? `"${value.name}" is now the default. Save to keep this change.` : 'No default value. Save to keep this change.');
   };
 
   const remove = (value) => onChange(values.filter((v) => v.key !== value.key));
@@ -85,9 +96,7 @@ const MasterValuesEditor = ({
     <div>
       <div className="flex justify-end mb-2">
         {valuesAllowed !== null && (
-          <span className={`text-xs ${isFull ? 'text-amber-600 font-medium' : 'text-gray-500'}`}>
-            {values.length} of {valuesAllowed} values
-          </span>
+          <UsagePill used={values.length} allowed={valuesAllowed} label="values" title={`A master can have at most ${valuesAllowed} values`} />
         )}
       </div>
 
@@ -128,6 +137,14 @@ const MasterValuesEditor = ({
 
                 {!isEditing && (
                   <div className="flex items-center gap-1 shrink-0">
+                    <DefaultChoice
+                      name={`default-${groupId}`}
+                      valueName={value.name}
+                      checked={value.isDefault}
+                      isActive={isActive}
+                      onToggle={() => toggleDefault(value)}
+                      disabled={disabled}
+                    />
                     <Switch
                       size="sm"
                       checked={isActive}

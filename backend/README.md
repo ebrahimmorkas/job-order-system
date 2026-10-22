@@ -35,13 +35,21 @@ it (`GET /api/feature-access`). The flags are listed in
 | --- | --- | --- |
 | Masters | `isMasterModuleFeatureOn` | `numberOfMastersAllowed`, `numberOfValuesAllowedInMaster` |
 
+`CompanyMaster.fetchMastersEvenWhenBitIsOff` (default false) only matters while
+the vendor's `isMasterModuleFeatureOn` is off: the Masters page stays hidden and
+every master action stays blocked, except `GET /api/masters/for-job-order`, so
+the job order form still gets the masters. The platform-wide WebsiteMaster
+switch still applies.
+
 ## Masters
 
 A master is a vendor's own dropdown list for the job order form, e.g. "My
 Services" with the values Polishing, Cutting, Edging.
 
 - Master: `name` (unique per vendor, ignoring capital letters), `shortName`
-  (optional, unique the same way), `isMultiselectAllowed`, `precedence`
+  (optional, unique the same way), `isMultiselectAllowed`, `defaultValueId`
+  (the value picked in advance on a new job order - optional, one active
+  value; cleared when that value is made inactive or deleted), `precedence`
   (order on the job order form).
 - Values (`MasterValue`): `name` (unique inside the master), `precedence`.
 - Masters and values are each active / inactive, and deleted softly
@@ -93,18 +101,21 @@ uploader's file name is never used. Replacing an image deletes the old file.
 | POST | `/api/auth/logout` | the refresh-token cookie |
 | PUT | `/api/company-settings/logo` | owner - multipart, image in the `logo` field |
 | GET | `/api/feature-access` | logged in - which features are on |
+| GET | `/api/masters/for-job-order` | logged in - active masters with their active values and default, for the job order form |
 | GET / POST | `/api/masters` | owner - list (search, status, page, limit) / create with values |
 | GET / PUT / DELETE | `/api/masters/:id` | owner - one master with its values / save details and the full values list / delete |
 | PATCH | `/api/masters/:id/status` | owner - `{ isActive }` |
 | POST | `/api/masters/bulk` | owner - `{ action: activate|deactivate|delete, ids }` |
+| PATCH | `/api/masters/:id/default` | owner - `{ valueId }` (null = no default), an active value |
 | PATCH | `/api/masters/:id/move` | owner - `{ direction: up|down }`, one place in the whole list |
 | PATCH | `/api/masters/:id/values/:valueId/move` | owner - `{ direction: up|down }`, one place inside the master |
 | DELETE | `/api/masters/:id/values/:valueId` | owner - delete a value |
 | PATCH | `/api/masters/:id/values/:valueId/status` | owner - `{ isActive }` |
 
 `PUT /api/masters/:id` takes `{ name, shortName, isMultiselectAllowed, values }`.
-`values` is the whole list in order: `{ _id, name, status }` for a value that
-already exists, `{ name, status }` for a new one. Existing values left out are
+`values` is the whole list in order: `{ _id, name, status, isDefault }` for a
+value that already exists, `{ name, status, isDefault }` for a new one. At most
+one value is `isDefault`, and it must be active. Existing values left out are
 deleted. Everything is checked first, then saved together.
 
 After `maxLoginAttempts` wrong passwords in a row (WebsiteMaster, default 5),

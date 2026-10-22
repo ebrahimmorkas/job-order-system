@@ -27,7 +27,8 @@ images stored on the server itself, such as logos) to it.
 - **Masters** - the vendor's own dropdown lists for the job order: list with
   Sr. No. (with up / down arrows to change the order), search, status filter,
   pages, a status switch and bulk actions; clicking the values count opens the
-  values (move up / down, mark active / inactive, delete - saved at once); create, copy and
+  values (move up / down, default, mark active / inactive, delete - saved at
+  once); create, copy and
   edit, where every change waits for Save and leaving with unsaved changes
   asks first.
 - An unknown host name shows "No account is set up for this domain".

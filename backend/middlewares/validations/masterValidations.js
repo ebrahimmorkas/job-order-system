@@ -35,14 +35,27 @@ const listMastersQuerySchema = Joi.object({
 
 // The values list, in dropdown order. A value's status lets a copy keep
 // inactive values inactive. On edit, existing values carry their _id (no
-// _id = a new value); the same value can't be listed twice.
+// _id = a new value); the same value can't be listed twice. At most one
+// value is the default, and it must be active.
 const valuesList = (valueItem) => Joi.array().items(valueItem).min(1).required().label('Values')
     .unique((a, b) => sameName(a, b) || (!!a._id && a._id === b._id))
-    .messages({ 'array.min': 'Add at least one value', 'array.unique': 'Each value must have a different name' });
+    .custom((values, helpers) => {
+        const defaults = values.filter((value) => value.isDefault);
+        if (defaults.length > 1) return helpers.error('values.oneDefault');
+        if (defaults.length === 1 && defaults[0].status !== 'A') return helpers.error('values.defaultActive');
+        return values;
+    })
+    .messages({
+        'array.min': 'Add at least one value',
+        'array.unique': 'Each value must have a different name',
+        'values.oneDefault': 'Only one value can be the default',
+        'values.defaultActive': 'An inactive value cannot be the default'
+    });
 
 const valueFields = {
     name: valueName.required(),
-    status: Joi.string().valid('A', 'I').default('A').label('Value status')
+    status: Joi.string().valid('A', 'I').default('A').label('Value status'),
+    isDefault: Joi.boolean().default(false).label('Default')
 };
 
 // POST /api/masters - the master with its values.
@@ -66,6 +79,11 @@ const statusSchema = Joi.object({
     isActive: Joi.boolean().required().label('isActive')
 });
 
+// PATCH /api/masters/:id/default - valueId null = no default.
+const defaultValueSchema = Joi.object({
+    valueId: objectId('Value id').allow(null)
+});
+
 // POST /api/masters/bulk
 const bulkMastersSchema = Joi.object({
     action: Joi.string().valid('activate', 'deactivate', 'delete').required().label('Action'),
@@ -84,6 +102,7 @@ module.exports = {
     createMasterSchema,
     updateMasterSchema,
     statusSchema,
+    defaultValueSchema,
     bulkMastersSchema,
     moveSchema
 };

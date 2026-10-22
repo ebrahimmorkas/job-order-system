@@ -3,12 +3,24 @@ const { sendResult } = require('../utils/common');
 const { logInfo, logException } = require('../utils/logger');
 
 // Every route here already passed: login, owner role, the master feature
-// switch and the Joi validation (routes/masterRoutes.js).
+// switch and the Joi validation (routes/masterRoutes.js) - except
+// for-job-order, which any logged-in user of the vendor may call and which
+// also works through CompanyMaster.fetchMastersEvenWhenBitIsOff.
 
 const respond = (res, result, meta) => {
     if (result.isSuccess) logInfo(1, 0, result.message, meta);
     else logInfo(0, 1, result.message, meta);
     return sendResult(res, result);
+};
+
+// GET /api/masters/for-job-order
+const getMastersForJobOrder = async (req, res) => {
+    try {
+        const result = await masterService.getMastersForJobOrder({ vendorId: req.vendorId });
+        return sendResult(res, result);
+    } catch (err) {
+        logException('Error while fetching masters for the job order', err);
+    }
 };
 
 // GET /api/masters
@@ -121,6 +133,18 @@ const moveValue = async (req, res) => {
     }
 };
 
+// PATCH /api/masters/:id/default
+const setDefaultValue = async (req, res) => {
+    try {
+        const result = await masterService.setDefaultValue({
+            vendorId: req.vendorId, userId: req.user._id, id: req.params.id, valueId: req.body.valueId
+        });
+        return respond(res, result, { vendorId: req.vendorId, masterId: req.params.id, valueId: req.body.valueId });
+    } catch (err) {
+        logException('Error while setting the default value', err);
+    }
+};
+
 // DELETE /api/masters/:id/values/:valueId
 const deleteValue = async (req, res) => {
     try {
@@ -134,6 +158,7 @@ const deleteValue = async (req, res) => {
 };
 
 module.exports = {
+    getMastersForJobOrder,
     listMasters,
     getMaster,
     createMaster,
@@ -144,5 +169,6 @@ module.exports = {
     moveMaster,
     setValueStatus,
     moveValue,
+    setDefaultValue,
     deleteValue
 };

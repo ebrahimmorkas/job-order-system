@@ -19,14 +19,14 @@ export const listMasters = ({ search, status, page, limit } = {}, { signal } = {
 /** @returns {Promise<{ master: Object (with values), limits: Object }>} */
 export const getMaster = (id) => apiRequest(`${BASE}/${id}`);
 
-/** data: { name, shortName, isMultiselectAllowed, values: [{ name, status }] } */
+/** data: { name, shortName, isMultiselectAllowed, values: [{ name, status, isDefault }] } */
 export const createMaster = (data) => apiRequest(BASE, { method: 'POST', body: data });
 
 /**
  * Saves the details and the full values list together, in order. Existing
  * values carry their _id; values without one are new; existing ones left
  * out are deleted.
- * data: { name, shortName, isMultiselectAllowed, values: [{ _id?, name, status }] }
+ * data: { name, shortName, isMultiselectAllowed, values: [{ _id?, name, status, isDefault }] }
  */
 export const updateMaster = (id, data) => apiRequest(`${BASE}/${id}`, { method: 'PUT', body: data });
 
@@ -43,6 +43,9 @@ export const bulkUpdateMasters = (action, ids) => apiRequest(`${BASE}/bulk`, { m
 // The values popup on the list - saved straight away.
 export const setValueStatus = (id, valueId, isActive) =>
   apiRequest(`${BASE}/${id}/values/${valueId}/status`, { method: 'PATCH', body: { isActive } });
+
+/** The value picked in advance on a new job order; valueId null = none. */
+export const setDefaultValue = (id, valueId) => apiRequest(`${BASE}/${id}/default`, { method: 'PATCH', body: { valueId } });
 
 /** One place up or down inside its master. direction: 'up' | 'down' */
 export const moveValue = (id, valueId, direction) =>

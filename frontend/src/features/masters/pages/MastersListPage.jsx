@@ -13,6 +13,7 @@ import { useToast } from '../../../components/common/Toast';
 import { useDebouncedValue } from '../../../utils/useDebouncedValue';
 import IconButton from '../components/IconButton';
 import MasterValuesModal from '../components/MasterValuesModal';
+import UsagePill from '../components/UsagePill';
 import { EditIcon, CopyIcon, TrashIcon, PlusIcon, MoveUpIcon, MoveDownIcon } from '../components/icons';
 import * as mastersApi from '../api/mastersApi';
 
@@ -274,18 +275,7 @@ const MastersListPage = ({ onCreate, onEdit, onClone }) => {
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold text-gray-900">Masters</h1>
           {limits && !isNotSetUp && (
-            <div
-              className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium ${isFull ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-gray-200 bg-white text-gray-600'}`}
-              title={`${limits.mastersUsed} of ${limits.mastersAllowed} masters used`}
-            >
-              <span>{limits.mastersUsed} / {limits.mastersAllowed} used</span>
-              <span className="h-1.5 w-14 overflow-hidden rounded-full bg-gray-200" aria-hidden="true">
-                <span
-                  className={`block h-full rounded-full ${isFull ? 'bg-amber-500' : 'bg-indigo-500'}`}
-                  style={{ width: `${Math.min(100, (limits.mastersUsed / Math.max(1, limits.mastersAllowed)) * 100)}%` }}
-                />
-              </span>
-            </div>
+            <UsagePill used={limits.mastersUsed} allowed={limits.mastersAllowed} title={`${limits.mastersUsed} of ${limits.mastersAllowed} masters used`} />
           )}
         </div>
         <Button leftIcon={<PlusIcon className="w-4 h-4" />} onClick={() => onCreate(limits)} disabled={!canCreate}>

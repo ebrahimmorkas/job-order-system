@@ -74,6 +74,13 @@ const companyMasterSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    // Only matters while isMasterModuleFeatureOn is off: the job order form
+    // still gets the vendor's masters (GET /api/masters/for-job-order), while
+    // the Masters page and every other master action stay off.
+    fetchMastersEvenWhenBitIsOff: {
+        type: Boolean,
+        default: false
+    },
     // How many masters / values per master the vendor may have (active +
     // inactive; deleted ones don't count). No default on purpose: set per
     // vendor - while empty, nothing can be created.

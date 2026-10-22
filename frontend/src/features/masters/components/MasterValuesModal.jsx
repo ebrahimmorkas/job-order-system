@@ -6,12 +6,15 @@ import Alert from '../../../components/common/Alert';
 import Spinner from '../../../components/common/Spinner';
 import { useToast } from '../../../components/common/Toast';
 import IconButton from './IconButton';
+import DefaultChoice from './DefaultChoice';
+import UsagePill from './UsagePill';
 import { TrashIcon, MoveUpIcon, MoveDownIcon } from './icons';
 import * as mastersApi from '../api/mastersApi';
 
 /**
  * A master's values in a popup (opened from the values count on the list).
- * Moving a value, marking it active / inactive or deleting it is saved straight away.
+ * Moving a value, making it the default, marking it active / inactive or
+ * deleting it is saved straight away.
  *
  * @param {Object} props
  * @param {{ _id: string, name: string }} props.master
@@ -20,6 +23,8 @@ import * as mastersApi from '../api/mastersApi';
 const MasterValuesModal = ({ master, onClose }) => {
   const toast = useToast();
   const [values, setValues] = useState(null);
+  const [defaultValueId, setDefaultValueId] = useState(null);
+  const [valuesAllowed, setValuesAllowed] = useState(null);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState(null);
   const [confirmId, setConfirmId] = useState(null);
@@ -29,7 +34,12 @@ const MasterValuesModal = ({ master, onClose }) => {
     let cancelled = false;
     mastersApi
       .getMaster(master._id)
-      .then((result) => !cancelled && setValues(result.master.values))
+      .then((result) => {
+        if (cancelled) return;
+        setValues(result.master.values);
+        setDefaultValueId(result.master.defaultValueId);
+        setValuesAllowed(result.limits.valuesAllowedPerMaster);
+      })
       .catch((err) => !cancelled && setError(err.message));
     return () => { cancelled = true; };
   }, [master._id]);
@@ -54,7 +64,17 @@ const MasterValuesModal = ({ master, onClose }) => {
     const isActive = value.status !== 'A';
     const isDone = await run(value._id, () => mastersApi.setValueStatus(master._id, value._id, isActive),
       `"${value.name}" marked as ${isActive ? 'active' : 'inactive'}.`);
-    if (isDone) setValues((prev) => prev.map((v) => (v._id === value._id ? { ...v, status: isActive ? 'A' : 'I' } : v)));
+    if (!isDone) return;
+    setValues((prev) => prev.map((v) => (v._id === value._id ? { ...v, status: isActive ? 'A' : 'I' } : v)));
+    // The server clears the default when it is made inactive.
+    if (!isActive && defaultValueId === value._id) setDefaultValueId(null);
+  };
+
+  const toggleDefault = async (value) => {
+    const valueId = defaultValueId === value._id ? null : value._id;
+    const isDone = await run(value._id, () => mastersApi.setDefaultValue(master._id, valueId),
+      valueId ? `"${value.name}" is now the default.` : `"${value.name}" is no longer the default.`);
+    if (isDone) setDefaultValueId(valueId);
   };
 
   const move = async (index, direction) => {
@@ -73,13 +93,20 @@ const MasterValuesModal = ({ master, onClose }) => {
   const remove = async (value) => {
     const isDone = await run(value._id, () => mastersApi.deleteValue(master._id, value._id), `"${value.name}" deleted.`);
     setConfirmId(null);
-    if (isDone) setValues((prev) => prev.filter((v) => v._id !== value._id));
+    if (!isDone) return;
+    setValues((prev) => prev.filter((v) => v._id !== value._id));
+    if (defaultValueId === value._id) setDefaultValueId(null);
   };
 
   return (
     <Modal isOpen onClose={() => onClose(hasChanged.current)} title={`${master.name} - values`} size="lg">
       {error && <Alert variant="error">{error}</Alert>}
       {!values && !error && <div className="py-10 flex justify-center"><Spinner /></div>}
+      {values && valuesAllowed !== null && (
+        <div className="flex justify-end mb-2">
+          <UsagePill used={values.length} allowed={valuesAllowed} label="values" title={`A master can have at most ${valuesAllowed} values`} />
+        </div>
+      )}
       {values && (
         <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200 max-h-[60vh] overflow-y-auto">
           {values.map((value, index) => {
@@ -101,6 +128,14 @@ const MasterValuesModal = ({ master, onClose }) => {
                   </div>
                 ) : (
                   <div className="flex items-center gap-1 shrink-0">
+                    <DefaultChoice
+                      name={`default-${master._id}`}
+                      valueName={value.name}
+                      checked={defaultValueId === value._id}
+                      isActive={isActive}
+                      onToggle={() => toggleDefault(value)}
+                      disabled={busyId !== null}
+                    />
                     <Switch
                       size="sm"
                       checked={isActive}

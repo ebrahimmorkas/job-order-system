@@ -11,7 +11,7 @@ const { LIVE_STATUSES } = require('../constants/masterConstants');
 // While a limit is empty nothing can be created.
 
 const LIVE = { $in: LIVE_STATUSES };
-const MASTER_FIELDS = '_id name shortName isMultiselectAllowed precedence status updatedAt';
+const MASTER_FIELDS = '_id name shortName isMultiselectAllowed defaultValueId precedence status updatedAt';
 const VALUE_FIELDS = '_id name precedence status';
 
 const pick = (doc, fields) => {
@@ -151,9 +151,14 @@ const createMaster = async ({ vendorId, userId, data, companyMasterData }) => {
 
         try {
             // insertMany skips the save hook that fills createdBy, so it is set here.
-            await MasterValue.insertMany(data.values.map((value, index) => ({
+            const inserted = await MasterValue.insertMany(data.values.map((value, index) => ({
                 vendorId, masterId: master._id, name: value.name, status: value.status, precedence: index + 1, createdBy: userId
             })));
+            const defaultIndex = data.values.findIndex((value) => value.isDefault);
+            if (defaultIndex !== -1) {
+                master.defaultValueId = inserted[defaultIndex]._id;
+                await Master.updateOne({ _id: master._id, vendorId }, { $set: { defaultValueId: master.defaultValueId } }, { auditUserId: userId });
+            }
         } catch (err) {
             // No transactions yet: undo the master so no master is left without values.
             await Master.deleteOne({ _id: master._id, vendorId }, { auditUserId: userId });
@@ -169,7 +174,8 @@ const createMaster = async ({ vendorId, userId, data, companyMasterData }) => {
 // Brings the master's values in line with `values` (the full list, in
 // order): values with an _id are existing ones (name / status / order may
 // change), values without one are new, existing ones left out are deleted.
-// Only what actually changed is written.
+// Only what actually changed is written. Returns the id of the value marked
+// isDefault (it may be a new one), or null.
 const saveValues = async ({ vendorId, userId, id, values, current }) => {
     try {
         const now = new Date();
@@ -216,7 +222,13 @@ const saveValues = async ({ vendorId, userId, id, values, current }) => {
             .map((value, index) => ({ value, index }))
             .filter(({ value }) => !value._id)
             .map(({ value, index }) => ({ vendorId, masterId: id, name: value.name, status: value.status, precedence: index + 1, createdBy: userId }));
-        if (added.length > 0) await MasterValue.insertMany(added);
+        const inserted = added.length > 0 ? await MasterValue.insertMany(added) : [];
+
+        const defaultValue = values.find((value) => value.isDefault);
+        if (!defaultValue) return null;
+        if (defaultValue._id) return defaultValue._id;
+        // insertMany keeps the order: the default's place among the new values.
+        return inserted[values.filter((value) => !value._id).indexOf(defaultValue)]._id;
     } catch (err) {
         throw err;
     }
@@ -249,7 +261,11 @@ const updateMaster = async ({ vendorId, userId, id, data, companyMasterData }) =
         }
         if (!master) return common.returnResult(false, 404, 'Master not found.');
 
-        await saveValues({ vendorId, userId, id, values: data.values, current });
+        const defaultValueId = await saveValues({ vendorId, userId, id, values: data.values, current });
+        if (String(defaultValueId) !== String(master.defaultValueId)) {
+            await Master.updateOne({ _id: id, vendorId }, { $set: { defaultValueId } }, { auditUserId: userId });
+            master.defaultValueId = defaultValueId;
+        }
 
         const values = await MasterValue.find({ vendorId, masterId: id, status: LIVE }).select(VALUE_FIELDS).sort({ precedence: 1 }).lean();
         return common.returnResult(true, 200, 'Master saved.', { master: { ...master, values } });
@@ -337,11 +353,38 @@ const moveMaster = async ({ vendorId, userId, id, direction }) => {
 
 // ---- values (the values popup on the list) ----------------------------------
 
+// A value that is made inactive or deleted can't stay the default.
+const clearDefaultIf = async ({ vendorId, userId, id, valueId }) => {
+    try {
+        await Master.updateOne({ _id: id, vendorId, defaultValueId: valueId }, { $set: { defaultValueId: null } }, { auditUserId: userId });
+    } catch (err) {
+        throw err;
+    }
+};
+
+// PATCH /api/masters/:id/default - the value picked in advance on a new job
+// order (an active value of this master), or null for none.
+const setDefaultValue = async ({ vendorId, userId, id, valueId }) => {
+    try {
+        if (valueId !== null) {
+            const value = await MasterValue.findOne({ _id: valueId, vendorId, masterId: id, status: LIVE }).select('status').lean();
+            if (!value) return common.returnResult(false, 404, 'Value not found.');
+            if (value.status !== 'A') return common.returnResult(false, 400, 'An inactive value cannot be the default. Mark it active first.');
+        }
+        const result = await Master.updateOne({ _id: id, vendorId, status: LIVE }, { $set: { defaultValueId: valueId } }, { auditUserId: userId });
+        if (result.matchedCount === 0) return common.returnResult(false, 404, 'Master not found.');
+        return common.returnResult(true, 200, valueId ? 'Default value set.' : 'Default value removed.', { defaultValueId: valueId });
+    } catch (err) {
+        throw err;
+    }
+};
+
 // PATCH /api/masters/:id/values/:valueId/status
 const setValueStatus = async ({ vendorId, userId, id, valueId, isActive }) => {
     try {
         const result = await common.toggleActiveStatus(MasterValue, valueId, userId, isActive, vendorId, { masterId: id });
         if (!result.isSuccess) return result.statusCode === 404 ? common.returnResult(false, 404, 'Value not found.') : result;
+        if (!isActive) await clearDefaultIf({ vendorId, userId, id, valueId });
         return common.returnResult(true, 200, isActive ? 'Value marked as active.' : 'Value marked as inactive.', {
             value: { _id: result.meta.document._id, status: result.meta.document.status }
         });
@@ -370,13 +413,47 @@ const deleteValue = async ({ vendorId, userId, id, valueId }) => {
         }
         const result = await common.softDelete(MasterValue, valueId, userId, vendorId, { masterId: id });
         if (!result.isSuccess) return result.statusCode === 404 ? common.returnResult(false, 404, 'Value not found.') : result;
+        await clearDefaultIf({ vendorId, userId, id, valueId });
         return common.returnResult(true, 200, 'Value deleted.');
     } catch (err) {
         throw err;
     }
 };
 
+// ---- job order -------------------------------------------------------------
+
+// GET /api/masters/for-job-order - every active master with its active values,
+// both in order, and the default value (only if it is still active). Masters
+// without an active value are left out - there would be nothing to pick.
+const getMastersForJobOrder = async ({ vendorId }) => {
+    try {
+        const masters = await Master.find({ vendorId, status: 'A' })
+            .select('_id name shortName isMultiselectAllowed defaultValueId').sort({ precedence: 1 }).lean();
+        const values = masters.length === 0 ? [] : await MasterValue.find({ vendorId, masterId: { $in: masters.map((m) => m._id) }, status: 'A' })
+            .select('_id masterId name').sort({ precedence: 1 }).lean();
+
+        const valuesByMaster = new Map();
+        for (const { masterId, ...value } of values) {
+            const key = String(masterId);
+            if (!valuesByMaster.has(key)) valuesByMaster.set(key, []);
+            valuesByMaster.get(key).push(value);
+        }
+
+        const result = [];
+        for (const master of masters) {
+            const masterValues = valuesByMaster.get(String(master._id));
+            if (!masterValues) continue;
+            const hasDefault = masterValues.some((value) => String(value._id) === String(master.defaultValueId));
+            result.push({ ...master, defaultValueId: hasDefault ? master.defaultValueId : null, values: masterValues });
+        }
+        return common.returnResult(true, 200, 'Masters fetched successfully.', { masters: result });
+    } catch (err) {
+        throw err;
+    }
+};
+
 module.exports = {
+    getMastersForJobOrder,
     listMasters,
     getMaster,
     createMaster,
@@ -387,5 +464,6 @@ module.exports = {
     moveMaster,
     setValueStatus,
     moveValue,
+    setDefaultValue,
     deleteValue
 };

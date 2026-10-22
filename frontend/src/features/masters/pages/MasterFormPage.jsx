@@ -28,7 +28,7 @@ const toDetails = (master) => ({
 // What gets saved, as one string - compared with the loaded one to know
 // whether anything changed.
 const toSnapshot = (details, values) =>
-  JSON.stringify([details, values.map(({ _id, name, status }) => [_id, name, status])]);
+  JSON.stringify([details, values.map(({ _id, name, status, isDefault }) => [_id, name, status, isDefault])]);
 
 // The server's field errors ({ field, message }) by field name. Errors on a
 // single value ("values.2.name") count as errors of the values list.
@@ -84,13 +84,13 @@ const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed = nu
         let loadedValues;
         if (mode === 'edit') {
           loadedDetails = toDetails(master);
-          loadedValues = master.values.map(({ _id, name, status: valueStatus }) => ({ key: _id, _id, name, status: valueStatus }));
+          loadedValues = master.values.map(({ _id, name, status: valueStatus }) => ({ key: _id, _id, name, status: valueStatus, isDefault: _id === master.defaultValueId }));
         } else {
           // Clone: a new master with the same settings and values. The short
           // name is left empty - it must be unique.
           const base = master.name.slice(0, NAME_MAX_LENGTH - COPY_SUFFIX.length);
           loadedDetails = { ...toDetails(master), name: `${base}${COPY_SUFFIX}`, shortName: '' };
-          loadedValues = master.values.map(({ name, status: valueStatus }) => ({ key: `new-${nextKey.current++}`, name, status: valueStatus }));
+          loadedValues = master.values.map(({ _id, name, status: valueStatus }) => ({ key: `new-${nextKey.current++}`, name, status: valueStatus, isDefault: _id === master.defaultValueId }));
         }
         setDetails(loadedDetails);
         setValues(loadedValues);
@@ -128,7 +128,7 @@ const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed = nu
       setAddError(failure);
       return null;
     }
-    const next = [...values, { key: createKey(), name: newName.trim(), status: 'A' }];
+    const next = [...values, { key: createKey(), name: newName.trim(), status: 'A', isDefault: false }];
     setValues(next);
     setNewName('');
     return next;
@@ -153,7 +153,7 @@ const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed = nu
       name: details.name.trim(),
       shortName: details.shortName.trim() || null,
       isMultiselectAllowed: details.isMultiselectAllowed,
-      values: valuesToSave.map(({ _id, name, status: valueStatus }) => (_id ? { _id, name, status: valueStatus } : { name, status: valueStatus })),
+      values: valuesToSave.map(({ _id, name, status: valueStatus, isDefault }) => (_id ? { _id, name, status: valueStatus, isDefault } : { name, status: valueStatus, isDefault })),
     };
     setIsSaving(true);
     setFormError('');
@@ -239,7 +239,7 @@ const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed = nu
             </div>
           </Card>
 
-          <Card variant="outlined" title="Values" subtitle="The options of this dropdown, in the order shown.">
+          <Card variant="outlined" title="Values" subtitle="The options of this dropdown, in the order shown. The default one is picked in advance on a new job order.">
             <MasterValuesEditor
               values={values}
               onChange={handleValuesChange}

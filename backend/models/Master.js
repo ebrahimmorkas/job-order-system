@@ -26,6 +26,12 @@ const masterSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    // The value picked in advance on a new job order (an active value of
+    // this master), or null for none.
+    defaultValueId: {
+        type: mongoose.Types.ObjectId,
+        default: null
+    },
     // Order of the dropdowns on the job order form - lowest first.
     precedence: {
         type: Number,

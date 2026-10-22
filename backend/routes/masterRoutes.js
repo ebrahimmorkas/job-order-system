@@ -6,10 +6,18 @@ const requireFeature = require('../middlewares/requireFeature');
 const validate = require('../middlewares/validate');
 const v = require('../middlewares/validations/masterValidations');
 const { ROLES } = require('../constants/roleConstants');
-const { FEATURE_FLAGS } = require('../constants/featureConstants');
+const { FEATURE_FLAGS, FEATURE_READ_OVERRIDES } = require('../constants/featureConstants');
 
-// Logged in already (server.js mounts this below authenticate). Owner only,
-// and nothing works while the master feature is off on either side.
+// Logged in already (server.js mounts this below authenticate).
+
+// The job order form: any logged-in user of the vendor. Also works while the
+// vendor's master feature is off, if fetchMastersEvenWhenBitIsOff is on.
+router.get('/for-job-order',
+    requireFeature(FEATURE_FLAGS.MASTER_MODULE, { orCompanyFlag: FEATURE_READ_OVERRIDES.MASTERS_FOR_JOB_ORDER }),
+    masterController.getMastersForJobOrder);
+
+// Everything else: owner only, and nothing works while the master feature is
+// off on either side.
 router.use(authorize(ROLES.OWNER), requireFeature(FEATURE_FLAGS.MASTER_MODULE));
 
 const byId = validate(v.masterIdParamSchema, 'params');
@@ -24,6 +32,7 @@ router.get('/:id', byId, masterController.getMaster);
 router.put('/:id', byId, validate(v.updateMasterSchema), masterController.updateMaster);
 router.patch('/:id/status', byId, validate(v.statusSchema), masterController.setMasterStatus);
 router.patch('/:id/move', byId, validate(v.moveSchema), masterController.moveMaster);
+router.patch('/:id/default', byId, validate(v.defaultValueSchema), masterController.setDefaultValue);
 router.delete('/:id', byId, masterController.deleteMaster);
 
 // The values popup on the list; everything else about values is saved with the master (PUT /:id).
