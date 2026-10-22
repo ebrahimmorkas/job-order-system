@@ -3,7 +3,8 @@
 // the feature works only when it is on in both (common.checkFeatureOnOrOff).
 // Add a new flag here and to both schemas.
 const FEATURE_FLAGS = {
-    MASTER_MODULE: 'isMasterModuleFeatureOn'
+    MASTER_MODULE: 'isMasterModuleFeatureOn',
+    CONTROLS: 'isControlsFeatureOn'
 };
 
 // CompanyMaster-only switches that keep ONE read action of a feature
@@ -12,7 +13,9 @@ const FEATURE_FLAGS = {
 // the feature is on.
 const FEATURE_READ_OVERRIDES = {
     // The job order form still gets the vendor's masters.
-    MASTERS_FOR_JOB_ORDER: 'fetchMastersEvenWhenBitIsOff'
+    MASTERS_FOR_JOB_ORDER: 'fetchMastersEvenWhenBitIsOff',
+    // The job order form still gets the vendor's controls.
+    CONTROLS_FOR_JOB_ORDER: 'fetchControlsEvenWhenBitIsOff'
 };
 
 module.exports = {

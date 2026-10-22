@@ -16,6 +16,7 @@ const WEBSITE_MASTER = {
     loginLockoutMinutes: 15,
     // Feature switches - each also has to be on in the vendor's CompanyMaster
     isMasterModuleFeatureOn: true,
+    isControlsFeatureOn: true,
     // Image storage - 'local' = this server's disk
     mainImageService: 'local',
     enforceMainImageService: false

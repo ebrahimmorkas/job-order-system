@@ -38,6 +38,14 @@ export const MastersIcon = (props) => (
   </svg>
 );
 
+export const ControlsIcon = (props) => (
+  <svg {...base} {...props}>
+    <rect x="3.75" y="4.5" width="16.5" height="5.25" rx="1.5" />
+    <rect x="3.75" y="14.25" width="4.5" height="4.5" rx="1" />
+    <path d="M11.25 16.5h9" />
+  </svg>
+);
+
 export const MenuIcon = (props) => (
   <svg {...base} {...props}>
     <path d="M4 6h16M4 12h16M4 18h16" />

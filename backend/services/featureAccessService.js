@@ -1,4 +1,5 @@
 const common = require('../utils/common');
+const { assignedTypesOf } = require('./controlService');
 const { FEATURE_FLAGS, FEATURE_FLAG_VALUES, FEATURE_READ_OVERRIDES } = require('../constants/featureConstants');
 
 // Which features are on for this vendor - on in WebsiteMaster AND in its
@@ -10,6 +11,16 @@ const getFeatureAccess = (websiteMasterData, companyMasterData) => {
         for (const flag of FEATURE_FLAG_VALUES) {
             featureAccess[flag] = websiteMasterData?.[flag] === true && companyMasterData?.[flag] === true;
         }
+        // Controls: on only with at least one type assigned; which ones.
+        const assignedTypes = assignedTypesOf(companyMasterData);
+        const assignedControls = featureAccess[FEATURE_FLAGS.CONTROLS] ? assignedTypes : [];
+        featureAccess[FEATURE_FLAGS.CONTROLS] = assignedControls.length > 0;
+        featureAccess.assignedControls = assignedControls;
+        // Whether the job order form gets the controls (same rule as the route).
+        featureAccess.canFetchControlsForJobOrder = featureAccess[FEATURE_FLAGS.CONTROLS]
+            || (websiteMasterData?.[FEATURE_FLAGS.CONTROLS] === true
+                && companyMasterData?.[FEATURE_READ_OVERRIDES.CONTROLS_FOR_JOB_ORDER] === true
+                && assignedTypes.length > 0);
         // Whether the job order form gets the masters (same rule as the route).
         featureAccess.canFetchMastersForJobOrder = featureAccess[FEATURE_FLAGS.MASTER_MODULE]
             || (websiteMasterData?.[FEATURE_FLAGS.MASTER_MODULE] === true

@@ -5,10 +5,10 @@ import Button from '../../../components/common/Buttons';
 import Alert from '../../../components/common/Alert';
 import Spinner from '../../../components/common/Spinner';
 import { useToast } from '../../../components/common/Toast';
-import IconButton from './IconButton';
-import DefaultChoice from './DefaultChoice';
-import UsagePill from './UsagePill';
-import { TrashIcon, MoveUpIcon, MoveDownIcon } from './icons';
+import IconButton from '../../../components/common/IconButton';
+import DefaultChoice from '../../../components/common/DefaultChoice';
+import UsagePill from '../../../components/common/UsagePill';
+import { TrashIcon, MoveUpIcon, MoveDownIcon } from '../../../components/common/ActionIcons';
 import * as mastersApi from '../api/mastersApi';
 
 /**

@@ -7,11 +7,13 @@ import { useConfirmLeave } from '../components/common/UnsavedChanges';
 import { useFeatureAccess } from '../features/featureAccess/hooks/useFeatureAccess';
 import DashboardPage from '../features/dashboard/pages/DashboardPage';
 import MastersPage from '../features/masters/pages/MastersPage';
+import ControlsPage from '../features/controls/pages/ControlsPage';
 
 // Sidebar key -> page. Keys without a page yet show a placeholder.
 const PAGES = {
   dashboard: DashboardPage,
   masters: MastersPage,
+  controls: ControlsPage,
 };
 
 /**

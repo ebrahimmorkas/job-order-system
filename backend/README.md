@@ -34,12 +34,19 @@ it (`GET /api/feature-access`). The flags are listed in
 | Feature | Flag | Also needs (CompanyMaster) |
 | --- | --- | --- |
 | Masters | `isMasterModuleFeatureOn` | `numberOfMastersAllowed`, `numberOfValuesAllowedInMaster` |
+| Controls | `isControlsFeatureOn` | `assignedControls` (see Controls) |
 
 `CompanyMaster.fetchMastersEvenWhenBitIsOff` (default false) only matters while
 the vendor's `isMasterModuleFeatureOn` is off: the Masters page stays hidden and
 every master action stays blocked, except `GET /api/masters/for-job-order`, so
 the job order form still gets the masters. The platform-wide WebsiteMaster
 switch still applies.
+
+`CompanyMaster.fetchControlsEvenWhenBitIsOff` (default false) works the same way
+for Controls: while the vendor's `isControlsFeatureOn` is off, only
+`GET /api/controls/for-job-order` still works (the controls of the assigned
+types). `GET /api/feature-access` returns `canFetchMastersForJobOrder` and
+`canFetchControlsForJobOrder` so the job order form knows what it gets.
 
 ## Masters
 
@@ -59,6 +66,35 @@ Services" with the values Polishing, Cutting, Edging.
   deleted). They have no default: while either is empty, nothing can be
   created.
 - Needs MongoDB 6.0 or newer (the unique-name indexes).
+
+## Controls
+
+Fields the vendor adds to the job order form (`models/Control.js`): a
+`textfield`, `textarea`, `checkbox` (one tick box) or `radio` group.
+
+- Every control: `label` (the question; for a checkbox its own text - unique
+  per vendor, ignoring capital letters), `isRequired`, `precedence` (order on
+  the job order form). Text controls: `placeholder`, `defaultText`. Text field
+  only: `isPrice` (the answer is an amount - no minus, at most 2 decimals, also
+  the default - added to the job order total) and `isPriceIncludedInTax` (tax is
+  charged on it; only with `isPrice`). Checkbox:
+  `defaultChecked`. Radio: `options` (at least 2, in order, each with its own
+  `_id`) and `defaultOptionId` (optional). The type never changes.
+- Active / inactive, deleted softly (`status: 'D'`); a deleted label can be used again.
+- CompanyMaster (set by the platform owner; empty = no limit):
+  - `assignedControls` - which types the vendor gets: `null` = all, `[]` =
+    none (the Controls menu is hidden), otherwise only those listed. Controls
+    of a type taken away are hidden everywhere and come back if it is given again.
+  - `numberOfControlsAllowed.{textfield,textarea,checkbox,radio}` - per type
+    (active + inactive).
+  - `maxLengthOfTextfieldControl`, `maxLengthOfTextareaControl` - longest text
+    typed on the job order (and the default text).
+  - `maxLengthOfRadioButtonText` (one choice), `maxLengthOfCheckboxText`,
+    `numberOfRadioButtonsAllowedInGroup`.
+  - `maxTextForLabelInTextfieldControl`, `maxTextForPlaceholderInTextfieldControl`,
+    `maxTextForLabelInTextareaControl`, `maxTextForPlaceholderInTextareaControl`,
+    `maxTextForLabelInRadioButtonControl` - longest label / placeholder the
+    vendor may set (a checkbox's label: `maxLengthOfCheckboxText`).
 
 ## Image storage (logos and later images)
 
@@ -111,6 +147,12 @@ uploader's file name is never used. Replacing an image deletes the old file.
 | PATCH | `/api/masters/:id/values/:valueId/move` | owner - `{ direction: up|down }`, one place inside the master |
 | DELETE | `/api/masters/:id/values/:valueId` | owner - delete a value |
 | PATCH | `/api/masters/:id/values/:valueId/status` | owner - `{ isActive }` |
+| GET | `/api/controls/for-job-order` | logged in - active controls of the assigned types with defaults and `maxLength`, for the job order form (also while Controls is off, with `fetchControlsEvenWhenBitIsOff`) |
+| GET / POST | `/api/controls` | owner - list (search, status, type, page, limit) / create |
+| GET / PUT / DELETE | `/api/controls/:id` | owner - one control / save every field (same type) / delete |
+| PATCH | `/api/controls/:id/status` | owner - `{ isActive }` |
+| PATCH | `/api/controls/:id/move` | owner - `{ direction: up|down }` |
+| POST | `/api/controls/bulk` | owner - `{ action: activate|deactivate|delete, ids }` |
 
 `PUT /api/masters/:id` takes `{ name, shortName, isMultiselectAllowed, values }`.
 `values` is the whole list in order: `{ _id, name, status, isDefault }` for a

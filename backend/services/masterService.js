@@ -55,16 +55,6 @@ const duplicateResult = (err, data) => {
     }
 };
 
-// The next free position at the end of the vendor's masters.
-const nextMasterPrecedence = async (vendorId) => {
-    try {
-        const last = await Master.findOne({ vendorId, status: LIVE }).sort({ precedence: -1 }).select('precedence').lean();
-        return (last?.precedence || 0) + 1;
-    } catch (err) {
-        throw err;
-    }
-};
-
 // ---- masters --------------------------------------------------------------
 
 // GET /api/masters - one page, in dropdown order, with each master's number
@@ -128,7 +118,7 @@ const createMaster = async ({ vendorId, userId, data, companyMasterData }) => {
 
         const [mastersUsed, precedence] = await Promise.all([
             Master.countDocuments({ vendorId, status: LIVE }),
-            nextMasterPrecedence(vendorId)
+            common.nextPrecedence(Master, { vendorId })
         ]);
         if (mastersUsed >= mastersAllowed) {
             return common.returnResult(false, 403, `You can have at most ${mastersAllowed} masters. Delete one you no longer need to add another.`);
@@ -319,33 +309,11 @@ const bulkUpdateMasters = async ({ vendorId, userId, action, ids }) => {
     }
 };
 
-// Swaps the precedence of document `id` with the one just above / below it
-// among the live documents matching `scope`. noun: 'master' | 'value'.
-const swapWithNeighbour = async (Model, scope, id, direction, userId, noun) => {
-    try {
-        const doc = await Model.findOne({ ...scope, _id: id, status: LIVE }).select('_id precedence').lean();
-        if (!doc) return common.returnResult(false, 404, noun === 'master' ? 'Master not found.' : 'Value not found.');
-
-        const isUp = direction === 'up';
-        const neighbour = await Model.findOne({ ...scope, status: LIVE, precedence: isUp ? { $lt: doc.precedence } : { $gt: doc.precedence } })
-            .sort({ precedence: isUp ? -1 : 1 }).select('_id precedence').lean();
-        if (!neighbour) return common.returnResult(false, 400, `This ${noun} is already ${isUp ? 'first' : 'last'}.`);
-
-        await Promise.all([
-            Model.updateOne({ ...scope, _id: doc._id }, { $set: { precedence: neighbour.precedence } }, { auditUserId: userId }),
-            Model.updateOne({ ...scope, _id: neighbour._id }, { $set: { precedence: doc.precedence } }, { auditUserId: userId })
-        ]);
-        return common.returnResult(true, 200, isUp ? 'Moved up.' : 'Moved down.');
-    } catch (err) {
-        throw err;
-    }
-};
-
 // PATCH /api/masters/:id/move - swaps places with the master just above /
 // below it in the whole list (across pages).
 const moveMaster = async ({ vendorId, userId, id, direction }) => {
     try {
-        return await swapWithNeighbour(Master, { vendorId }, id, direction, userId, 'master');
+        return await common.swapPrecedence(Master, { vendorId }, id, direction, userId, 'master');
     } catch (err) {
         throw err;
     }
@@ -397,7 +365,7 @@ const setValueStatus = async ({ vendorId, userId, id, valueId, isActive }) => {
 // just above / below it in the same master.
 const moveValue = async ({ vendorId, userId, id, valueId, direction }) => {
     try {
-        return await swapWithNeighbour(MasterValue, { vendorId, masterId: id }, valueId, direction, userId, 'value');
+        return await common.swapPrecedence(MasterValue, { vendorId, masterId: id }, valueId, direction, userId, 'value');
     } catch (err) {
         throw err;
     }

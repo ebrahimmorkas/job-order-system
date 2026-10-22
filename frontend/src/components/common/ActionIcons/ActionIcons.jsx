@@ -1,4 +1,4 @@
-// Icons used by the masters screens. All decorative: every button using one
+// Small line icons for row actions. All decorative: every button using one
 // has its own aria-label.
 const base = {
   fill: 'none',

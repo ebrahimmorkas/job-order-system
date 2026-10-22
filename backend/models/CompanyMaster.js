@@ -1,4 +1,13 @@
 const mongoose = require('mongoose');
+const { CONTROL_TYPE_VALUES } = require('../constants/controlConstants');
+
+// A whole number of at least `min`, or null (= no limit).
+const wholeNumberOrNull = (field, min = 0) => ({
+    type: Number,
+    min,
+    validate: { validator: (value) => value === null || Number.isInteger(value), message: `${field} must be a whole number` },
+    default: null
+});
 const auditPlugin = require('./plugins/auditPlugin');
 const cacheInvalidationPlugin = require('./plugins/cacheInvalidationPlugin');
 const redisKeys = require('../utils/redisKeys');
@@ -96,6 +105,53 @@ const companyMasterSchema = new mongoose.Schema({
         validate: { validator: (value) => value === null || Number.isInteger(value), message: 'numberOfValuesAllowedInMaster must be a whole number' },
         default: null
     },
+
+    // ---- Controls ---------------------------------------------------------
+    // Fields the vendor adds to the job order form (models/Control.js). Off
+    // until the platform owner switches it on for this vendor.
+    isControlsFeatureOn: {
+        type: Boolean,
+        default: false
+    },
+    // Which control types the vendor gets: null = all of them, [] = none,
+    // otherwise only those listed. Controls of a type taken away are hidden
+    // everywhere (kept in the database; they come back if it is given again).
+    // Only matters while isControlsFeatureOn is off: the job order form still
+    // gets the vendor's controls of the assigned types (GET
+    // /api/controls/for-job-order), while the Controls page and every other
+    // control action stay off.
+    fetchControlsEvenWhenBitIsOff: {
+        type: Boolean,
+        default: false
+    },
+    assignedControls: {
+        type: [{ type: String, enum: CONTROL_TYPE_VALUES }],
+        default: null
+    },
+    // How many controls of each type the vendor may have (active + inactive;
+    // deleted ones don't count). null = no limit.
+    numberOfControlsAllowed: {
+        textfield: wholeNumberOrNull('numberOfControlsAllowed.textfield'),
+        textarea: wholeNumberOrNull('numberOfControlsAllowed.textarea'),
+        checkbox: wholeNumberOrNull('numberOfControlsAllowed.checkbox'),
+        radio: wholeNumberOrNull('numberOfControlsAllowed.radio')
+    },
+    // Longest text allowed (null = no limit): typed into a textfield /
+    // textarea (and its default text), a radio choice, a checkbox's text.
+    maxLengthOfTextfieldControl: wholeNumberOrNull('maxLengthOfTextfieldControl', 1),
+    maxLengthOfTextareaControl: wholeNumberOrNull('maxLengthOfTextareaControl', 1),
+    maxLengthOfRadioButtonText: wholeNumberOrNull('maxLengthOfRadioButtonText', 1),
+    maxLengthOfCheckboxText: wholeNumberOrNull('maxLengthOfCheckboxText', 1),
+    // Most choices in one radio group (null = no limit).
+    numberOfRadioButtonsAllowedInGroup: wholeNumberOrNull('numberOfRadioButtonsAllowedInGroup', 2),
+    // Longest label (the question above the control) and placeholder (grey
+    // hint text) the vendor may set (null = no limit). A checkbox's label is
+    // its text: maxLengthOfCheckboxText.
+    maxTextForLabelInTextfieldControl: wholeNumberOrNull('maxTextForLabelInTextfieldControl', 1),
+    maxTextForPlaceholderInTextfieldControl: wholeNumberOrNull('maxTextForPlaceholderInTextfieldControl', 1),
+    maxTextForLabelInTextareaControl: wholeNumberOrNull('maxTextForLabelInTextareaControl', 1),
+    maxTextForPlaceholderInTextareaControl: wholeNumberOrNull('maxTextForPlaceholderInTextareaControl', 1),
+    maxTextForLabelInRadioButtonControl: wholeNumberOrNull('maxTextForLabelInRadioButtonControl', 1),
 
     // ---- Storage ----------------------------------------------------------
     // Where this vendor's images go. null = WebsiteMaster.mainImageService

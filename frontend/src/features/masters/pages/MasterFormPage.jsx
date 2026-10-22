@@ -7,15 +7,16 @@ import Alert from '../../../components/common/Alert';
 import Badge from '../../../components/common/Badge';
 import Spinner from '../../../components/common/Spinner';
 import { useUnsavedChanges } from '../../../components/common/UnsavedChanges';
-import MasterValuesEditor from '../components/MasterValuesEditor';
-import { checkValueName } from '../utils/valueName';
-import { BackIcon } from '../components/icons';
+import ListItemsEditor, { checkItemName } from '../../../components/common/ListItemsEditor';
+import { BackIcon } from '../../../components/common/ActionIcons';
 import * as mastersApi from '../api/mastersApi';
 
 // Same limits as the backend (constants/masterConstants.js).
 const NAME_MAX_LENGTH = 50;
 const SHORT_NAME_MAX_LENGTH = 10;
+const VALUE_NAME_MAX_LENGTH = 100;
 const COPY_SUFFIX = ' (Copy)';
+const VALUE_NOUN = { singular: 'value', plural: 'values', owner: 'master' };
 
 const EMPTY_DETAILS = { name: '', shortName: '', isMultiselectAllowed: false };
 
@@ -123,7 +124,7 @@ const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed = nu
   // null when that typed value can't be added (its error is shown).
   const collectValues = () => {
     if (!newName.trim()) return values;
-    const failure = checkValueName(values, newName, valuesAllowed);
+    const failure = checkItemName(values, newName, { itemsAllowed: valuesAllowed, maxLength: VALUE_NAME_MAX_LENGTH, noun: VALUE_NOUN });
     if (failure) {
       setAddError(failure);
       return null;
@@ -240,11 +241,14 @@ const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed = nu
           </Card>
 
           <Card variant="outlined" title="Values" subtitle="The options of this dropdown, in the order shown. The default one is picked in advance on a new job order.">
-            <MasterValuesEditor
-              values={values}
+            <ListItemsEditor
+              items={values}
               onChange={handleValuesChange}
               createKey={createKey}
-              valuesAllowed={valuesAllowed}
+              itemsAllowed={valuesAllowed}
+              maxLength={VALUE_NAME_MAX_LENGTH}
+              noun={VALUE_NOUN}
+              addPlaceholder="Add a value, e.g. Polishing"
               newName={newName}
               onNewNameChange={setNewName}
               addError={addError}

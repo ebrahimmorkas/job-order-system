@@ -31,6 +31,11 @@ images stored on the server itself, such as logos) to it.
   once); create, copy and
   edit, where every change waits for Save and leaving with unsaved changes
   asks first.
+- **Controls** - fields the vendor adds to the job order (text field, text
+  area, checkbox, radio buttons), only the types assigned to the vendor: the
+  same list as Masters plus a type filter and a usage pill per limited type;
+  create (pick the type), copy and edit with a live preview; radio choices
+  with a default.
 - An unknown host name shows "No account is set up for this domain".
 
 ## Vendors in local development
@@ -58,10 +63,12 @@ To try a second vendor on the same computer:
 
 - `src/components/common/` - the reusable building blocks every module uses:
   Accordion, Alert, Autocomplete, Avatar, Badge, Breadcrumbs, BulkActionBar,
-  Button, Card, Checkbox, ConfirmDialog, DatePicker, Divider, Dropdown, EmptyState,
-  FileUpload, Form, HtmlEditor, InputField, Menu, Modal, Pagination,
+  ActionIcons, Button, Card, Checkbox, ConfirmDialog, DatePicker, DefaultChoice,
+  Divider, Dropdown, EmptyState, FileUpload, Form, HtmlEditor, IconButton,
+  InputField, ListItemsEditor (an ordered, editable list of named items with a
+  default), Menu, Modal, Pagination,
   ProgressBar, Radio, SearchInput, Skeleton, Slider, Spinner, Stepper, Switch,
-  Table, Tabs, TextArea, Toast, UnsavedChanges (asks before leaving a page with
+  Table, Tabs, TextArea, Toast, UsagePill ("2 / 10 used"), UnsavedChanges (asks before leaving a page with
   unsaved changes - `useUnsavedChanges(isDirty)`). Reuse these; when something is missing, add it
   here as a new reusable component rather than inside one module.
 - `src/components/ui/Sidebar/` - the app's left-hand menu (menu items in

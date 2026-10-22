@@ -330,6 +330,43 @@ const runBulkOperation = async (ids, operationFn) => {
   return returnResult(true, 200, `${successCount} succeeded, ${failureCount} failed.`, { results, successCount, failureCount });
 };
 
+// Moves a document one place up / down: swaps its precedence with the
+// nearest document above / below it among those matching `scope` (e.g.
+// { vendorId } or { vendorId, masterId }) that are active or inactive.
+// noun names the document in the messages ('master', 'value', 'control').
+const swapPrecedence = async (Model, scope, id, direction, userId, noun) => {
+  try {
+    const live = { $in: ['A', 'I'] };
+    const notFoundMessage = `${noun.charAt(0).toUpperCase()}${noun.slice(1)} not found.`;
+    const doc = await Model.findOne({ ...scope, _id: id, status: live }).select('_id precedence').lean();
+    if (!doc) return returnResult(false, 404, notFoundMessage);
+
+    const isUp = direction === 'up';
+    const neighbour = await Model.findOne({ ...scope, status: live, precedence: isUp ? { $lt: doc.precedence } : { $gt: doc.precedence } })
+      .sort({ precedence: isUp ? -1 : 1 }).select('_id precedence').lean();
+    if (!neighbour) return returnResult(false, 400, `This ${noun} is already ${isUp ? 'first' : 'last'}.`);
+
+    await Promise.all([
+      Model.updateOne({ ...scope, _id: doc._id }, { $set: { precedence: neighbour.precedence } }, { auditUserId: userId }),
+      Model.updateOne({ ...scope, _id: neighbour._id }, { $set: { precedence: doc.precedence } }, { auditUserId: userId })
+    ]);
+    return returnResult(true, 200, isUp ? 'Moved up.' : 'Moved down.');
+  } catch (err) {
+    throw err;
+  }
+};
+
+// The next free position at the end of the documents matching `scope`
+// (active or inactive).
+const nextPrecedence = async (Model, scope) => {
+  try {
+    const last = await Model.findOne({ ...scope, status: { $in: ['A', 'I'] } }).sort({ precedence: -1 }).select('precedence').lean();
+    return (last?.precedence || 0) + 1;
+  } catch (err) {
+    throw err;
+  }
+};
+
 // The vendor's active default document (isDefault: true), in meta.document.
 const getDefault = async (Model, vendorId) => {
   const document = await Model.findOne({ vendorId, isDefault: true, status: 'A' });
@@ -349,6 +386,8 @@ module.exports = {
   softDelete,
   hardDelete,
   runBulkOperation,
+  swapPrecedence,
+  nextPrecedence,
   getAll,
   getByID,
   getDefault,

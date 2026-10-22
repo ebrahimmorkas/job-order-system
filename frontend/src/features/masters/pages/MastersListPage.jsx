@@ -11,10 +11,10 @@ import EmptyState from '../../../components/common/EmptyState';
 import ConfirmDialog from '../../../components/common/ConfirmDialog';
 import { useToast } from '../../../components/common/Toast';
 import { useDebouncedValue } from '../../../utils/useDebouncedValue';
-import IconButton from '../components/IconButton';
+import IconButton from '../../../components/common/IconButton';
+import UsagePill from '../../../components/common/UsagePill';
+import { EditIcon, CopyIcon, TrashIcon, PlusIcon, MoveUpIcon, MoveDownIcon } from '../../../components/common/ActionIcons';
 import MasterValuesModal from '../components/MasterValuesModal';
-import UsagePill from '../components/UsagePill';
-import { EditIcon, CopyIcon, TrashIcon, PlusIcon, MoveUpIcon, MoveDownIcon } from '../components/icons';
 import * as mastersApi from '../api/mastersApi';
 
 const PAGE_SIZE = 25;
