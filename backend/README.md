@@ -42,6 +42,7 @@ it (`GET /api/feature-access`). The flags are listed in
 | Controls | `isControlsFeatureOn` | `assignedControls` (see Controls) |
 | Tax | `isTaxFeatureOn` | `assignedCountries` (see Tax) |
 | Job order images | `isImageUploadFeatureOn` | optional limits `numberOfImageUploadAllowed`, `maxImageUploadSizeMB`, `imageFormatsAllowed` (see Job orders) |
+| Users and Role Master (RBAC) | `isRBACFeatureOn` | optional limit `numberOfRoleCreationAllowed` (see Role Master) |
 
 `CompanyMaster.fetchMastersEvenWhenBitIsOff` (default false) only matters while
 the vendor's `isMasterModuleFeatureOn` is off: the Masters page stays hidden and
@@ -62,7 +63,10 @@ Services" with the values Polishing, Cutting, Edging.
 
 - Master: `name` (unique per vendor, ignoring capital letters), `shortName`
   (optional, unique the same way), `isMultiselectAllowed`, `isRequired` (a
-  job order can't be saved without a value picked), `defaultValueId`
+  job order can't be saved without a value picked), `isRoleProvided` ("Role
+  will be provided for this master": a master role can use it; it can't be
+  unticked, and the master can't be deleted, while a role uses it),
+  `defaultValueId`
   (the value picked in advance on a new job order - optional, one active
   value; cleared when that value is made inactive or deleted), `precedence`
   (order on the job order form).
@@ -141,6 +145,26 @@ Per vendor:
 - A country is "tax ready" while it is assigned and saved as registered. Only
   then is tax charged on a job order for it; a job order for a country not
   ready is made without tax.
+
+## Role Master
+
+Roles the vendor makes, given to users later (the Users module). Owner only,
+and only while RBAC is on (WebsiteMaster and CompanyMaster `isRBACFeatureOn`).
+
+- Role (`Role`): `name` (unique per vendor, ignoring capital letters), `type`
+  (picked at creation, never changes) and, by type:
+  - `module` - `modules: [{ module, permissions }]`. Modules are the ones
+    switched on for the vendor (Job Orders, Masters, Controls, Users, Role
+    Master, Company Settings - `constants/rbacConstants.js`). Permissions are
+    `view`, `create`, `edit`, `delete`; Users also has `assignRole`;
+    Company Settings has only `view` and `edit`. Giving anything also gives
+    `view`.
+  - `master` - `masters: [{ masterId, isWholeMaster, valueIds }]`: view only,
+    of masters marked `isRoleProvided`, each whole or some of its values.
+- Active / inactive, deleted softly. `numberOfRoleCreationAllowed` counts
+  active + inactive roles (null = no limit).
+- A deleted master value leaves every role; a master entry left with no value
+  is removed.
 
 ## Job orders
 
@@ -256,6 +280,11 @@ uploader's file name is never used. Replacing an image deletes the old file.
 | PATCH | `/api/controls/:id/status` | owner - `{ isActive }` |
 | PATCH | `/api/controls/:id/move` | owner - `{ direction: up|down }` |
 | POST | `/api/controls/bulk` | owner - `{ action: activate|deactivate|delete, ids }` |
+| GET | `/api/roles/form-data` | owner, RBAC on - the modules and role masters (with values) a role can use, and the roles limit |
+| GET / POST | `/api/roles` | owner, RBAC on - list (search, status, type, page, limit) / create |
+| GET / PUT / DELETE | `/api/roles/:id` | owner, RBAC on - one role / save name and modules or masters (same type) / delete |
+| PATCH | `/api/roles/:id/status` | owner, RBAC on - `{ isActive }` |
+| POST | `/api/roles/bulk` | owner, RBAC on - `{ action: activate|deactivate|delete, ids }` |
 | GET | `/api/job-orders/form-data` | logged in - everything the job order form needs (see Job orders) |
 | GET / POST | `/api/job-orders` | logged in - list, newest first (search number or customer place, page, limit) / create |
 | GET / PUT / DELETE | `/api/job-orders/:id` | logged in - one job order / save it (worked out again) / cancel it |
@@ -268,7 +297,12 @@ JSON in `data` and new images in `images`. Field errors are named
 `jobOrderNumber`, `customer.<field>`, `masters.<id>`, `controls.<id>`, `taxId`
 and `images`.
 
-`PUT /api/masters/:id` takes `{ name, shortName, isMultiselectAllowed, values }`.
+`POST` / `PUT /api/roles` take `{ name, type (create only), modules: [{ module,
+permissions }] }` or `{ ..., masters: [{ masterId, isWholeMaster, valueIds }] }`.
+Field errors are named `name`, `modules`, `masters`, `modules.<key>` and
+`masters.<masterId>`.
+
+`PUT /api/masters/:id` takes `{ name, shortName, isMultiselectAllowed, isRoleProvided, values }`.
 `values` is the whole list in order: `{ _id, name, status, isDefault }` for a
 value that already exists, `{ name, status, isDefault }` for a new one. At most
 one value is `isDefault`, and it must be active. Existing values left out are

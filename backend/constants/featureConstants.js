@@ -6,7 +6,9 @@ const FEATURE_FLAGS = {
     MASTER_MODULE: 'isMasterModuleFeatureOn',
     CONTROLS: 'isControlsFeatureOn',
     TAX: 'isTaxFeatureOn',
-    IMAGE_UPLOAD: 'isImageUploadFeatureOn'
+    IMAGE_UPLOAD: 'isImageUploadFeatureOn',
+    // Role Master now, Users (more logins with roles) next.
+    RBAC: 'isRBACFeatureOn'
 };
 
 // CompanyMaster-only switches that keep ONE read action of a feature

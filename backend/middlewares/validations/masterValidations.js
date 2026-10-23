@@ -64,6 +64,7 @@ const createMasterSchema = Joi.object({
     shortName,
     isRequired: Joi.boolean().default(false).label('Required'),
     isMultiselectAllowed: Joi.boolean().default(false).label('Allow multiple selection'),
+    isRoleProvided: Joi.boolean().default(false).label('Role will be provided for this master'),
     values: valuesList(Joi.object(valueFields))
 });
 
@@ -73,6 +74,7 @@ const updateMasterSchema = Joi.object({
     shortName,
     isRequired: Joi.boolean().default(false).label('Required'),
     isMultiselectAllowed: Joi.boolean().required().label('Allow multiple selection'),
+    isRoleProvided: Joi.boolean().default(false).label('Role will be provided for this master'),
     values: valuesList(Joi.object({ _id: objectId('Value id').optional(), ...valueFields }))
 });
 

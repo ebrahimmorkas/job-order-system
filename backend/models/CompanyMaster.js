@@ -169,6 +169,16 @@ const companyMasterSchema = new mongoose.Schema({
         default: []
     },
 
+    // ---- Roles (RBAC) -----------------------------------------------------
+    // Role Master and Users. Off until the platform owner switches it on for
+    // this vendor (also needs WebsiteMaster.isRBACFeatureOn).
+    isRBACFeatureOn: {
+        type: Boolean,
+        default: false
+    },
+    // Most roles the vendor can create (active + inactive). null = no limit.
+    numberOfRoleCreationAllowed: wholeNumberOrNull('numberOfRoleCreationAllowed', 1),
+
     // ---- Images on job orders --------------------------------------------
     // Photos added to a job order. Off until the platform owner switches it
     // on for this vendor (also needs WebsiteMaster.isImageUploadFeatureOn).

@@ -10,6 +10,7 @@ import MastersPage from '../features/masters/pages/MastersPage';
 import ControlsPage from '../features/controls/pages/ControlsPage';
 import CompanySettingsPage from '../features/companySettings/pages/CompanySettingsPage';
 import JobOrdersPage from '../features/jobOrders/pages/JobOrdersPage';
+import RolesPage from '../features/roles/pages/RolesPage';
 
 // Sidebar key -> page. Keys without a page yet show a placeholder.
 const PAGES = {
@@ -17,6 +18,7 @@ const PAGES = {
   jobOrders: JobOrdersPage,
   masters: MastersPage,
   controls: ControlsPage,
+  roles: RolesPage,
   companySettings: CompanySettingsPage,
 };
 

@@ -1,5 +1,6 @@
 const Master = require('../models/Master');
 const MasterValue = require('../models/MasterValue');
+const Role = require('../models/Role');
 const common = require('../utils/common');
 const { LIVE_STATUSES } = require('../constants/masterConstants');
 
@@ -11,7 +12,7 @@ const { LIVE_STATUSES } = require('../constants/masterConstants');
 // While a limit is empty nothing can be created.
 
 const LIVE = { $in: LIVE_STATUSES };
-const MASTER_FIELDS = '_id name shortName isRequired isMultiselectAllowed defaultValueId precedence status updatedAt';
+const MASTER_FIELDS = '_id name shortName isRequired isMultiselectAllowed isRoleProvided defaultValueId precedence status updatedAt';
 const VALUE_FIELDS = '_id name precedence status';
 
 const pick = (doc, fields) => {
@@ -52,6 +53,34 @@ const duplicateResult = (err, data) => {
         return common.returnResult(false, 409, message, { errors: [{ field: 'name', message }] });
     } catch (error) {
         throw error;
+    }
+};
+
+// ---- roles using a master ----------------------------------------------------
+
+// A master given in roles can't stop being role-provided or be deleted:
+// a 409 naming those roles, or null when no role uses it.
+const usedByRolesResult = async ({ vendorId, id, action }) => {
+    try {
+        const roles = await Role.find({ vendorId, status: LIVE, 'masters.masterId': id }).select('name').limit(4).lean();
+        if (roles.length === 0) return null;
+        const names = roles.slice(0, 3).map((role) => `"${role.name}"`).join(', ') + (roles.length > 3 ? ' and more' : '');
+        const message = `This master is used by the role${roles.length > 1 ? 's' : ''} ${names}. Remove it from ${roles.length > 1 ? 'them' : 'it'} first, then ${action}.`;
+        return common.returnResult(false, 409, message, { errors: [{ field: 'isRoleProvided', message }] });
+    } catch (err) {
+        throw err;
+    }
+};
+
+// Deleted values leave every role; a role entry left with no value goes too.
+const removeValuesFromRoles = async ({ vendorId, userId, id, valueIds }) => {
+    try {
+        if (valueIds.length === 0) return;
+        const filter = { vendorId, status: LIVE, 'masters.masterId': id };
+        await Role.updateMany(filter, { $pull: { 'masters.$[].valueIds': { $in: valueIds } } }, { auditUserId: userId });
+        await Role.updateMany(filter, { $pull: { masters: { masterId: id, isWholeMaster: false, valueIds: { $size: 0 } } } }, { auditUserId: userId });
+    } catch (err) {
+        throw err;
     }
 };
 
@@ -132,6 +161,7 @@ const createMaster = async ({ vendorId, userId, data, companyMasterData }) => {
                 shortName: data.shortName,
                 isRequired: data.isRequired,
                 isMultiselectAllowed: data.isMultiselectAllowed,
+                isRoleProvided: data.isRoleProvided,
                 precedence
             });
         } catch (err) {
@@ -181,6 +211,7 @@ const saveValues = async ({ vendorId, userId, id, values, current }) => {
                 { $set: { status: 'D', deletedBy: userId, deletedDate: now } },
                 { auditUserId: userId }
             );
+            await removeValuesFromRoles({ vendorId, userId, id, valueIds: removedIds });
         }
 
         const changes = [];
@@ -237,12 +268,16 @@ const updateMaster = async ({ vendorId, userId, id, data, companyMasterData }) =
         if (data.values.some((value) => value._id && !currentIds.has(value._id))) {
             return common.returnResult(false, 409, 'This master was changed meanwhile. Please reload it and make your changes again.');
         }
+        if (!data.isRoleProvided) {
+            const used = await usedByRolesResult({ vendorId, id, action: 'untick "Role will be provided for this master"' });
+            if (used) return used;
+        }
 
         let master;
         try {
             master = await Master.findOneAndUpdate(
                 { _id: id, vendorId, status: LIVE },
-                { $set: { name: data.name, shortName: data.shortName, isRequired: data.isRequired, isMultiselectAllowed: data.isMultiselectAllowed } },
+                { $set: { name: data.name, shortName: data.shortName, isRequired: data.isRequired, isMultiselectAllowed: data.isMultiselectAllowed, isRoleProvided: data.isRoleProvided } },
                 { returnDocument: 'after', runValidators: true, auditUserId: userId, projection: MASTER_FIELDS }
             ).lean();
         } catch (err) {
@@ -281,6 +316,8 @@ const setMasterStatus = async ({ vendorId, userId, id, isActive }) => {
 // DELETE /api/masters/:id - soft delete, with all its values.
 const deleteMaster = async ({ vendorId, userId, id }) => {
     try {
+        const used = await usedByRolesResult({ vendorId, id, action: 'delete it' });
+        if (used) return used;
         const result = await common.softDelete(Master, id, userId, vendorId);
         if (!result.isSuccess) return result.statusCode === 404 ? common.returnResult(false, 404, 'Master not found.') : result;
         await MasterValue.updateMany(
@@ -383,6 +420,7 @@ const deleteValue = async ({ vendorId, userId, id, valueId }) => {
         const result = await common.softDelete(MasterValue, valueId, userId, vendorId, { masterId: id });
         if (!result.isSuccess) return result.statusCode === 404 ? common.returnResult(false, 404, 'Value not found.') : result;
         await clearDefaultIf({ vendorId, userId, id, valueId });
+        await removeValuesFromRoles({ vendorId, userId, id, valueIds: [result.meta.document._id] });
         return common.returnResult(true, 200, 'Value deleted.');
     } catch (err) {
         throw err;

@@ -7,7 +7,7 @@ import MasterFormPage from './MasterFormPage';
  * The Masters section: the list, or the create / copy / edit screen.
  * (No router yet - the screen shown is kept here.)
  */
-const MastersPage = () => {
+const MastersPage = ({ featureAccess }) => {
   const toast = useToast();
   // { mode: 'list' } | { mode: 'create', valuesAllowed } | { mode: 'edit' | 'clone', id }
   const [screen, setScreen] = useState({ mode: 'list' });
@@ -31,6 +31,7 @@ const MastersPage = () => {
       mode={screen.mode}
       masterId={screen.id}
       valuesAllowed={screen.valuesAllowed}
+      featureAccess={featureAccess}
       onBack={backToList}
       onDone={(message) => {
         toast.success(message);

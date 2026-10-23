@@ -30,7 +30,15 @@ images stored on the server itself, such as logos) to it.
   values (move up / down, default, mark active / inactive, delete - saved at
   once); create, copy and
   edit, where every change waits for Save and leaving with unsaved changes
-  asks first.
+  asks first. With RBAC on, a master can be ticked "Role will be provided for
+  this master".
+- **Role Master** (with Users, only while RBAC is on) - the same list as
+  Masters plus a type filter, an access column and the roles usage pill.
+  Create (pick Module role or Master role - it can't change later), copy and
+  edit: a module role adds modules from a searchable dropdown and ticks View /
+  Create / Edit / Delete (Role assignment for Users; only View and Edit for
+  Company Settings - ticking anything ticks View); a master role adds role
+  masters, each "Whole master" or some of its values.
 - **Controls** - fields the vendor adds to the job order (text field, text
   area, checkbox, radio buttons), only the types assigned to the vendor: the
   same list as Masters plus a type filter and a usage pill per limited type;

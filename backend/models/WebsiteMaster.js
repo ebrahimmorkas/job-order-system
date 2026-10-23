@@ -47,6 +47,10 @@ const websiteMasterSchema = mongoose.Schema({
         type: Boolean,
         default: true
     },
+    isRBACFeatureOn: {
+        type: Boolean,
+        default: true
+    },
 
     // ---- Storage ----------------------------------------------------------
     // The platform's default image storage: used (with the platform's own

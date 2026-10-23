@@ -18,13 +18,14 @@ const VALUE_NAME_MAX_LENGTH = 100;
 const COPY_SUFFIX = ' (Copy)';
 const VALUE_NOUN = { singular: 'value', plural: 'values', owner: 'master' };
 
-const EMPTY_DETAILS = { name: '', shortName: '', isRequired: false, isMultiselectAllowed: false };
+const EMPTY_DETAILS = { name: '', shortName: '', isRequired: false, isMultiselectAllowed: false, isRoleProvided: false };
 
 const toDetails = (master) => ({
   name: master.name,
   shortName: master.shortName || '',
   isRequired: !!master.isRequired,
   isMultiselectAllowed: master.isMultiselectAllowed,
+  isRoleProvided: !!master.isRoleProvided,
 });
 
 // What gets saved, as one string - compared with the loaded one to know
@@ -52,10 +53,11 @@ const toFieldErrors = (errors) => {
  * @param {'create'|'clone'|'edit'} props.mode
  * @param {string} [props.masterId] - The master to edit, or to copy (clone)
  * @param {number|null} [props.valuesAllowed] - The vendor's limit, known from the list (create)
+ * @param {Object|null} [props.featureAccess] - Which features are on; the role checkbox needs RBAC
  * @param {(message: string) => void} props.onDone - Back to the list after saving
  * @param {() => void} props.onBack
  */
-const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed = null, onDone, onBack }) => {
+const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed = null, featureAccess = null, onDone, onBack }) => {
   const isEdit = mode === 'edit';
   const nextKey = useRef(0);
   const createKey = () => `new-${nextKey.current++}`;
@@ -156,6 +158,8 @@ const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed = nu
       shortName: details.shortName.trim() || null,
       isRequired: details.isRequired,
       isMultiselectAllowed: details.isMultiselectAllowed,
+      // Always sent as loaded, so a hidden checkbox (RBAC off) changes nothing.
+      isRoleProvided: details.isRoleProvided,
       values: valuesToSave.map(({ _id, name, status: valueStatus, isDefault }) => (_id ? { _id, name, status: valueStatus, isDefault } : { name, status: valueStatus, isDefault })),
     };
     setIsSaving(true);
@@ -172,7 +176,7 @@ const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed = nu
       const errors = toFieldErrors(err.errors);
       setFieldErrors(errors);
       // A message not tied to one field (e.g. the masters limit) goes on top.
-      if (!errors.name && !errors.shortName && !errors.values) setFormError(err.message);
+      if (!errors.name && !errors.shortName && !errors.values && !errors.isRoleProvided) setFormError(err.message);
       setIsSaving(false);
     }
   };
@@ -247,6 +251,17 @@ const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed = nu
                 onChange={(e) => setDetail('isMultiselectAllowed', e.target.checked)}
                 disabled={isSaving}
               />
+              {featureAccess?.isRBACFeatureOn && (
+                <Checkbox
+                  name="isRoleProvided"
+                  label="Role will be provided for this master"
+                  description="In Role Master, a role can be given this whole master or some of its values."
+                  checked={details.isRoleProvided}
+                  onChange={(e) => setDetail('isRoleProvided', e.target.checked)}
+                  error={fieldErrors.isRoleProvided}
+                  disabled={isSaving}
+                />
+              )}
             </div>
           </Card>
 

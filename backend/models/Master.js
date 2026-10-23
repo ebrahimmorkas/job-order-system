@@ -26,6 +26,12 @@ const masterSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    // Roles (RBAC): a master role can be given for this master - the whole
+    // master or some of its values (models/Role.js).
+    isRoleProvided: {
+        type: Boolean,
+        default: false
+    },
     // On the job order: pick several values instead of one.
     isMultiselectAllowed: {
         type: Boolean,

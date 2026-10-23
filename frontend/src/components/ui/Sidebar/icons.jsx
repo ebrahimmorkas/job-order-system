@@ -24,6 +24,13 @@ export const UsersIcon = (props) => (
   </svg>
 );
 
+export const RolesIcon = (props) => (
+  <svg {...base} {...props}>
+    <path d="M12 3l7.5 3v5.25c0 4.5-3.15 8.4-7.5 9.75-4.35-1.35-7.5-5.25-7.5-9.75V6L12 3z" />
+    <path d="M9 12l2 2 4-4" />
+  </svg>
+);
+
 export const CompanySettingsIcon = (props) => (
   <svg {...base} {...props}>
     <circle cx="12" cy="12" r="3" />
