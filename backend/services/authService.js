@@ -6,8 +6,12 @@ const RefreshToken = require('../models/RefreshToken');
 const { generateAccessToken, generateRefreshToken, verifyRefreshToken, hashToken } = require('../utils/token');
 const common = require('../utils/common');
 const loginAttemptService = require('./loginAttemptService');
+const { ROLES } = require('../constants/roleConstants');
 
 const INACTIVE_ACCOUNT_MESSAGE = 'Your account has been deactivated. Please contact support.';
+// Users added in the Users module can't log in until their roles are
+// applied to what they see (the next RBAC step); only the owner can.
+const USER_LOGIN_OFF_MESSAGE = 'Logins for users are not switched on yet. Please contact the owner.';
 const lockedMessage = (minutes) =>
     `Too many failed login attempts. Please try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`;
 
@@ -84,6 +88,9 @@ const loginUser = async ({ identifier, password }, deviceMeta, vendorId, website
         // Checked only after the password, so it never reveals which accounts exist.
         if (user.status === 'I') {
             return common.returnResult(false, 403, INACTIVE_ACCOUNT_MESSAGE);
+        }
+        if (user.role !== ROLES.OWNER) {
+            return common.returnResult(false, 403, USER_LOGIN_OFF_MESSAGE);
         }
 
         const accessToken = generateAccessToken({ userId: user._id, role: user.role, vendorId: user.vendorId });
@@ -188,6 +195,10 @@ const refreshAccessToken = async (incomingRefreshToken, deviceMeta) => {
         if (user.status === 'I') {
             await RefreshToken.deleteOne({ _id: session._id });
             return common.returnResult(false, 403, INACTIVE_ACCOUNT_MESSAGE);
+        }
+        if (user.role !== ROLES.OWNER) {
+            await RefreshToken.deleteOne({ _id: session._id });
+            return common.returnResult(false, 403, USER_LOGIN_OFF_MESSAGE);
         }
 
         // A request presenting the PREVIOUS token right after a rotation is racing that

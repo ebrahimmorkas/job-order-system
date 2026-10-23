@@ -40,6 +40,23 @@ const MODULES = {
 };
 const MODULE_KEYS = Object.keys(MODULES);
 
+// Users (models/User.js, role 'user'). Dates are calendar days 'YYYY-MM-DD';
+// a role or extra access works from startDate to endDate, both included
+// (endDate null = no end).
+const USER_NAME_MIN_LENGTH = 2;
+const USER_NAME_MAX_LENGTH = 50;
+// Starts with a letter, so it never looks like a phone number or an email
+// (login takes any of the three).
+const USERNAME_PATTERN = /^[a-z][a-z0-9._-]{2,29}$/;
+const USERNAME_MAX_LENGTH = 30;
+const PASSWORD_MIN_LENGTH = 8;
+const PASSWORD_MAX_LENGTH = 128;
+const EMAIL_MAX_LENGTH = 100;
+const PHONE_PATTERN = /^\+?\d{10,13}$/;
+const ADDRESS_MAX_LENGTH = 300;
+const USER_LIST_MAX_PAGE_SIZE = 100;
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
 module.exports = {
     ROLE_NAME_MIN_LENGTH,
     ROLE_NAME_MAX_LENGTH,
@@ -49,5 +66,16 @@ module.exports = {
     PERMISSIONS,
     PERMISSION_VALUES,
     MODULES,
-    MODULE_KEYS
+    MODULE_KEYS,
+    USER_NAME_MIN_LENGTH,
+    USER_NAME_MAX_LENGTH,
+    USERNAME_PATTERN,
+    USERNAME_MAX_LENGTH,
+    PASSWORD_MIN_LENGTH,
+    PASSWORD_MAX_LENGTH,
+    EMAIL_MAX_LENGTH,
+    PHONE_PATTERN,
+    ADDRESS_MAX_LENGTH,
+    USER_LIST_MAX_PAGE_SIZE,
+    DATE_PATTERN
 };

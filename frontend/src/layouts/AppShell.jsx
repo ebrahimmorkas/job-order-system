@@ -11,6 +11,7 @@ import ControlsPage from '../features/controls/pages/ControlsPage';
 import CompanySettingsPage from '../features/companySettings/pages/CompanySettingsPage';
 import JobOrdersPage from '../features/jobOrders/pages/JobOrdersPage';
 import RolesPage from '../features/roles/pages/RolesPage';
+import UsersPage from '../features/users/pages/UsersPage';
 
 // Sidebar key -> page. Keys without a page yet show a placeholder.
 const PAGES = {
@@ -18,6 +19,7 @@ const PAGES = {
   jobOrders: JobOrdersPage,
   masters: MastersPage,
   controls: ControlsPage,
+  users: UsersPage,
   roles: RolesPage,
   companySettings: CompanySettingsPage,
 };

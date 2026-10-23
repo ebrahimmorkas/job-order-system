@@ -32,6 +32,14 @@ images stored on the server itself, such as logos) to it.
   edit, where every change waits for Save and leaving with unsaved changes
   asks first. With RBAC on, a master can be ticked "Role will be provided for
   this master".
+- **Users** (only while RBAC is on) - the list (search, role and status
+  filters, roles shown as chips - amber before they start, struck through once
+  ended - and "+N extra", status switch, bulk actions, users usage pill) and
+  the form: name, login username, password (empty on edit = unchanged),
+  email, phone, address; roles from a searchable dropdown, each with start /
+  end dates (one role unless several are allowed); and, when allowed, extra
+  access: module options ticked one by one and master values, each with its
+  own dates. Users can't log in yet.
 - **Role Master** (with Users, only while RBAC is on) - the same list as
   Masters plus a type filter, an access column and the roles usage pill.
   Create (pick Module role or Master role - it can't change later), copy and

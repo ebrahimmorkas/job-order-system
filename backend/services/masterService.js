@@ -1,6 +1,8 @@
 const Master = require('../models/Master');
 const MasterValue = require('../models/MasterValue');
 const Role = require('../models/Role');
+const User = require('../models/User');
+const { ROLES } = require('../constants/roleConstants');
 const common = require('../utils/common');
 const { LIVE_STATUSES } = require('../constants/masterConstants');
 
@@ -58,14 +60,28 @@ const duplicateResult = (err, data) => {
 
 // ---- roles using a master ----------------------------------------------------
 
-// A master given in roles can't stop being role-provided or be deleted:
-// a 409 naming those roles, or null when no role uses it.
+// "the roles "A", "B" and more" - null for none.
+const namesOf = (docs, noun) => {
+    try {
+        if (docs.length === 0) return null;
+        const names = docs.slice(0, 3).map((doc) => `"${doc.name}"`).join(', ') + (docs.length > 3 ? ' and more' : '');
+        return `the ${noun}${docs.length > 1 ? 's' : ''} ${names}`;
+    } catch (err) {
+        throw err;
+    }
+};
+
+// A master given in roles, or as a user's extra access, can't stop being
+// role-provided or be deleted: a 409 naming them, or null when unused.
 const usedByRolesResult = async ({ vendorId, id, action }) => {
     try {
-        const roles = await Role.find({ vendorId, status: LIVE, 'masters.masterId': id }).select('name').limit(4).lean();
-        if (roles.length === 0) return null;
-        const names = roles.slice(0, 3).map((role) => `"${role.name}"`).join(', ') + (roles.length > 3 ? ' and more' : '');
-        const message = `This master is used by the role${roles.length > 1 ? 's' : ''} ${names}. Remove it from ${roles.length > 1 ? 'them' : 'it'} first, then ${action}.`;
+        const [roles, users] = await Promise.all([
+            Role.find({ vendorId, status: LIVE, 'masters.masterId': id }).select('name').limit(4).lean(),
+            User.find({ vendorId, role: ROLES.USER, status: LIVE, 'extraMasters.masterId': id }).select('name').limit(4).lean()
+        ]);
+        const usedBy = [namesOf(roles, 'role'), namesOf(users, 'user')].filter(Boolean);
+        if (usedBy.length === 0) return null;
+        const message = `This master is used by ${usedBy.join(' and ')}. Remove it from them first, then ${action}.`;
         return common.returnResult(false, 409, message, { errors: [{ field: 'isRoleProvided', message }] });
     } catch (err) {
         throw err;
@@ -79,6 +95,10 @@ const removeValuesFromRoles = async ({ vendorId, userId, id, valueIds }) => {
         const filter = { vendorId, status: LIVE, 'masters.masterId': id };
         await Role.updateMany(filter, { $pull: { 'masters.$[].valueIds': { $in: valueIds } } }, { auditUserId: userId });
         await Role.updateMany(filter, { $pull: { masters: { masterId: id, isWholeMaster: false, valueIds: { $size: 0 } } } }, { auditUserId: userId });
+        // The same for users' extra access.
+        const userFilter = { vendorId, role: ROLES.USER, status: LIVE, 'extraMasters.masterId': id };
+        await User.updateMany(userFilter, { $pull: { 'extraMasters.$[].valueIds': { $in: valueIds } } }, { auditUserId: userId });
+        await User.updateMany(userFilter, { $pull: { extraMasters: { masterId: id, isWholeMaster: false, valueIds: { $size: 0 } } } }, { auditUserId: userId });
     } catch (err) {
         throw err;
     }

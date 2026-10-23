@@ -1,10 +1,12 @@
 const Role = require('../models/Role');
+const User = require('../models/User');
 const Master = require('../models/Master');
 const MasterValue = require('../models/MasterValue');
 const common = require('../utils/common');
 const featureAccessService = require('./featureAccessService');
 const { LIVE_STATUSES } = require('../constants/masterConstants');
 const { ROLE_TYPES, PERMISSIONS, MODULES, MODULE_KEYS } = require('../constants/rbacConstants');
+const { ROLES } = require('../constants/roleConstants');
 
 // The vendor's roles (Role Master). Every function is scoped by vendorId.
 //
@@ -283,9 +285,15 @@ const setRoleStatus = async ({ vendorId, userId, id, isActive }) => {
     }
 };
 
-// DELETE /api/roles/:id - soft delete; its name can be used again.
+// DELETE /api/roles/:id - soft delete; its name can be used again. A role
+// given to users can't be deleted (409 naming them).
 const deleteRole = async ({ vendorId, userId, id }) => {
     try {
+        const users = await User.find({ vendorId, role: ROLES.USER, status: LIVE, 'assignedRoles.roleId': id }).select('name').limit(4).lean();
+        if (users.length > 0) {
+            const names = users.slice(0, 3).map((user) => `"${user.name}"`).join(', ') + (users.length > 3 ? ' and more' : '');
+            return common.returnResult(false, 409, `This role is given to the user${users.length > 1 ? 's' : ''} ${names}. Remove it from ${users.length > 1 ? 'them' : 'that user'} first, then delete it.`);
+        }
         const result = await common.softDelete(Role, id, userId, vendorId);
         if (!result.isSuccess) return result.statusCode === 404 ? common.returnResult(false, 404, 'Role not found.') : result;
         return common.returnResult(true, 200, 'Role deleted.');
@@ -311,6 +319,9 @@ const bulkUpdateRoles = async ({ vendorId, userId, action, ids }) => {
 };
 
 module.exports = {
+    // Shared with services/userService.js (extra access of a user).
+    availableModulesOf,
+    roleMastersOf,
     getFormData,
     listRoles,
     getRole,

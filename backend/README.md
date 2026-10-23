@@ -42,7 +42,7 @@ it (`GET /api/feature-access`). The flags are listed in
 | Controls | `isControlsFeatureOn` | `assignedControls` (see Controls) |
 | Tax | `isTaxFeatureOn` | `assignedCountries` (see Tax) |
 | Job order images | `isImageUploadFeatureOn` | optional limits `numberOfImageUploadAllowed`, `maxImageUploadSizeMB`, `imageFormatsAllowed` (see Job orders) |
-| Users and Role Master (RBAC) | `isRBACFeatureOn` | optional limit `numberOfRoleCreationAllowed` (see Role Master) |
+| Users and Role Master (RBAC) | `isRBACFeatureOn` | optional limits `numberOfRoleCreationAllowed`, `numberOfUsersAllowed`; `isAssigningSeveralRolesAllowed`, `isRoleAssignmentOnUserModuleAllowed` (see Users) |
 
 `CompanyMaster.fetchMastersEvenWhenBitIsOff` (default false) only matters while
 the vendor's `isMasterModuleFeatureOn` is off: the Masters page stays hidden and
@@ -166,6 +166,39 @@ and only while RBAC is on (WebsiteMaster and CompanyMaster `isRBACFeatureOn`).
 - A deleted master value leaves every role; a master entry left with no value
   is removed.
 
+## Users
+
+The owner's users (`User` with `role: 'user'`; the owner is never listed or
+changed here). Owner only, and only while RBAC is on.
+
+- Details: `name`, `username` (the login username - 3-30 characters,
+  starting with a letter), `password` (bcrypt, at least 8 characters) are
+  required; `email`, `phone_no`, `address` are optional. Username, email
+  and phone are unique per vendor among users not deleted (the owner
+  included).
+- `assignedRoles: [{ roleId, startDate, endDate }]` - Role Master roles; at
+  most one unless `CompanyMaster.isAssigningSeveralRolesAllowed`. An inactive
+  role can't be newly given; one already given stays. A role given to users
+  can't be deleted.
+- With `CompanyMaster.isRoleAssignmentOnUserModuleAllowed`, extra access of the
+  user's own, on top of the roles:
+  - `extraModules: [{ module, permission, startDate, endDate }]` - one option
+    of a module each (the same modules / options as a module role);
+  - `extraMasters: [{ masterId, isWholeMaster, valueIds, startDate, endDate }]`
+    - role-provided masters, whole or some values, view only (like a master
+    role). Deleted values leave it; a master used here can't be deleted or
+    unticked.
+  While the bit is off, saving a user leaves their extras untouched.
+- Dates are calendar days `'YYYY-MM-DD'`, both included; start empty = today,
+  end empty = no end.
+- `numberOfUsersAllowed` counts active + inactive users (null = no limit).
+- **Users can't log in yet** - login answers 403 until their roles are applied
+  to what they can see (the next RBAC step). Deactivating or deleting a user
+  ends every request at once; a new password logs them out.
+- A database made before the Users module needs its user indexes replaced
+  once: `node scripts/syncUserIndexes.js` (shows what changes), then with
+  `--apply` while the server is stopped.
+
 ## Job orders
 
 What the vendor's users fill in (`models/JobOrder.js`); any logged-in user of
@@ -285,6 +318,11 @@ uploader's file name is never used. Replacing an image deletes the old file.
 | GET / PUT / DELETE | `/api/roles/:id` | owner, RBAC on - one role / save name and modules or masters (same type) / delete |
 | PATCH | `/api/roles/:id/status` | owner, RBAC on - `{ isActive }` |
 | POST | `/api/roles/bulk` | owner, RBAC on - `{ action: activate|deactivate|delete, ids }` |
+| GET | `/api/users/form-data` | owner, RBAC on - roles, extra-access modules and masters (when allowed), settings, users limit, today |
+| GET / POST | `/api/users` | owner, RBAC on - list (search, status, roleId, page, limit) / create |
+| GET / PUT / DELETE | `/api/users/:id` | owner, RBAC on - one user (never the password) / save (password empty = unchanged) / delete |
+| PATCH | `/api/users/:id/status` | owner, RBAC on - `{ isActive }` |
+| POST | `/api/users/bulk` | owner, RBAC on - `{ action: activate|deactivate|delete, ids }` |
 | GET | `/api/job-orders/form-data` | logged in - everything the job order form needs (see Job orders) |
 | GET / POST | `/api/job-orders` | logged in - list, newest first (search number or customer place, page, limit) / create |
 | GET / PUT / DELETE | `/api/job-orders/:id` | logged in - one job order / save it (worked out again) / cancel it |
@@ -301,6 +339,13 @@ and `images`.
 permissions }] }` or `{ ..., masters: [{ masterId, isWholeMaster, valueIds }] }`.
 Field errors are named `name`, `modules`, `masters`, `modules.<key>` and
 `masters.<masterId>`.
+
+`POST` / `PUT /api/users` take `{ name, username, password, email, phone,
+address, roles: [{ roleId, startDate, endDate }], extraModules: [{ module,
+permission, startDate, endDate }], extraMasters: [{ masterId, isWholeMaster,
+valueIds, startDate, endDate }] }`. Field errors are named after the details,
+`roles`, `roles.<roleId>`, `extraModules.<module>.<permission>` and
+`extraMasters.<masterId>`.
 
 `PUT /api/masters/:id` takes `{ name, shortName, isMultiselectAllowed, isRoleProvided, values }`.
 `values` is the whole list in order: `{ _id, name, status, isDefault }` for a

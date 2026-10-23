@@ -178,6 +178,20 @@ const companyMasterSchema = new mongoose.Schema({
     },
     // Most roles the vendor can create (active + inactive). null = no limit.
     numberOfRoleCreationAllowed: wholeNumberOrNull('numberOfRoleCreationAllowed', 1),
+    // Most users the vendor can add (active + inactive; the owner not
+    // counted). null = no limit.
+    numberOfUsersAllowed: wholeNumberOrNull('numberOfUsersAllowed', 1),
+    // A user can get extra access of their own (modules / masters, each with
+    // its own dates) on top of their roles.
+    isRoleAssignmentOnUserModuleAllowed: {
+        type: Boolean,
+        default: false
+    },
+    // A user can get several roles; otherwise at most one.
+    isAssigningSeveralRolesAllowed: {
+        type: Boolean,
+        default: false
+    },
 
     // ---- Images on job orders --------------------------------------------
     // Photos added to a job order. Off until the platform owner switches it
