@@ -6,6 +6,7 @@ import Alert from '../../../components/common/Alert';
 import Spinner from '../../../components/common/Spinner';
 import { useToast } from '../../../components/common/Toast';
 import { useBranding } from '../../branding/hooks/useBranding';
+import JobOrderSettingsCard from './JobOrderSettingsCard';
 import * as companySettingsApi from '../api/companySettingsApi';
 
 const COMPANY_NAME_MAX_LENGTH = 100;
@@ -15,8 +16,8 @@ const LOGO_TYPES = 'image/jpeg,image/png,image/webp,image/gif';
 
 /**
  * Company Settings > General: the company name and login tagline (saved
- * together) and the logo (uploaded as soon as it is picked). The sidebar,
- * login page and browser tab show the change at once.
+ * together), the logo (uploaded as soon as it is picked) and the job order
+ * settings. The sidebar, login page and browser tab show the change at once.
  *
  * @param {Object} props
  * @param {(key: string, isDirty: boolean) => void} props.onDirtyChange
@@ -30,6 +31,7 @@ const GeneralSettingsTab = ({ onDirtyChange }) => {
   const [saved, setSaved] = useState({ companyName: '', loginTagline: '' });
   const [fields, setFields] = useState(saved);
   const [logoUrl, setLogoUrl] = useState(null);
+  const [jobOrderSettings, setJobOrderSettings] = useState(null);
   const [errors, setErrors] = useState({});
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -44,6 +46,7 @@ const GeneralSettingsTab = ({ onDirtyChange }) => {
         setSaved(loaded);
         setFields(loaded);
         setLogoUrl(settings.logoUrl);
+        setJobOrderSettings(settings.jobOrder);
         setIsLoading(false);
       })
       .catch((err) => {
@@ -158,6 +161,8 @@ const GeneralSettingsTab = ({ onDirtyChange }) => {
         </div>
         {logoError && <p className="mt-3 text-sm text-red-600" role="alert">{logoError}</p>}
       </Card>
+
+      {jobOrderSettings && <JobOrderSettingsCard initial={jobOrderSettings} onDirtyChange={onDirtyChange} />}
     </div>
   );
 };

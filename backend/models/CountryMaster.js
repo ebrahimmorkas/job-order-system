@@ -97,6 +97,14 @@ const countryMasterSchema = new mongoose.Schema({
         type: [taxFieldSchema],
         default: []
     },
+    // Where a sale between two states is taxed as one tax instead of the
+    // rate's split, its name - India: "IGST" (CGST + SGST within one state).
+    // null = the split is the same everywhere (e.g. the UAE).
+    interStateTaxLabel: {
+        type: String,
+        trim: true,
+        default: null
+    },
     // The postal code of an address here: what it is called ("PIN code",
     // "P.O. Box"), whether it is needed and its form (null = any).
     postalCode: {

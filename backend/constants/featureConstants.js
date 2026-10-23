@@ -5,7 +5,8 @@
 const FEATURE_FLAGS = {
     MASTER_MODULE: 'isMasterModuleFeatureOn',
     CONTROLS: 'isControlsFeatureOn',
-    TAX: 'isTaxFeatureOn'
+    TAX: 'isTaxFeatureOn',
+    IMAGE_UPLOAD: 'isImageUploadFeatureOn'
 };
 
 // CompanyMaster-only switches that keep ONE read action of a feature

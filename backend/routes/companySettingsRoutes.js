@@ -16,6 +16,7 @@ router.use(authorize(ROLES.OWNER));
 // General
 router.get('/', companySettingsController.getGeneralSettings);
 router.put('/general', validate(v.generalSettingsSchema), companySettingsController.updateGeneralSettings);
+router.put('/job-order', validate(v.jobOrderSettingsSchema), companySettingsController.updateJobOrderSettings);
 router.put('/logo', imageUpload.single('logo'), validate(v.logoUploadSchema, 'body'), companySettingsController.uploadLogo);
 
 // Tax - the tax feature on, and at least one country assigned.

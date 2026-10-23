@@ -221,6 +221,12 @@ const MastersListPage = ({ onCreate, onEdit, onClone }) => {
       ),
     },
     {
+      key: 'isRequired',
+      label: 'Required',
+      width: '100px',
+      render: (master) => (master.isRequired ? 'Yes' : 'No'),
+    },
+    {
       key: 'isMultiselectAllowed',
       label: 'Multiple selection',
       width: '150px',

@@ -16,7 +16,7 @@ const { FEATURE_FLAGS } = require('../constants/featureConstants');
 // address and the country's required tax fields then). Only then is tax
 // charged on a job order of that country.
 
-const COUNTRY_FIELDS = '_id name code phoneCode currencyId taxName taxFields postalCode';
+const COUNTRY_FIELDS = '_id name code phoneCode currencyId taxName interStateTaxLabel taxFields postalCode';
 
 // The vendor's assigned countries, as id strings.
 const assignedCountryIdsOf = (companyMasterData) => (companyMasterData?.assignedCountries || []).map(String);
@@ -66,12 +66,12 @@ const toDetailView = (detail) => ({
     defaultTaxId: detail?.defaultTaxId ?? null
 });
 
-// GET /api/company-settings/tax - every assigned country with what its form
-// needs (tax fields, postal code rules, states, cities, current rates,
-// currency) and what the vendor saved for it.
-const getTaxSettings = async ({ companyMasterData, companySettingsData }) => {
+// The countries (id strings) with what a form needs about each: its tax
+// fields, postal code rules, states, cities, current rates and currency.
+// Active ones only, in dropdown order.
+const loadCountries = async (countryIds) => {
     try {
-        const countryIds = assignedCountryIdsOf(companyMasterData);
+        if (countryIds.length === 0) return [];
         const [countries, states, cities, taxes] = await Promise.all([
             CountryMaster.find({ _id: { $in: countryIds }, status: 'A' }).select(COUNTRY_FIELDS).sort({ precedence: 1, name: 1 }).lean(),
             StateMaster.find({ countryId: { $in: countryIds }, status: 'A' }).select('_id countryId name code taxCode').sort({ name: 1 }).lean(),
@@ -93,20 +93,36 @@ const getTaxSettings = async ({ companyMasterData, companySettingsData }) => {
         const citiesOf = byCountry(cities);
         const taxesOf = byCountry(taxes);
         const currencyById = new Map(currencies.map(({ _id, ...currency }) => [String(_id), currency]));
-        const detailOf = new Map((companySettingsData?.taxDetails || []).map((detail) => [String(detail.countryId), detail]));
 
+        return countries.map(({ currencyId, ...country }) => {
+            const key = String(country._id);
+            return {
+                ...country,
+                currency: currencyById.get(String(currencyId)) || null,
+                states: statesOf.get(key) || [],
+                cities: citiesOf.get(key) || [],
+                taxes: taxesOf.get(key) || []
+            };
+        });
+    } catch (err) {
+        throw err;
+    }
+};
+
+// The vendor's saved details of each country, by country id string.
+const detailsByCountry = (companySettingsData) =>
+    new Map((companySettingsData?.taxDetails || []).map((detail) => [String(detail.countryId), detail]));
+
+// GET /api/company-settings/tax - every assigned country with what its form
+// needs and what the vendor saved for it.
+const getTaxSettings = async ({ companyMasterData, companySettingsData }) => {
+    try {
+        const countries = await loadCountries(assignedCountryIdsOf(companyMasterData));
+        const detailOf = detailsByCountry(companySettingsData);
         return common.returnResult(true, 200, 'Tax settings fetched successfully.', {
-            countries: countries.map(({ currencyId, ...country }) => {
-                const key = String(country._id);
-                return {
-                    ...country,
-                    currency: currencyById.get(String(currencyId)) || null,
-                    states: statesOf.get(key) || [],
-                    cities: citiesOf.get(key) || [],
-                    taxes: taxesOf.get(key) || [],
-                    details: toDetailView(detailOf.get(key)),
-                    isTaxReady: isDetailReady(detailOf.get(key))
-                };
+            countries: countries.map((country) => {
+                const detail = detailOf.get(String(country._id));
+                return { ...country, details: toDetailView(detail), isTaxReady: isDetailReady(detail) };
             })
         });
     } catch (err) {
@@ -226,6 +242,9 @@ module.exports = {
     assignedCountryIdsOf,
     isTaxOn,
     taxReadyCountryIds,
+    currentTaxFilter,
+    loadCountries,
+    detailsByCountry,
     getTaxSettings,
     updateTaxDetails
 };

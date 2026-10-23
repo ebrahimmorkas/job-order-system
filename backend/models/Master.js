@@ -21,6 +21,11 @@ const masterSchema = new mongoose.Schema({
         maxlength: MASTER_SHORT_NAME_MAX_LENGTH,
         default: null
     },
+    // The job order can't be saved without a value picked here.
+    isRequired: {
+        type: Boolean,
+        default: false
+    },
     // On the job order: pick several values instead of one.
     isMultiselectAllowed: {
         type: Boolean,

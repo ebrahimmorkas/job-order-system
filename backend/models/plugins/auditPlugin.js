@@ -272,7 +272,7 @@ const auditPlugin = (schema, { vendorScoped = true, exclude = [] } = {}) => {
 
 // Models that deliberately keep no audit history: logs that are themselves a
 // record, and short-lived technical data.
-const AUDIT_EXEMPT_MODELS = new Set(['AuditLog', 'ErrorLog', 'RefreshToken', 'LoginAttempt']);
+const AUDIT_EXEMPT_MODELS = new Set(['AuditLog', 'ErrorLog', 'RefreshToken', 'LoginAttempt', 'Counter']);
 
 // Run once at startup, after every model is loaded: throws if a model is
 // missing the plugin, so a new model can't quietly go without its history.

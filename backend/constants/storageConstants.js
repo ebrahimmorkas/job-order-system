@@ -70,9 +70,29 @@ const AREA_SERVICE_FIELDS = {
 const IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const IMAGE_EXTENSIONS = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' };
 
+// The formats a vendor can be limited to (CompanyMaster.imageFormatsAllowed),
+// with their type and the name shown in messages.
+const IMAGE_FORMATS = {
+    jpeg: { mimeType: 'image/jpeg', label: 'JPG' },
+    png: { mimeType: 'image/png', label: 'PNG' },
+    webp: { mimeType: 'image/webp', label: 'WebP' },
+    gif: { mimeType: 'image/gif', label: 'GIF' }
+};
+const IMAGE_FORMAT_VALUES = Object.keys(IMAGE_FORMATS);
+
+// Size of one image, in MB: the server's hard ceiling (also the limit of a
+// vendor whose maxImageUploadSizeMB is null) and the limit of a vendor whose
+// CompanyMaster predates the field.
+const MAX_IMAGE_UPLOAD_MB = 20;
+const DEFAULT_IMAGE_UPLOAD_MB = 2;
+// Most images one request may carry (and one job order may hold while the
+// vendor's numberOfImageUploadAllowed is null).
+const MAX_IMAGES_PER_REQUEST = 50;
+
 // What each stored image belongs to (ImageAsset.module).
 const IMAGE_MODULES = {
-    COMPANY_LOGO: 'companyLogo'
+    COMPANY_LOGO: 'companyLogo',
+    JOB_ORDER: 'jobOrder'
 };
 
 module.exports = {
@@ -87,5 +107,10 @@ module.exports = {
     AREA_SERVICE_FIELDS,
     IMAGE_MIME_TYPES,
     IMAGE_EXTENSIONS,
+    IMAGE_FORMATS,
+    IMAGE_FORMAT_VALUES,
+    MAX_IMAGE_UPLOAD_MB,
+    DEFAULT_IMAGE_UPLOAD_MB,
+    MAX_IMAGES_PER_REQUEST,
     IMAGE_MODULES
 };

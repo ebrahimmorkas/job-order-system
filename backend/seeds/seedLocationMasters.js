@@ -25,6 +25,7 @@ const COUNTRIES = [
         phoneCode: '+91',
         currencyCode: 'INR',
         taxName: 'GST',
+        interStateTaxLabel: 'IGST',
         taxFields: [
             {
                 key: 'gstin',
@@ -56,6 +57,7 @@ const COUNTRIES = [
         phoneCode: '+971',
         currencyCode: 'AED',
         taxName: 'VAT',
+        interStateTaxLabel: null,
         taxFields: [
             {
                 key: 'trn',

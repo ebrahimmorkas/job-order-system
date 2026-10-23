@@ -327,7 +327,8 @@ const Dropdown = ({
       );
     }
 
-    if (selectedOption) {
+    // (Multiple with nothing picked falls through to the placeholder.)
+    if (selectedOption && !multiple) {
       return <span className="block truncate">{selectedOption.label}</span>;
     }
 

@@ -39,6 +39,13 @@ export const PlusIcon = (props) => (
   <svg {...base} {...props}><path d="M12 5v14M5 12h14" /></svg>
 );
 
+export const ViewIcon = (props) => (
+  <svg {...base} {...props}>
+    <path d="M2.25 12s3.5-6.75 9.75-6.75S21.75 12 21.75 12s-3.5 6.75-9.75 6.75S2.25 12 2.25 12z" />
+    <circle cx="12" cy="12" r="2.75" />
+  </svg>
+);
+
 export const BackIcon = (props) => (
   <svg {...base} {...props}><path d="M19 12H5M11.5 5.5L5 12l6.5 6.5" /></svg>
 );

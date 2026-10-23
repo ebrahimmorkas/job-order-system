@@ -9,10 +9,12 @@ import DashboardPage from '../features/dashboard/pages/DashboardPage';
 import MastersPage from '../features/masters/pages/MastersPage';
 import ControlsPage from '../features/controls/pages/ControlsPage';
 import CompanySettingsPage from '../features/companySettings/pages/CompanySettingsPage';
+import JobOrdersPage from '../features/jobOrders/pages/JobOrdersPage';
 
 // Sidebar key -> page. Keys without a page yet show a placeholder.
 const PAGES = {
   dashboard: DashboardPage,
+  jobOrders: JobOrdersPage,
   masters: MastersPage,
   controls: ControlsPage,
   companySettings: CompanySettingsPage,

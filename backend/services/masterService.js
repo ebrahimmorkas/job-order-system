@@ -11,7 +11,7 @@ const { LIVE_STATUSES } = require('../constants/masterConstants');
 // While a limit is empty nothing can be created.
 
 const LIVE = { $in: LIVE_STATUSES };
-const MASTER_FIELDS = '_id name shortName isMultiselectAllowed defaultValueId precedence status updatedAt';
+const MASTER_FIELDS = '_id name shortName isRequired isMultiselectAllowed defaultValueId precedence status updatedAt';
 const VALUE_FIELDS = '_id name precedence status';
 
 const pick = (doc, fields) => {
@@ -130,6 +130,7 @@ const createMaster = async ({ vendorId, userId, data, companyMasterData }) => {
                 vendorId,
                 name: data.name,
                 shortName: data.shortName,
+                isRequired: data.isRequired,
                 isMultiselectAllowed: data.isMultiselectAllowed,
                 precedence
             });
@@ -241,7 +242,7 @@ const updateMaster = async ({ vendorId, userId, id, data, companyMasterData }) =
         try {
             master = await Master.findOneAndUpdate(
                 { _id: id, vendorId, status: LIVE },
-                { $set: { name: data.name, shortName: data.shortName, isMultiselectAllowed: data.isMultiselectAllowed } },
+                { $set: { name: data.name, shortName: data.shortName, isRequired: data.isRequired, isMultiselectAllowed: data.isMultiselectAllowed } },
                 { returnDocument: 'after', runValidators: true, auditUserId: userId, projection: MASTER_FIELDS }
             ).lean();
         } catch (err) {
@@ -396,7 +397,7 @@ const deleteValue = async ({ vendorId, userId, id, valueId }) => {
 const getMastersForJobOrder = async ({ vendorId }) => {
     try {
         const masters = await Master.find({ vendorId, status: 'A' })
-            .select('_id name shortName isMultiselectAllowed defaultValueId').sort({ precedence: 1 }).lean();
+            .select('_id name shortName isRequired isMultiselectAllowed defaultValueId').sort({ precedence: 1 }).lean();
         const values = masters.length === 0 ? [] : await MasterValue.find({ vendorId, masterId: { $in: masters.map((m) => m._id) }, status: 'A' })
             .select('_id masterId name').sort({ precedence: 1 }).lean();
 

@@ -18,6 +18,7 @@ const WEBSITE_MASTER = {
     isMasterModuleFeatureOn: true,
     isControlsFeatureOn: true,
     isTaxFeatureOn: true,
+    isImageUploadFeatureOn: true,
     // Image storage - 'local' = this server's disk
     mainImageService: 'local',
     enforceMainImageService: false

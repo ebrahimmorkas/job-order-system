@@ -37,8 +37,21 @@ images stored on the server itself, such as logos) to it.
   create (pick the type), copy and edit with a live preview; radio choices
   with a default. "Include this price in tax" shows only while tax is
   available (the tax feature on and one country's tax details filled in).
+- **Job Orders** - the list (newest first, search by number or customer
+  place, view / edit / cancel) and the job order form: the number (only when
+  typed by hand), the customer address (only when asked; the country is
+  locked when the vendor has one), every master as a searchable dropdown
+  (multi-select where allowed, default picked, short name when chosen in
+  Company Settings, required ones starred), every control, the tax rate, and a
+  summary beside it that updates as you type - every answer, the prices,
+  subtotal, tax split (CGST + SGST, or IGST for another Indian state) and
+  total in the country's currency, or why no tax is charged. Images (only
+  with the image feature on): thumbnails with add / remove, checked for
+  format, size and count, uploaded with Create / Save; the view shows them
+  (click for full size). Leaving with unsaved changes asks first.
 - **Company Settings** - tabs: General (company name, login tagline, logo -
-  the menu and browser tab update at once) and Tax (only with the tax feature
+  the menu and browser tab update at once - and Job orders: automatic
+  numbers, ask the customer address, where to use master short names) and Tax (only with the tax feature
   on): one form per assigned country - business address with state / city
   dropdowns, "I am registered for GST / VAT" with that country's own fields,
   and the default tax rate. Tabs keep what was typed; leaving with unsaved
@@ -72,6 +85,7 @@ To try a second vendor on the same computer:
   Accordion, Alert, Autocomplete, Avatar, Badge, Breadcrumbs, BulkActionBar,
   ActionIcons, Button, Card, Checkbox, ConfirmDialog, DatePicker, DefaultChoice,
   Divider, Dropdown, EmptyState, FileUpload, Form, HtmlEditor, IconButton,
+  ImageUploader (a grid of images with add / remove, checking type, size and count),
   InputField, ListItemsEditor (an ordered, editable list of named items with a
   default), Menu, Modal, Pagination,
   ProgressBar, Radio, SearchInput, Skeleton, Slider, Spinner, Stepper, Switch,
@@ -85,7 +99,8 @@ To try a second vendor on the same computer:
 - `src/features/<feature>/` - one folder per feature: its `api/`, `context/`,
   `hooks/`, `pages/` and `components/`. `auth` (session, login page),
   `branding` (company name / tagline / logo, loaded once per page load),
-  `featureAccess` (which features are on), `dashboard` and `masters`.
+  `featureAccess` (which features are on), `dashboard`, `masters`, `controls`,
+  `companySettings` and `jobOrders`.
 - `src/layouts/AppShell.jsx` - the logged-in layout: sidebar + current page.
 - `src/utils/apiClient.js` - every API call goes through it (access token,
   refresh on 401, error handling).

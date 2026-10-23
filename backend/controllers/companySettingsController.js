@@ -39,6 +39,16 @@ const updateGeneralSettings = async (req, res) => {
     }
 };
 
+// PUT /api/company-settings/job-order
+const updateJobOrderSettings = async (req, res) => {
+    try {
+        const result = await companySettingsService.updateJobOrderSettings({ vendorId: req.vendorId, userId: req.user._id, data: req.body });
+        return respond(res, result, { vendorId: req.vendorId });
+    } catch (err) {
+        logException('Error while saving job order settings', err);
+    }
+};
+
 // GET /api/company-settings/tax
 const getTaxSettings = async (req, res) => {
     try {
@@ -90,6 +100,7 @@ module.exports = {
     getBranding,
     getGeneralSettings,
     updateGeneralSettings,
+    updateJobOrderSettings,
     getTaxSettings,
     updateTaxDetails,
     uploadLogo

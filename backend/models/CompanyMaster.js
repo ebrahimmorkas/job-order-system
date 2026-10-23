@@ -11,7 +11,7 @@ const wholeNumberOrNull = (field, min = 0) => ({
 const auditPlugin = require('./plugins/auditPlugin');
 const cacheInvalidationPlugin = require('./plugins/cacheInvalidationPlugin');
 const redisKeys = require('../utils/redisKeys');
-const { VALID_STORAGE_PROVIDERS, ACCOUNT_NOTES_MAX_LENGTH } = require('../constants/storageConstants');
+const { VALID_STORAGE_PROVIDERS, ACCOUNT_NOTES_MAX_LENGTH, IMAGE_FORMAT_VALUES, MAX_IMAGE_UPLOAD_MB } = require('../constants/storageConstants');
 
 // The vendor's own storage accounts (storageCredentials below). Secrets are
 // encrypted with common.encryptSecret and only ever decrypted inside
@@ -169,6 +169,27 @@ const companyMasterSchema = new mongoose.Schema({
         default: []
     },
 
+    // ---- Images on job orders --------------------------------------------
+    // Photos added to a job order. Off until the platform owner switches it
+    // on for this vendor (also needs WebsiteMaster.isImageUploadFeatureOn).
+    isImageUploadFeatureOn: {
+        type: Boolean,
+        default: false
+    },
+    // Most images on one job order. null = no limit of the vendor's own
+    // (the server still takes at most MAX_IMAGES_PER_REQUEST).
+    numberOfImageUploadAllowed: wholeNumberOrNull('numberOfImageUploadAllowed', 1),
+    // Which formats may be uploaded: some of jpeg, png, webp, gif.
+    // null = all of them. The size limit is maxImageUploadSizeMB below.
+    imageFormatsAllowed: {
+        type: [{ type: String, enum: IMAGE_FORMAT_VALUES }],
+        default: null,
+        validate: {
+            validator: (value) => value === null || (value.length > 0 && new Set(value).size === value.length),
+            message: 'imageFormatsAllowed must list at least one format, each once (or be null for all)'
+        }
+    },
+
     // ---- Storage ----------------------------------------------------------
     // Where this vendor's images go. null = WebsiteMaster.mainImageService
     // (with the platform's own account). Overridden for everyone while
@@ -178,11 +199,13 @@ const companyMasterSchema = new mongoose.Schema({
         enum: [...VALID_STORAGE_PROVIDERS, null],
         default: null
     },
-    // Largest image this vendor may upload, in MB.
+    // Largest image this vendor may upload (logo and job order images), in
+    // MB. null = no limit of the vendor's own (the server's ceiling,
+    // MAX_IMAGE_UPLOAD_MB, still applies).
     maxImageUploadSizeMB: {
         type: Number,
         min: 0.1,
-        max: 20,
+        max: MAX_IMAGE_UPLOAD_MB,
         default: 2
     },
     // The vendor's own accounts, per area and provider. NEVER loaded unless a

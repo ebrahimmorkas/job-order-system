@@ -18,11 +18,12 @@ const VALUE_NAME_MAX_LENGTH = 100;
 const COPY_SUFFIX = ' (Copy)';
 const VALUE_NOUN = { singular: 'value', plural: 'values', owner: 'master' };
 
-const EMPTY_DETAILS = { name: '', shortName: '', isMultiselectAllowed: false };
+const EMPTY_DETAILS = { name: '', shortName: '', isRequired: false, isMultiselectAllowed: false };
 
 const toDetails = (master) => ({
   name: master.name,
   shortName: master.shortName || '',
+  isRequired: !!master.isRequired,
   isMultiselectAllowed: master.isMultiselectAllowed,
 });
 
@@ -153,6 +154,7 @@ const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed = nu
     const payload = {
       name: details.name.trim(),
       shortName: details.shortName.trim() || null,
+      isRequired: details.isRequired,
       isMultiselectAllowed: details.isMultiselectAllowed,
       values: valuesToSave.map(({ _id, name, status: valueStatus, isDefault }) => (_id ? { _id, name, status: valueStatus, isDefault } : { name, status: valueStatus, isDefault })),
     };
@@ -229,6 +231,14 @@ const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed = nu
                   disabled={isSaving}
                 />
               </div>
+              <Checkbox
+                name="isRequired"
+                label="Required"
+                description="The job order can't be saved without a value picked here."
+                checked={details.isRequired}
+                onChange={(e) => setDetail('isRequired', e.target.checked)}
+                disabled={isSaving}
+              />
               <Checkbox
                 name="isMultiselectAllowed"
                 label="Allow multiple selection"
