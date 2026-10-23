@@ -20,6 +20,7 @@ const WEBSITE_MASTER = {
     isTaxFeatureOn: true,
     isImageUploadFeatureOn: true,
     isRBACFeatureOn: true,
+    isLayoutMasterFeatureOn: true,
     // Image storage - 'local' = this server's disk
     mainImageService: 'local',
     enforceMainImageService: false

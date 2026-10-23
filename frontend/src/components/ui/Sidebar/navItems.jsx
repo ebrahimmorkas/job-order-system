@@ -1,4 +1,4 @@
-import { DashboardIcon, JobOrdersIcon, MastersIcon, ControlsIcon, UsersIcon, RolesIcon, CompanySettingsIcon } from './icons';
+import { DashboardIcon, JobOrdersIcon, MastersIcon, ControlsIcon, UsersIcon, RolesIcon, LayoutsIcon, CompanySettingsIcon } from './icons';
 
 // The sidebar's default menu. Add each new module here as it is built.
 // featureFlag (optional) names a feature that must be on - see
@@ -10,6 +10,7 @@ export const DEFAULT_NAV_ITEMS = [
   { key: 'controls', label: 'Controls', icon: ControlsIcon, featureFlag: 'isControlsFeatureOn' },
   { key: 'users', label: 'Users', icon: UsersIcon, featureFlag: 'isRBACFeatureOn' },
   { key: 'roles', label: 'Role Master', icon: RolesIcon, featureFlag: 'isRBACFeatureOn' },
+  { key: 'layouts', label: 'Layout Master', icon: LayoutsIcon, featureFlag: 'isLayoutMasterFeatureOn' },
   { key: 'companySettings', label: 'Company Settings', icon: CompanySettingsIcon },
 ];
 

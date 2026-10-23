@@ -25,6 +25,7 @@ const controlRoutes = require('./routes/controlRoutes');
 const jobOrderRoutes = require('./routes/jobOrderRoutes');
 const roleRoutes = require('./routes/roleRoutes');
 const userRoutes = require('./routes/userRoutes');
+const layoutRoutes = require('./routes/layoutRoutes');
 const masterRoutes = require('./routes/masterRoutes');
 const storageProviderConfig = require('./config/storageProviderConfig');
 
@@ -95,6 +96,7 @@ app.use('/api/controls', controlRoutes);
 app.use('/api/job-orders', jobOrderRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/layouts', layoutRoutes);
 
 // No route matched: the same JSON shape as every other error, instead of
 // Express's default HTML page.

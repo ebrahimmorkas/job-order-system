@@ -43,6 +43,7 @@ it (`GET /api/feature-access`). The flags are listed in
 | Tax | `isTaxFeatureOn` | `assignedCountries` (see Tax) |
 | Job order images | `isImageUploadFeatureOn` | optional limits `numberOfImageUploadAllowed`, `maxImageUploadSizeMB`, `imageFormatsAllowed` (see Job orders) |
 | Users and Role Master (RBAC) | `isRBACFeatureOn` | optional limits `numberOfRoleCreationAllowed`, `numberOfUsersAllowed`; `isAssigningSeveralRolesAllowed`, `isRoleAssignmentOnUserModuleAllowed` (see Users) |
+| Layout Master (print layouts) | `isLayoutMasterFeatureOn` | optional limit `numberOfLayoutsAllowed`; `isControlFeatureInLayoutOn` for text formatting (see Layout Master) |
 
 `CompanyMaster.fetchMastersEvenWhenBitIsOff` (default false) only matters while
 the vendor's `isMasterModuleFeatureOn` is off: the Masters page stays hidden and
@@ -251,6 +252,34 @@ the vendor can create, edit and cancel them.
     storage after the save. With the feature off, saved images can still be
     removed but none added.
 
+## Layout Master
+
+Print layouts for job orders (`models/Layout.js`), made by the owner in a
+designer; any logged-in user can print a job order with an active one.
+
+- A layout has a `name` (unique per vendor), `paper` (`A3`, `A4`, `A5`,
+  `Letter`, `Legal` portrait / landscape, or `custom` 50 - 1500 mm each way;
+  `widthMm` / `heightMm` are saved as printed), `labelDefault` (`none`,
+  `masters`, `controls`, `both` - which dropped fields show "name: value")
+  and up to 300 `elements`. Sizes and places are in millimetres from the
+  page's top-left; font sizes in points.
+- Elements: `field` (a master, a control, or a job order / company field:
+  number, date, customer address, subtotal, tax, total, company name,
+  address, tax numbers; `showLabel`, `labelText`), `text`, `line`,
+  `rectangle`, `circle`, `table` (up to 30 x 10 cells, each typed text or
+  a field) and `logo` (the Company Settings logo). Every element must be on
+  the page and every master / control must still exist.
+- Text `style` (font, size, bold, italic, underline, alignment, colour) is
+  kept only while CompanyMaster `isControlFeatureInLayoutOn` is on.
+- The first layout (or the first while none is the default) becomes the
+  default; the default is picked first when printing. Deactivating or
+  deleting the default leaves no default until one is chosen.
+- `numberOfLayoutsAllowed` (null = no limit) caps the layouts.
+- Printing (`/for-print`) gives the layout with the master / control names,
+  the company name, logo, and address and tax numbers per country (the job
+  order's tax country, else its customer's country), and whether master short
+  names are used on print.
+
 ## Image storage (logos and later images)
 
 Where an upload goes:
@@ -323,6 +352,14 @@ uploader's file name is never used. Replacing an image deletes the old file.
 | GET / PUT / DELETE | `/api/users/:id` | owner, RBAC on - one user (never the password) / save (password empty = unchanged) / delete |
 | PATCH | `/api/users/:id/status` | owner, RBAC on - `{ isActive }` |
 | POST | `/api/users/bulk` | owner, RBAC on - `{ action: activate|deactivate|delete, ids }` |
+| GET | `/api/layouts/form-data` | owner, Layout Master on - masters, controls, job order fields and paper sizes a layout can use, settings, layouts limit, company name and logo |
+| GET / POST | `/api/layouts` | owner, Layout Master on - list (search, status, page, limit) / create |
+| GET / PUT / DELETE | `/api/layouts/:id` | owner, Layout Master on - one layout / save / delete |
+| PATCH | `/api/layouts/:id/default` | owner, Layout Master on - make an active layout the default |
+| PATCH | `/api/layouts/:id/status` | owner, Layout Master on - `{ isActive }` |
+| POST | `/api/layouts/bulk` | owner, Layout Master on - `{ action: activate|deactivate|delete, ids }` |
+| GET | `/api/layouts/for-print` | logged in, Layout Master on - the active layouts, default first |
+| GET | `/api/layouts/for-print/:id` | logged in, Layout Master on - one active layout and what fills it besides the job order |
 | GET | `/api/job-orders/form-data` | logged in - everything the job order form needs (see Job orders) |
 | GET / POST | `/api/job-orders` | logged in - list, newest first (search number or customer place, page, limit) / create |
 | GET / PUT / DELETE | `/api/job-orders/:id` | logged in - one job order / save it (worked out again) / cancel it |
@@ -334,6 +371,11 @@ controls: [{ controlId, text | checked | optionId }], taxId, keepImageIds }`
 JSON in `data` and new images in `images`. Field errors are named
 `jobOrderNumber`, `customer.<field>`, `masters.<id>`, `controls.<id>`, `taxId`
 and `images`.
+
+`POST` / `PUT /api/layouts` take `{ name, paper: { size, orientation } | { size:
+'custom', widthMm, heightMm }, labelDefault, elements }`. Field errors are
+named `name`, `paper.*` and `elements.<elementId>` (an item off the page or a
+master / control that is gone).
 
 `POST` / `PUT /api/roles` take `{ name, type (create only), modules: [{ module,
 permissions }] }` or `{ ..., masters: [{ masterId, isWholeMaster, valueIds }] }`.

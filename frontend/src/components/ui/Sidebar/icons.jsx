@@ -79,3 +79,11 @@ export const LogoutIcon = (props) => (
     <path d="M12 12h9m0 0l-3-3m3 3l-3 3" />
   </svg>
 );
+
+export const LayoutsIcon = (props) => (
+  <svg {...base} {...props}>
+    <rect x="4.5" y="3" width="15" height="18" rx="1.5" />
+    <path d="M7.5 6.75h9M7.5 10.5h4.5M7.5 14.25h4.5" />
+    <rect x="14.25" y="10.5" width="2.25" height="6.75" rx="0.5" />
+  </svg>
+);

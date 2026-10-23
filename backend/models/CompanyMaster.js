@@ -193,6 +193,22 @@ const companyMasterSchema = new mongoose.Schema({
         default: false
     },
 
+    // ---- Layout Master ------------------------------------------------------
+    // Print layouts for job orders. Off until the platform owner switches it
+    // on for this vendor (also needs WebsiteMaster.isLayoutMasterFeatureOn).
+    isLayoutMasterFeatureOn: {
+        type: Boolean,
+        default: false
+    },
+    // Most layouts the vendor can create (active + inactive). null = no limit.
+    numberOfLayoutsAllowed: wholeNumberOrNull('numberOfLayoutsAllowed', 1),
+    // Text formatting in layouts (font, size, bold, italic, underline,
+    // alignment, colour). Off = every text in the standard font.
+    isControlFeatureInLayoutOn: {
+        type: Boolean,
+        default: false
+    },
+
     // ---- Images on job orders --------------------------------------------
     // Photos added to a job order. Off until the platform owner switches it
     // on for this vendor (also needs WebsiteMaster.isImageUploadFeatureOn).

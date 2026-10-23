@@ -64,7 +64,23 @@ images stored on the server itself, such as logos) to it.
   total in the country's currency, or why no tax is charged. Images (only
   with the image feature on): thumbnails with add / remove, checked for
   format, size and count, uploaded with Create / Save; the view shows them
-  (click for full size). Leaving with unsaved changes asks first.
+  (click for full size). Leaving with unsaved changes asks first. With Layout
+  Master on, the view has Print: pick a layout (the default first), see the
+  job order in it, then Print (the page at the layout's paper size) or
+  Download PDF / PNG / JPEG.
+- **Layout Master** (only while the feature is on) - the list (search, status
+  filter, Default badge and star to make one the default, paper, items count,
+  status switch, copy / edit / delete, bulk actions, layouts usage pill). New
+  layout: name, paper (A3 / A4 / A5 / Letter / Legal portrait or landscape, or
+  a custom width and height) and which labels show by default. Then the
+  designer: items on the left (job order fields, masters, controls, text,
+  line, rectangle, circle, table, logo - drag onto the page or click), the
+  page in the middle (move and resize in 1 mm steps, Alt for finer; arrows,
+  Delete, Ctrl+Z / Y / D; zoom), and the selected item's settings on the
+  right (place and size, label on / off and its text, table cells, line and
+  fill, and - when allowed - font, size, bold, italic, underline, alignment,
+  colour). Export downloads the template as PDF, PNG or JPEG. Leaving with
+  unsaved changes asks first.
 - **Company Settings** - tabs: General (company name, login tagline, logo -
   the menu and browser tab update at once - and Job orders: automatic
   numbers, ask the customer address, where to use master short names) and Tax (only with the tax feature
@@ -99,11 +115,11 @@ To try a second vendor on the same computer:
 
 - `src/components/common/` - the reusable building blocks every module uses:
   Accordion, Alert, Autocomplete, Avatar, Badge, Breadcrumbs, BulkActionBar,
-  ActionIcons, Button, Card, Checkbox, ConfirmDialog, DatePicker, DefaultChoice,
+  ActionIcons, Button, Card, Checkbox, ColorField (colour picker with its code), ConfirmDialog, DatePicker, DefaultChoice,
   Divider, Dropdown, EmptyState, FileUpload, Form, HtmlEditor, IconButton,
   ImageUploader (a grid of images with add / remove, checking type, size and count),
   InputField, ListItemsEditor (an ordered, editable list of named items with a
-  default), Menu, Modal, Pagination,
+  default), Menu, Modal, NumberField (a small number box with a unit), Pagination,
   ProgressBar, Radio, SearchInput, Skeleton, Slider, Spinner, Stepper, Switch,
   Table, Tabs, TextArea, Toast, UsagePill ("2 / 10 used"), UnsavedChanges (asks before leaving a page with
   unsaved changes - `useUnsavedChanges(isDirty)`). Reuse these; when something is missing, add it
@@ -116,7 +132,8 @@ To try a second vendor on the same computer:
   `hooks/`, `pages/` and `components/`. `auth` (session, login page),
   `branding` (company name / tagline / logo, loaded once per page load),
   `featureAccess` (which features are on), `dashboard`, `masters`, `controls`,
-  `companySettings` and `jobOrders`.
+  `companySettings`, `jobOrders` and `layouts` (the designer, the drawing
+  shared by the designer, printing and exports, and the PDF / image export).
 - `src/layouts/AppShell.jsx` - the logged-in layout: sidebar + current page.
 - `src/utils/apiClient.js` - every API call goes through it (access token,
   refresh on 401, error handling).

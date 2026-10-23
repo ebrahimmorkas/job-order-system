@@ -49,3 +49,16 @@ export const ViewIcon = (props) => (
 export const BackIcon = (props) => (
   <svg {...base} {...props}><path d="M19 12H5M11.5 5.5L5 12l6.5 6.5" /></svg>
 );
+
+export const StarIcon = (props) => (
+  <svg {...base} {...props}>
+    <path d="M12 3.75l2.55 5.17 5.7.83-4.13 4.02.98 5.68L12 16.77l-5.1 2.68.98-5.68-4.13-4.02 5.7-.83L12 3.75z" />
+  </svg>
+);
+
+export const PrintIcon = (props) => (
+  <svg {...base} {...props}>
+    <path d="M6.75 8.25V3.75h10.5v4.5M6.75 17.25h-1.5a1.5 1.5 0 01-1.5-1.5v-6a1.5 1.5 0 011.5-1.5h13.5a1.5 1.5 0 011.5 1.5v6a1.5 1.5 0 01-1.5 1.5h-1.5" />
+    <rect x="6.75" y="13.5" width="10.5" height="6.75" rx="1" />
+  </svg>
+);

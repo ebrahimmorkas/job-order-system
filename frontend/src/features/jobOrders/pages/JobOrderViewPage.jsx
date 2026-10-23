@@ -4,7 +4,7 @@ import Card from '../../../components/common/Card';
 import Alert from '../../../components/common/Alert';
 import Badge from '../../../components/common/Badge';
 import Spinner from '../../../components/common/Spinner';
-import { BackIcon, EditIcon } from '../../../components/common/ActionIcons';
+import { BackIcon, EditIcon, PrintIcon } from '../../../components/common/ActionIcons';
 import JobOrderSummary from '../components/JobOrderSummary';
 import { summaryRowsOf } from '../summaryRows';
 import * as jobOrdersApi from '../api/jobOrdersApi';
@@ -18,8 +18,9 @@ const formatDateTime = (value) => new Date(value).toLocaleString('en-IN', { day:
  * @param {string} props.jobOrderId
  * @param {() => void} props.onBack
  * @param {() => void} props.onEdit
+ * @param {(() => void)|null} props.onPrint - null while Layout Master is off
  */
-const JobOrderViewPage = ({ jobOrderId, onBack, onEdit }) => {
+const JobOrderViewPage = ({ jobOrderId, onBack, onEdit, onPrint }) => {
   const [jobOrder, setJobOrder] = useState(null);
   const [error, setError] = useState('');
 
@@ -52,7 +53,10 @@ const JobOrderViewPage = ({ jobOrderId, onBack, onEdit }) => {
             <h1 className="text-2xl font-bold text-gray-900 break-all">Job order {jobOrder.jobOrderNumber}</h1>
             {jobOrder.tax?.isApplied && <Badge variant="green">Tax charged</Badge>}
           </div>
-          <Button variant="outline" leftIcon={<EditIcon className="w-4 h-4" />} onClick={onEdit}>Edit</Button>
+          <div className="flex flex-wrap gap-2">
+            {onPrint && <Button variant="outline" leftIcon={<PrintIcon className="w-4 h-4" />} onClick={onPrint}>Print</Button>}
+            <Button variant="outline" leftIcon={<EditIcon className="w-4 h-4" />} onClick={onEdit}>Edit</Button>
+          </div>
         </div>
         <p className="mt-1 text-sm text-gray-500">
           Created {formatDateTime(jobOrder.createdAt)}{wasEdited && ` · last changed ${formatDateTime(jobOrder.updatedAt)}`}

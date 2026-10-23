@@ -7,8 +7,10 @@ const FEATURE_FLAGS = {
     CONTROLS: 'isControlsFeatureOn',
     TAX: 'isTaxFeatureOn',
     IMAGE_UPLOAD: 'isImageUploadFeatureOn',
-    // Role Master now, Users (more logins with roles) next.
-    RBAC: 'isRBACFeatureOn'
+    // Role Master and Users.
+    RBAC: 'isRBACFeatureOn',
+    // Layout Master: print layouts for job orders.
+    LAYOUT_MASTER: 'isLayoutMasterFeatureOn'
 };
 
 // CompanyMaster-only switches that keep ONE read action of a feature
