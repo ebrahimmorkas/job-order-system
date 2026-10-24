@@ -3,7 +3,7 @@ const Role = require('../models/Role');
 const { todayString, coversDay } = require('../utils/days');
 const { ROLES } = require('../constants/roleConstants');
 const { ROLE_TYPES } = require('../constants/rbacConstants');
-const { FEATURE_FLAGS } = require('../constants/featureConstants');
+const { isRbacOn } = require('./accessService');
 
 // Who can be given the work of a master value on a job order: active users
 // who have that value today - through an active master role (the value
@@ -11,9 +11,6 @@ const { FEATURE_FLAGS } = require('../constants/featureConstants');
 // while CompanyMaster.isRoleAssignmentOnUserModuleAllowed is on). Only
 // masters with "Role will be provided" ticked, and only while RBAC is on.
 // Users with module roles only (e.g. Company Settings) never show.
-
-const isRbacOn = (websiteMasterData, companyMasterData) =>
-    websiteMasterData?.[FEATURE_FLAGS.RBAC] === true && companyMasterData?.[FEATURE_FLAGS.RBAC] === true;
 
 /**
  * @param {Object} params

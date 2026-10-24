@@ -5,22 +5,24 @@ const validate = require('../middlewares/validate');
 const v = require('../middlewares/validations/jobOrderValidations');
 const imageUpload = require('../middlewares/imageUpload');
 const parseMultipartData = require('../middlewares/parseMultipartData');
+const requirePermission = require('../middlewares/requirePermission');
 
-// Logged in already (server.js mounts this below authenticate). Any user of
-// the vendor - roles (RBAC) can narrow this later.
+// Logged in already (server.js mounts this below authenticate). The owner,
+// or a user whose roles give the permission.
+const can = (permission) => requirePermission('jobOrders', permission);
 
 // Above '/:id', so "form-data" is never read as an id.
-router.get('/form-data', jobOrderController.getFormData);
+router.get('/form-data', can(['create', 'edit']), jobOrderController.getFormData);
 
 const byId = validate(v.jobOrderIdParamSchema, 'params');
 
-router.get('/', validate(v.listJobOrdersQuerySchema, 'query'), jobOrderController.listJobOrders);
+router.get('/', can('view'), validate(v.listJobOrdersQuerySchema, 'query'), jobOrderController.listJobOrders);
 // JSON, or multipart: the job order as JSON in "data" plus new images in "images".
 const withImages = [imageUpload.multiple.array('images'), parseMultipartData];
 
-router.post('/', ...withImages, validate(v.jobOrderSchema), jobOrderController.createJobOrder);
-router.get('/:id', byId, jobOrderController.getJobOrder);
-router.put('/:id', byId, ...withImages, validate(v.jobOrderSchema), jobOrderController.updateJobOrder);
-router.delete('/:id', byId, jobOrderController.cancelJobOrder);
+router.post('/', can('create'), ...withImages, validate(v.jobOrderSchema), jobOrderController.createJobOrder);
+router.get('/:id', can('view'), byId, jobOrderController.getJobOrder);
+router.put('/:id', can('edit'), byId, ...withImages, validate(v.jobOrderSchema), jobOrderController.updateJobOrder);
+router.delete('/:id', can('delete'), byId, jobOrderController.cancelJobOrder);
 
 module.exports = router;

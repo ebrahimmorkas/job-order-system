@@ -17,6 +17,7 @@ import { useToast } from '../../../components/common/Toast';
 import { useDebouncedValue } from '../../../utils/useDebouncedValue';
 import { rangeStateOf, describeRange } from '../accessDates';
 import * as usersApi from '../api/usersApi';
+import { useAccess } from '../../access/hooks/useAccess';
 
 const PAGE_SIZE = 25;
 
@@ -57,6 +58,14 @@ const RoleChip = ({ entry, today }) => {
  */
 const UsersListPage = ({ onCreate, onEdit }) => {
   const toast = useToast();
+  // What the person may do here (the owner: everything).
+  const { can } = useAccess();
+  const mayCreate = can('users', 'create');
+  const mayEdit = can('users', 'edit');
+  const mayDelete = can('users', 'delete');
+  const { access } = useAccess();
+  // A user can't deactivate or delete their own account.
+  const isMe = (user) => user._id === access.userId;
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search.trim());
   const [status, setStatus] = useState('all');
@@ -195,9 +204,13 @@ const UsersListPage = ({ onCreate, onEdit }) => {
       label: 'Name',
       render: (user) => (
         <div className="min-w-0">
-          <button type="button" onClick={() => onEdit(user._id)} className="font-medium text-gray-900 hover:text-indigo-600 text-left break-words cursor-pointer">
-            {user.name}
-          </button>
+          {mayEdit ? (
+            <button type="button" onClick={() => onEdit(user._id)} className="font-medium text-gray-900 hover:text-indigo-600 text-left break-words cursor-pointer">
+              {user.name}
+            </button>
+          ) : (
+            <span className="font-medium text-gray-900 break-words">{user.name}</span>
+          )}
           <p className="text-xs text-gray-500 break-all">@{user.username}</p>
         </div>
       ),
@@ -235,7 +248,7 @@ const UsersListPage = ({ onCreate, onEdit }) => {
             size="sm"
             checked={isActive}
             onChange={() => toggleStatus(user)}
-            disabled={busyId === user._id}
+            disabled={!mayEdit || isMe(user) || busyId === user._id}
             aria-label={`"${user.name}" ${isActive ? 'is active' : 'is inactive'}`}
             title={isActive ? 'Active' : 'Inactive'}
           />
@@ -251,8 +264,8 @@ const UsersListPage = ({ onCreate, onEdit }) => {
         const isBusy = busyId === user._id;
         return (
           <div className="flex justify-end gap-0.5">
-            <IconButton label={`Edit "${user.name}"`} icon={EditIcon} onClick={() => onEdit(user._id)} disabled={isBusy} />
-            <IconButton label={`Delete "${user.name}"`} icon={TrashIcon} variant="danger" onClick={() => setToDelete({ ids: [user._id], label: user.name })} disabled={isBusy} />
+            {mayEdit && <IconButton label={`Edit "${user.name}"`} icon={EditIcon} onClick={() => onEdit(user._id)} disabled={isBusy} />}
+            {mayDelete && !isMe(user) && <IconButton label={`Delete "${user.name}"`} icon={TrashIcon} variant="danger" onClick={() => setToDelete({ ids: [user._id], label: user.name })} disabled={isBusy} />}
           </div>
         );
       },
@@ -270,9 +283,11 @@ const UsersListPage = ({ onCreate, onEdit }) => {
             <UsagePill used={limits.usersUsed} allowed={limits.usersAllowed} title={`${limits.usersUsed} of ${limits.usersAllowed} users used`} />
           )}
         </div>
-        <Button leftIcon={<PlusIcon className="w-4 h-4" />} onClick={onCreate} disabled={!limits || isFull}>
-          New user
-        </Button>
+        {mayCreate && (
+          <Button leftIcon={<PlusIcon className="w-4 h-4" />} onClick={onCreate} disabled={!limits || isFull}>
+            New user
+          </Button>
+        )}
       </div>
 
       {isFull && <Alert variant="info">You have reached your limit of {limits.usersAllowed} users. Delete one you no longer need to add another.</Alert>}
@@ -301,10 +316,10 @@ const UsersListPage = ({ onCreate, onEdit }) => {
           selectedCount={selectedCount}
           onClear={() => setSelectedKeys([])}
           actions={[
-            { key: 'activate', label: `Mark active (${selectedCount})`, variant: 'outline', onClick: () => handleBulkStatus('activate'), loading: bulkAction === 'activate', disabled: bulkAction !== null },
-            { key: 'deactivate', label: `Mark inactive (${selectedCount})`, variant: 'outline', onClick: () => handleBulkStatus('deactivate'), loading: bulkAction === 'deactivate', disabled: bulkAction !== null },
-            { key: 'delete', label: `Delete (${selectedCount})`, variant: 'danger', onClick: () => setToDelete({ ids: selectedKeys, label: `${selectedCount} users` }), disabled: bulkAction !== null },
-          ]}
+            mayEdit && { key: 'activate', label: `Mark active (${selectedCount})`, variant: 'outline', onClick: () => handleBulkStatus('activate'), loading: bulkAction === 'activate', disabled: bulkAction !== null },
+            mayEdit && { key: 'deactivate', label: `Mark inactive (${selectedCount})`, variant: 'outline', onClick: () => handleBulkStatus('deactivate'), loading: bulkAction === 'deactivate', disabled: bulkAction !== null },
+            mayDelete && { key: 'delete', label: `Delete (${selectedCount})`, variant: 'danger', onClick: () => setToDelete({ ids: selectedKeys, label: `${selectedCount} users` }), disabled: bulkAction !== null },
+          ].filter(Boolean)}
         />
       )}
 
@@ -312,7 +327,7 @@ const UsersListPage = ({ onCreate, onEdit }) => {
         columns={columns}
         data={data?.users || []}
         keyField="_id"
-        selectable
+        selectable={mayEdit || mayDelete}
         selectedKeys={selectedKeys}
         onSelectionChange={setSelectedKeys}
         loading={isLoading && !data}

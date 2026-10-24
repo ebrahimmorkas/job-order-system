@@ -25,7 +25,7 @@ const login = async (req, res) => {
         }
         const { identifier, password } = req.body;
 
-        const loginUser = await authService.loginUser({ identifier, password }, getDeviceMeta(req), vendorId, req.websiteMasterData);
+        const loginUser = await authService.loginUser({ identifier, password }, getDeviceMeta(req), vendorId, req.websiteMasterData, req.companyMasterData);
 
         if (!loginUser.isSuccess) {
             logInfo(0, 1, loginUser.message);
@@ -47,7 +47,7 @@ const refreshToken = async (req, res) => {
     try {
         const incomingRefreshToken = req.cookies?.refreshToken;
 
-        const result = await authService.refreshAccessToken(incomingRefreshToken, getDeviceMeta(req));
+        const result = await authService.refreshAccessToken(incomingRefreshToken, getDeviceMeta(req), req.websiteMasterData, req.companyMasterData);
 
         if (!result.isSuccess) {
             logInfo(0, 1, result.message);

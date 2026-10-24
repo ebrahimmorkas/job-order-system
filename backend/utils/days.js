@@ -19,7 +19,26 @@ const coversDay = ({ startDate, endDate }, day) => {
     }
 };
 
+// date + { amount, unit } (constants/jobOrderConstants.js DURATION_UNITS), as a
+// new Date. Days, months and years follow the calendar (31 Jan + 1 month =
+// 3 Mar, as JavaScript dates do).
+const addDuration = (date, { amount, unit }) => {
+    try {
+        const due = new Date(date);
+        if (unit === 'seconds') due.setSeconds(due.getSeconds() + amount);
+        else if (unit === 'minutes') due.setMinutes(due.getMinutes() + amount);
+        else if (unit === 'hours') due.setHours(due.getHours() + amount);
+        else if (unit === 'days') due.setDate(due.getDate() + amount);
+        else if (unit === 'months') due.setMonth(due.getMonth() + amount);
+        else if (unit === 'years') due.setFullYear(due.getFullYear() + amount);
+        return due;
+    } catch (err) {
+        throw err;
+    }
+};
+
 module.exports = {
     todayString,
-    coversDay
+    coversDay,
+    addDuration
 };

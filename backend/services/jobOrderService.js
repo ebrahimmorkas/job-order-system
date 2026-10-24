@@ -13,6 +13,7 @@ const { assignedCountryIdsOf, isTaxOn, taxReadyCountryIds, loadCountries, detail
 const { LIVE_STATUSES, CASE_INSENSITIVE_COLLATION } = require('../constants/masterConstants');
 const { CONTROL_TYPES, PRICE_PATTERN } = require('../constants/controlConstants');
 const { SHORT_NAME_PLACES, AUTO_NUMBER_PREFIX, AUTO_NUMBER_DIGITS, ANSWER_MAX_LENGTH } = require('../constants/jobOrderConstants');
+const { addDuration } = require('../utils/days');
 const { FEATURE_FLAGS } = require('../constants/featureConstants');
 const { IMAGE_FORMATS, IMAGE_FORMAT_VALUES, IMAGE_MODULES, MAX_IMAGES_PER_REQUEST } = require('../constants/storageConstants');
 
@@ -186,7 +187,7 @@ const getFormData = async (vendorData) => {
 const assigneesOf = ({ master, value, userIds, workerById, previous }) => {
     try {
         if (userIds.length > 0 && !master.isRoleProvided) return { message: `Work can't be given for ${master.name}.` };
-        const before = new Map((previous.get(String(value._id)) || []).map((person) => [String(person.userId), person]));
+        const before = new Map((previous.get(String(value._id))?.assignedTo || []).map((person) => [String(person.userId), person]));
         const assignees = [];
         for (const userId of userIds) {
             const worker = (value.workerIds || []).includes(userId) && workerById.get(userId);
@@ -200,11 +201,28 @@ const assigneesOf = ({ master, value, userIds, workerById, previous }) => {
     }
 };
 
+const sameDuration = (a, b) => (a?.amount ?? null) === (b?.amount ?? null) && (a?.unit ?? null) === (b?.unit ?? null);
+
+// When a value's work was given and is due. The clock starts when people are
+// first given it and restarts only when completeIn changes.
+// before: the value as saved before (on edit), or undefined.
+const timingOf = ({ assignees, completeIn, before, now }) => {
+    try {
+        if (assignees.length === 0) return { assignedAt: null, completeIn: null, dueAt: null };
+        const isSameClock = before?.assignedAt && before.assignedTo?.length > 0 && sameDuration(before.completeIn, completeIn);
+        const assignedAt = isSameClock ? before.assignedAt : now;
+        return { assignedAt, completeIn: completeIn || null, dueAt: completeIn ? addDuration(assignedAt, completeIn) : null };
+    } catch (err) {
+        throw err;
+    }
+};
+
 // The masters picked: field errors by master, and what to store.
-// previous: valueId -> the people given its work before (on edit).
+// previous: valueId -> the value as saved before (on edit).
 const pickMasters = (masters, input, workers, previous) => {
     try {
         const errors = [];
+        const now = new Date();
         const picked = new Map(input.map((entry) => [entry.masterId, entry.valueIds]));
         const assignmentsOf = new Map(input.map((entry) => [entry.masterId, entry.assignments || []]));
         const workerById = new Map(workers.map((worker) => [String(worker._id), worker]));
@@ -236,17 +254,19 @@ const pickMasters = (masters, input, workers, previous) => {
                 errors.push({ field, message: 'Work can be given only for a value picked here.' });
                 continue;
             }
-            const userIdsOf = new Map(assignments.map((assignment) => [assignment.valueId, assignment.userIds]));
+            const assignmentOf = new Map(assignments.map((assignment) => [assignment.valueId, assignment]));
             const values = [];
             let message = null;
             for (const valueId of valueIds) {
                 const value = valueById.get(valueId);
-                const result = assigneesOf({ master, value, userIds: userIdsOf.get(valueId) || [], workerById, previous });
+                const assignment = assignmentOf.get(valueId);
+                const result = assigneesOf({ master, value, userIds: assignment?.userIds || [], workerById, previous });
                 if (result.message) {
                     message = result.message;
                     break;
                 }
-                values.push({ valueId: value._id, name: value.name, assignedTo: result.assignees });
+                const timing = timingOf({ assignees: result.assignees, completeIn: assignment?.completeIn, before: previous.get(valueId), now });
+                values.push({ valueId: value._id, name: value.name, assignedTo: result.assignees, ...timing });
             }
             if (message) {
                 errors.push({ field, message });
@@ -417,7 +437,7 @@ const buildJobOrder = (parts, data, current = null) => {
     try {
         const previous = new Map();
         for (const master of current?.masters || []) {
-            for (const value of master.values) previous.set(String(value.valueId), value.assignedTo || []);
+            for (const value of master.values) previous.set(String(value.valueId), value);
         }
         const masters = pickMasters(parts.masters, data.masters, parts.workers, previous);
         const controls = answerControls(parts.controls, data.controls);

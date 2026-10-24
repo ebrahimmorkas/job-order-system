@@ -7,11 +7,14 @@ const { generateAccessToken, generateRefreshToken, verifyRefreshToken, hashToken
 const common = require('../utils/common');
 const loginAttemptService = require('./loginAttemptService');
 const { ROLES } = require('../constants/roleConstants');
+const { isRbacOn } = require('./accessService');
 
 const INACTIVE_ACCOUNT_MESSAGE = 'Your account has been deactivated. Please contact support.';
-// Users added in the Users module can't log in until their roles are
-// applied to what they see (the next RBAC step); only the owner can.
-const USER_LOGIN_OFF_MESSAGE = 'Logins for users are not switched on yet. Please contact the owner.';
+// Users added in the Users module log in only while RBAC is on (WebsiteMaster
+// AND CompanyMaster); the owner always can.
+const USER_LOGIN_OFF_MESSAGE = 'Logins for users are switched off. Please contact the owner.';
+const canLogIn = (user, websiteMasterData, companyMasterData) =>
+    user.role === ROLES.OWNER || (user.role === ROLES.USER && isRbacOn(websiteMasterData, companyMasterData));
 const lockedMessage = (minutes) =>
     `Too many failed login attempts. Please try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`;
 
@@ -50,7 +53,7 @@ const refreshTokenExpiry = (refreshToken) => {
     }
 };
 
-const loginUser = async ({ identifier, password }, deviceMeta, vendorId, websiteMasterData) => {
+const loginUser = async ({ identifier, password }, deviceMeta, vendorId, websiteMasterData, companyMasterData) => {
     try {
         if (!vendorId) {
             // Vendor detection fails
@@ -89,7 +92,7 @@ const loginUser = async ({ identifier, password }, deviceMeta, vendorId, website
         if (user.status === 'I') {
             return common.returnResult(false, 403, INACTIVE_ACCOUNT_MESSAGE);
         }
-        if (user.role !== ROLES.OWNER) {
+        if (!canLogIn(user, websiteMasterData, companyMasterData)) {
             return common.returnResult(false, 403, USER_LOGIN_OFF_MESSAGE);
         }
 
@@ -150,7 +153,7 @@ const REFRESH_LOST_RESPONSE_GRACE_MS = 30 * 60 * 1000;
  * - Not matched at all (unknown token, or previous token past its grace) -> expected
  *   failure, force re-login.
  */
-const refreshAccessToken = async (incomingRefreshToken, deviceMeta) => {
+const refreshAccessToken = async (incomingRefreshToken, deviceMeta, websiteMasterData, companyMasterData) => {
     try {
         if (!incomingRefreshToken) {
             return common.returnResult(false, 401, 'Session expired');
@@ -196,7 +199,7 @@ const refreshAccessToken = async (incomingRefreshToken, deviceMeta) => {
             await RefreshToken.deleteOne({ _id: session._id });
             return common.returnResult(false, 403, INACTIVE_ACCOUNT_MESSAGE);
         }
-        if (user.role !== ROLES.OWNER) {
+        if (!canLogIn(user, websiteMasterData, companyMasterData)) {
             await RefreshToken.deleteOne({ _id: session._id });
             return common.returnResult(false, 403, USER_LOGIN_OFF_MESSAGE);
         }

@@ -4,6 +4,7 @@ import JobOrdersListPage from './JobOrdersListPage';
 import JobOrderFormPage from './JobOrderFormPage';
 import JobOrderViewPage from './JobOrderViewPage';
 import JobOrderPrintPage from './JobOrderPrintPage';
+import { useAccess } from '../../access/hooks/useAccess';
 
 /**
  * The Job Orders section: the list, a job order's view or print screen, or the
@@ -14,6 +15,7 @@ import JobOrderPrintPage from './JobOrderPrintPage';
  */
 const JobOrdersPage = ({ featureAccess }) => {
   const toast = useToast();
+  const { can } = useAccess();
   // { mode: 'list' } | { mode: 'create' } | { mode: 'edit' | 'view' | 'print', id }
   const [screen, setScreen] = useState({ mode: 'list' });
 
@@ -35,7 +37,7 @@ const JobOrdersPage = ({ featureAccess }) => {
         key={screen.id}
         jobOrderId={screen.id}
         onBack={backToList}
-        onEdit={() => setScreen({ mode: 'edit', id: screen.id })}
+        onEdit={can('jobOrders', 'edit') ? () => setScreen({ mode: 'edit', id: screen.id }) : null}
         onPrint={featureAccess?.isLayoutMasterFeatureOn === false ? null : () => setScreen({ mode: 'print', id: screen.id })}
       />
     );

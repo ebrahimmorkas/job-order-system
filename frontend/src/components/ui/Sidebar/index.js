@@ -1,2 +1,2 @@
 export { default } from './Sidebar';
-export { DEFAULT_NAV_ITEMS, filterNavItemsByFeatureAccess } from './navItems';
+export { DEFAULT_NAV_ITEMS, filterNavItemsByFeatureAccess, filterNavItemsByAccess } from './navItems';

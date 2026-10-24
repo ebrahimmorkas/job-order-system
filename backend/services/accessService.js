@@ -1,0 +1,95 @@
+const User = require('../models/User');
+const Role = require('../models/Role');
+const common = require('../utils/common');
+const roleService = require('./roleService');
+const { todayString, coversDay } = require('../utils/days');
+const { ROLES } = require('../constants/roleConstants');
+const { ROLE_TYPES, PERMISSIONS } = require('../constants/rbacConstants');
+const { FEATURE_FLAGS } = require('../constants/featureConstants');
+
+// What a logged-in person may do. The owner may do everything. A user gets
+// the modules and permissions of their active roles that cover today, plus
+// their own extra access (only while CompanyMaster.isRoleAssignmentOnUserModuleAllowed
+// is on) - and nothing at all while RBAC is off. Any permission of a module
+// also gives View. Modules whose feature is off are left out.
+//
+// hasWork: a master role or extra master access today - the "My work" page.
+
+const NO_ACCESS = { isOwner: false, modules: {}, hasWork: false };
+
+/** RBAC is on only when it is on in WebsiteMaster AND in CompanyMaster. */
+const isRbacOn = (websiteMasterData, companyMasterData) =>
+    websiteMasterData?.[FEATURE_FLAGS.RBAC] === true && companyMasterData?.[FEATURE_FLAGS.RBAC] === true;
+
+/**
+ * @param {{ vendorId, user: { _id, role }, websiteMasterData, companyMasterData }} params
+ * @returns {Promise<{ isOwner: boolean, modules: Object<string, string[]>, hasWork: boolean }>}
+ */
+const accessOf = async ({ vendorId, user, websiteMasterData, companyMasterData }) => {
+    try {
+        if (user.role === ROLES.OWNER) return { isOwner: true, modules: {}, hasWork: false };
+        if (!isRbacOn(websiteMasterData, companyMasterData)) return NO_ACCESS;
+
+        const own = await User.findOne({ _id: user._id, vendorId }).select('assignedRoles extraModules extraMasters').lean();
+        if (!own) return NO_ACCESS;
+        const today = todayString();
+        const roleIds = own.assignedRoles.filter((entry) => coversDay(entry, today)).map((entry) => entry.roleId);
+        const roles = roleIds.length === 0 ? [] : await Role.find({ vendorId, _id: { $in: roleIds }, status: 'A' }).select('type modules masters').lean();
+        const canUseExtras = companyMasterData?.isRoleAssignmentOnUserModuleAllowed === true;
+
+        const granted = new Map();
+        const grant = (module, permission) => {
+            if (!granted.has(module)) granted.set(module, new Set([PERMISSIONS.VIEW]));
+            granted.get(module).add(permission);
+        };
+        let hasWork = false;
+        for (const role of roles) {
+            if (role.type === ROLE_TYPES.MODULE) {
+                for (const entry of role.modules) for (const permission of entry.permissions) grant(entry.module, permission);
+            } else if (role.masters.length > 0) {
+                hasWork = true;
+            }
+        }
+        if (canUseExtras) {
+            for (const extra of own.extraModules) if (coversDay(extra, today)) grant(extra.module, extra.permission);
+            if (own.extraMasters.some((extra) => coversDay(extra, today))) hasWork = true;
+        }
+
+        const modules = {};
+        for (const module of roleService.availableModulesOf(websiteMasterData, companyMasterData)) {
+            const permissions = granted.get(module.key);
+            if (permissions) modules[module.key] = module.permissions.filter((permission) => permissions.has(permission));
+        }
+        return { isOwner: false, modules, hasWork };
+    } catch (err) {
+        throw err;
+    }
+};
+
+/** Whether access allows permission (or any of permissions) in module. */
+const can = (access, module, permissions) => {
+    try {
+        if (access.isOwner) return true;
+        const own = access.modules[module] || [];
+        return [].concat(permissions).some((permission) => own.includes(permission));
+    } catch (err) {
+        throw err;
+    }
+};
+
+// GET /api/access - what the logged-in person may do (the menu and buttons),
+// and their own id (e.g. no Delete on your own row in Users).
+const getMyAccess = async (params) => {
+    try {
+        return common.returnResult(true, 200, 'Access fetched successfully.', { access: { ...await accessOf(params), userId: String(params.user._id) } });
+    } catch (err) {
+        throw err;
+    }
+};
+
+module.exports = {
+    isRbacOn,
+    accessOf,
+    can,
+    getMyAccess
+};

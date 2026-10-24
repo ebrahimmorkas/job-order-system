@@ -4,6 +4,7 @@ const layoutController = require('../controllers/layoutController');
 const authorize = require('../middlewares/authorize');
 const requireFeature = require('../middlewares/requireFeature');
 const validate = require('../middlewares/validate');
+const requirePermission = require('../middlewares/requirePermission');
 const v = require('../middlewares/validations/layoutValidations');
 const { ROLES } = require('../constants/roleConstants');
 const { FEATURE_FLAGS } = require('../constants/featureConstants');
@@ -14,9 +15,10 @@ router.use(requireFeature(FEATURE_FLAGS.LAYOUT_MASTER));
 
 const byId = validate(v.layoutIdParamSchema, 'params');
 
-// Printing a job order: any logged-in user of the vendor.
-router.get('/for-print', layoutController.listLayoutsForPrint);
-router.get('/for-print/:id', byId, layoutController.getLayoutForPrint);
+// Printing a job order: anyone who may view job orders.
+const canPrint = requirePermission('jobOrders', 'view');
+router.get('/for-print', canPrint, layoutController.listLayoutsForPrint);
+router.get('/for-print/:id', canPrint, byId, layoutController.getLayoutForPrint);
 
 // Everything else: the owner only.
 router.use(authorize(ROLES.OWNER));

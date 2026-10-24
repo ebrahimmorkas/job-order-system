@@ -27,6 +27,8 @@ const roleRoutes = require('./routes/roleRoutes');
 const userRoutes = require('./routes/userRoutes');
 const layoutRoutes = require('./routes/layoutRoutes');
 const masterRoutes = require('./routes/masterRoutes');
+const accessRoutes = require('./routes/accessRoutes');
+const myWorkRoutes = require('./routes/myWorkRoutes');
 const storageProviderConfig = require('./config/storageProviderConfig');
 
 // Every model must carry the audit history (or be listed as exempt) - refuse
@@ -97,6 +99,8 @@ app.use('/api/job-orders', jobOrderRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/layouts', layoutRoutes);
+app.use('/api/access', accessRoutes);
+app.use('/api/my-work', myWorkRoutes);
 
 // No route matched: the same JSON shape as every other error, instead of
 // Express's default HTML page.

@@ -12,6 +12,7 @@ import { BackIcon } from '../../../components/common/ActionIcons';
 import RoleAssignments from '../components/RoleAssignments';
 import ExtraAccess from '../components/ExtraAccess';
 import * as usersApi from '../api/usersApi';
+import { useAccess } from '../../access/hooks/useAccess';
 
 // Same rules as the backend (constants/rbacConstants.js).
 const NAME_MAX_LENGTH = 50;
@@ -74,6 +75,7 @@ const isBackwards = ({ startDate, endDate }, today) => !!endDate && endDate < (s
  * @param {() => void} props.onBack
  */
 const UserFormPage = ({ mode, userId, onDone, onBack }) => {
+  const { access } = useAccess();
   const isEdit = mode === 'edit';
 
   const [isLoading, setIsLoading] = useState(true);
@@ -130,7 +132,10 @@ const UserFormPage = ({ mode, userId, onDone, onBack }) => {
     clearError(errorKey);
   };
 
-  const canGiveExtraAccess = options?.settings.canGiveExtraAccess === true;
+  // Roles and extra access: only with Users > Assign role (the owner always),
+  // and never on your own account - the backend keeps them as they are.
+  const canChangeRoles = options?.canAssignRole === true && userId !== access.userId;
+  const canGiveExtraAccess = canChangeRoles && options?.settings.canGiveExtraAccess === true;
 
   const validate = (today) => {
     const errors = {};
@@ -146,7 +151,7 @@ const UserFormPage = ({ mode, userId, onDone, onBack }) => {
     if (details.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(details.email.trim())) errors.email = 'Enter a valid email';
     if (details.phone.trim() && !PHONE_PATTERN.test(details.phone.trim())) errors.phone = 'Phone must be 10 to 13 digits, optionally starting with +';
 
-    for (const entry of form.roles) {
+    for (const entry of canChangeRoles ? form.roles : []) {
       if (isBackwards(entry, today)) errors[`roles.${entry.roleId}`] = 'The end date is before the start date';
     }
     if (canGiveExtraAccess) {
@@ -311,6 +316,7 @@ const UserFormPage = ({ mode, userId, onDone, onBack }) => {
             </div>
           </Card>
 
+          {canChangeRoles && (
           <Card
             variant="outlined"
             title={options.settings.canGiveSeveralRoles ? 'Roles' : 'Role'}
@@ -325,6 +331,7 @@ const UserFormPage = ({ mode, userId, onDone, onBack }) => {
               disabled={isSaving}
             />
           </Card>
+          )}
 
           {canGiveExtraAccess && (
             <Card variant="outlined" title="Extra access" subtitle="Only for this user, on top of the roles.">

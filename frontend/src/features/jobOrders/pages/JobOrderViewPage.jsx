@@ -17,7 +17,7 @@ const formatDateTime = (value) => new Date(value).toLocaleString('en-IN', { day:
  * @param {Object} props
  * @param {string} props.jobOrderId
  * @param {() => void} props.onBack
- * @param {() => void} props.onEdit
+ * @param {(() => void)|null} props.onEdit - null without the Edit permission
  * @param {(() => void)|null} props.onPrint - null while Layout Master is off
  */
 const JobOrderViewPage = ({ jobOrderId, onBack, onEdit, onPrint }) => {
@@ -55,7 +55,7 @@ const JobOrderViewPage = ({ jobOrderId, onBack, onEdit, onPrint }) => {
           </div>
           <div className="flex flex-wrap gap-2">
             {onPrint && <Button variant="outline" leftIcon={<PrintIcon className="w-4 h-4" />} onClick={onPrint}>Print</Button>}
-            <Button variant="outline" leftIcon={<EditIcon className="w-4 h-4" />} onClick={onEdit}>Edit</Button>
+            {onEdit && <Button variant="outline" leftIcon={<EditIcon className="w-4 h-4" />} onClick={onEdit}>Edit</Button>}
           </div>
         </div>
         <p className="mt-1 text-sm text-gray-500">

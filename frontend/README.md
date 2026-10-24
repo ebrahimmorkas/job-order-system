@@ -23,7 +23,17 @@ images stored on the server itself, such as logos) to it.
   name is shown instead.
 - **After login** - the sidebar (company name + logo, the user, logout) and
   the dashboard. Menu items of features switched off for the vendor are
-  hidden; items whose page is not built yet show "coming soon".
+  hidden; items whose page is not built yet show "coming soon". What the
+  person may do is loaded once before the pages show (`features/access`,
+  `useAccess().can(module, permission)`): a user sees only the modules their
+  roles give, and buttons they can't use are hidden (New / Copy without
+  Create, Edit and status switches without Edit, Delete without Delete;
+  Company Settings read only without Edit; roles on the user form only with
+  Assign role, never on your own account). Layout Master is owner only.
+- **My work** (users given master values' work) - the job orders given to
+  them, newest first, with what they do on each, when it is due and the time
+  left ("Overdue", or "No deadline"), who else does it, and a read-only view
+  of the job order without any money. The dashboard links to it.
 - **Masters** - the vendor's own dropdown lists for the job order: list with
   Sr. No. (with up / down arrows to change the order), search, status filter,
   pages, a status switch and bulk actions; clicking the values count opens the
@@ -39,7 +49,7 @@ images stored on the server itself, such as logos) to it.
   email, phone, address; roles from a searchable dropdown, each with start /
   end dates (one role unless several are allowed); and, when allowed, extra
   access: module options ticked one by one and master values, each with its
-  own dates. Users can't log in yet.
+  own dates. Users log in while RBAC is on.
 - **Role Master** (with Users, only while RBAC is on) - the same list as
   Masters plus a type filter, an access column and the roles usage pill.
   Create (pick Module role or Master role - it can't change later), copy and
@@ -60,7 +70,9 @@ images stored on the server itself, such as logos) to it.
   (multi-select where allowed, default picked, short name when chosen in
   Company Settings, required ones starred) - under a role master, "Who does
   <value>?" for each picked value lists only the people who have that value
-  (several can be picked, optional) - every control, the tax rate, and a
+  (several can be picked, optional) and, once someone is picked, "Complete
+  in" (a number and Seconds / Minutes / Hours / Days / Months / Years;
+  empty = no deadline) - every control, the tax rate, and a
   summary beside it that updates as you type - every answer, the prices,
   subtotal, tax split (CGST + SGST, or IGST for another Indian state) and
   total in the country's currency, or why no tax is charged. Images (only
@@ -133,7 +145,8 @@ To try a second vendor on the same computer:
 - `src/features/<feature>/` - one folder per feature: its `api/`, `context/`,
   `hooks/`, `pages/` and `components/`. `auth` (session, login page),
   `branding` (company name / tagline / logo, loaded once per page load),
-  `featureAccess` (which features are on), `dashboard`, `masters`, `controls`,
+  `featureAccess` (which features are on), `access` (what the logged-in
+  person may do), `myWork`, `dashboard`, `masters`, `controls`,
   `companySettings`, `jobOrders` and `layouts` (the designer, the drawing
   shared by the designer, printing and exports, and the PDF / image export).
 - `src/layouts/AppShell.jsx` - the logged-in layout: sidebar + current page.
@@ -143,5 +156,6 @@ To try a second vendor on the same computer:
   (email, Indian mobile number, PIN code, password strength...).
 - `src/utils/searchFilter.js` - the matching used by SearchInput lists.
 - `src/utils/useDebouncedValue.js` - waits for typing to pause (server-side search).
+- `src/utils/useNow.js` - the current time, updated every 30 seconds (time left).
 - `src/utils/scrollLock.js` - the page-scroll lock shared by Modal and the
   mobile Sidebar.

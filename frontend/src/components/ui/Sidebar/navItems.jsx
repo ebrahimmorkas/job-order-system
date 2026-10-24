@@ -1,18 +1,37 @@
-import { DashboardIcon, JobOrdersIcon, MastersIcon, ControlsIcon, UsersIcon, RolesIcon, LayoutsIcon, CompanySettingsIcon } from './icons';
+import { DashboardIcon, MyWorkIcon, JobOrdersIcon, MastersIcon, ControlsIcon, UsersIcon, RolesIcon, LayoutsIcon, CompanySettingsIcon } from './icons';
 
 // The sidebar's default menu. Add each new module here as it is built.
 // featureFlag (optional) names a feature that must be on - see
-// filterNavItemsByFeatureAccess below.
+// filterNavItemsByFeatureAccess below. Who sees an item - see
+// filterNavItemsByAccess below:
+//   module    - a Role Master module: needs its View permission
+//   ownerOnly - the owner only
+//   workOnly  - a user who is given work (master roles)
 export const DEFAULT_NAV_ITEMS = [
   { key: 'dashboard', label: 'Dashboard', icon: DashboardIcon },
-  { key: 'jobOrders', label: 'Job Orders', icon: JobOrdersIcon },
-  { key: 'masters', label: 'Masters', icon: MastersIcon, featureFlag: 'isMasterModuleFeatureOn' },
-  { key: 'controls', label: 'Controls', icon: ControlsIcon, featureFlag: 'isControlsFeatureOn' },
-  { key: 'users', label: 'Users', icon: UsersIcon, featureFlag: 'isRBACFeatureOn' },
-  { key: 'roles', label: 'Role Master', icon: RolesIcon, featureFlag: 'isRBACFeatureOn' },
-  { key: 'layouts', label: 'Layout Master', icon: LayoutsIcon, featureFlag: 'isLayoutMasterFeatureOn' },
-  { key: 'companySettings', label: 'Company Settings', icon: CompanySettingsIcon },
+  { key: 'myWork', label: 'My work', icon: MyWorkIcon, workOnly: true },
+  { key: 'jobOrders', label: 'Job Orders', icon: JobOrdersIcon, module: 'jobOrders' },
+  { key: 'masters', label: 'Masters', icon: MastersIcon, featureFlag: 'isMasterModuleFeatureOn', module: 'masters' },
+  { key: 'controls', label: 'Controls', icon: ControlsIcon, featureFlag: 'isControlsFeatureOn', module: 'controls' },
+  { key: 'users', label: 'Users', icon: UsersIcon, featureFlag: 'isRBACFeatureOn', module: 'users' },
+  { key: 'roles', label: 'Role Master', icon: RolesIcon, featureFlag: 'isRBACFeatureOn', module: 'roles' },
+  { key: 'layouts', label: 'Layout Master', icon: LayoutsIcon, featureFlag: 'isLayoutMasterFeatureOn', ownerOnly: true },
+  { key: 'companySettings', label: 'Company Settings', icon: CompanySettingsIcon, module: 'companySettings' },
 ];
+
+/**
+ * Hides what the logged-in person can't open (see useAccess).
+ *
+ * @param {Array} items
+ * @param {{ isOwner: boolean, hasWork: boolean }} access
+ * @param {(module: string, permission: string) => boolean} can
+ */
+export const filterNavItemsByAccess = (items, access, can) =>
+  items.filter((item) => {
+    if (item.workOnly) return !access.isOwner && access.hasWork;
+    if (item.ownerOnly) return access.isOwner;
+    return !item.module || can(item.module, 'view');
+  });
 
 /**
  * Hides the items whose featureFlag is switched off for this vendor (off in

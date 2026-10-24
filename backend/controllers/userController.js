@@ -1,9 +1,10 @@
 const userService = require('../services/userService');
+const accessService = require('../services/accessService');
 const { sendResult } = require('../utils/common');
 const { logInfo, logException } = require('../utils/logger');
 
-// Every route here already passed: login, owner role, the RBAC feature switch
-// and the Joi validation (routes/userRoutes.js).
+// Every route here already passed: login, the RBAC feature switch, the
+// permission (req.access) and the Joi validation (routes/userRoutes.js).
 
 const respond = (res, result, meta) => {
     if (result.isSuccess) logInfo(1, 0, result.message, meta);
@@ -18,10 +19,13 @@ const vendorData = (req) => ({
     companyMasterData: req.companyMasterData
 });
 
+// Whether roles and extra access may be given: the owner, or Users > Assign role.
+const canAssignRoleOf = (req) => accessService.can(req.access, 'users', 'assignRole');
+
 // GET /api/users/form-data
 const getFormData = async (req, res) => {
     try {
-        const result = await userService.getFormData(vendorData(req));
+        const result = await userService.getFormData({ ...vendorData(req), canAssignRole: canAssignRoleOf(req) });
         return sendResult(res, result);
     } catch (err) {
         logException('Error while fetching the user form', err);
@@ -51,7 +55,7 @@ const getUser = async (req, res) => {
 // POST /api/users
 const createUser = async (req, res) => {
     try {
-        const result = await userService.createUser({ ...vendorData(req), userId: req.user._id, data: req.body });
+        const result = await userService.createUser({ ...vendorData(req), userId: req.user._id, canAssignRole: canAssignRoleOf(req), data: req.body });
         return respond(res, result, { vendorId: req.vendorId });
     } catch (err) {
         logException('Error while creating the user', err);
@@ -61,7 +65,7 @@ const createUser = async (req, res) => {
 // PUT /api/users/:id
 const updateUser = async (req, res) => {
     try {
-        const result = await userService.updateUser({ ...vendorData(req), userId: req.user._id, id: req.params.id, data: req.body });
+        const result = await userService.updateUser({ ...vendorData(req), userId: req.user._id, canAssignRole: canAssignRoleOf(req), id: req.params.id, data: req.body });
         return respond(res, result, { vendorId: req.vendorId, targetUserId: req.params.id });
     } catch (err) {
         logException('Error while updating the user', err);

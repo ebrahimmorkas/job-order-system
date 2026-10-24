@@ -15,6 +15,7 @@ import IconButton from '../../../components/common/IconButton';
 import UsagePill from '../../../components/common/UsagePill';
 import { EditIcon, CopyIcon, TrashIcon, PlusIcon, MoveUpIcon, MoveDownIcon } from '../../../components/common/ActionIcons';
 import MasterValuesModal from '../components/MasterValuesModal';
+import { useAccess } from '../../access/hooks/useAccess';
 import * as mastersApi from '../api/mastersApi';
 
 const PAGE_SIZE = 25;
@@ -43,6 +44,11 @@ const BULK_LABELS = {
  */
 const MastersListPage = ({ onCreate, onEdit, onClone }) => {
   const toast = useToast();
+  // What the person may do here (the owner: everything).
+  const { can } = useAccess();
+  const mayCreate = can('masters', 'create');
+  const mayEdit = can('masters', 'edit');
+  const mayDelete = can('masters', 'delete');
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search.trim());
   const [status, setStatus] = useState('all');
@@ -181,7 +187,7 @@ const MastersListPage = ({ onCreate, onEdit, onClone }) => {
           <div className="flex items-center gap-1">
             <span className="w-7 text-gray-500">{index + 1}</span>
             {/* Moving only makes sense when the whole list is shown in order. */}
-            {!isFiltered && (
+            {!isFiltered && mayEdit && (
               <div className="flex">
                 <IconButton label={`Move "${master.name}" up`} icon={MoveUpIcon} size="sm" onClick={() => move(master, 'up')} disabled={isBusy || index === 0} />
                 <IconButton label={`Move "${master.name}" down`} icon={MoveDownIcon} size="sm" onClick={() => move(master, 'down')} disabled={isBusy || index === total - 1} />
@@ -196,9 +202,13 @@ const MastersListPage = ({ onCreate, onEdit, onClone }) => {
       label: 'Name',
       render: (master) => (
         <div className="min-w-0">
-          <button type="button" onClick={() => onEdit(master._id)} className="font-medium text-gray-900 hover:text-indigo-600 text-left break-words cursor-pointer">
-            {master.name}
-          </button>
+          {mayEdit ? (
+            <button type="button" onClick={() => onEdit(master._id)} className="font-medium text-gray-900 hover:text-indigo-600 text-left break-words cursor-pointer">
+              {master.name}
+            </button>
+          ) : (
+            <span className="font-medium text-gray-900 break-words">{master.name}</span>
+          )}
           {master.shortName && <span className="ml-2 text-xs text-gray-500">{master.shortName}</span>}
         </div>
       ),
@@ -243,7 +253,7 @@ const MastersListPage = ({ onCreate, onEdit, onClone }) => {
             size="sm"
             checked={isActive}
             onChange={() => toggleStatus(master)}
-            disabled={busyId === master._id}
+            disabled={!mayEdit || busyId === master._id}
             aria-label={`"${master.name}" ${isActive ? 'is active' : 'is inactive'}`}
             title={isActive ? 'Active' : 'Inactive'}
           />
@@ -259,14 +269,16 @@ const MastersListPage = ({ onCreate, onEdit, onClone }) => {
         const isBusy = busyId === master._id;
         return (
           <div className="flex justify-end gap-0.5">
-            <IconButton label={`Edit "${master.name}"`} icon={EditIcon} onClick={() => onEdit(master._id)} disabled={isBusy} />
-            <IconButton
-              label={canCreate ? `Copy "${master.name}"` : 'Copy - the limit for masters is reached'}
-              icon={CopyIcon}
-              onClick={() => onClone(master._id)}
-              disabled={isBusy || !canCreate}
-            />
-            <IconButton label={`Delete "${master.name}"`} icon={TrashIcon} variant="danger" onClick={() => setToDelete({ ids: [master._id], label: master.name })} disabled={isBusy} />
+            {mayEdit && <IconButton label={`Edit "${master.name}"`} icon={EditIcon} onClick={() => onEdit(master._id)} disabled={isBusy} />}
+            {mayCreate && (
+              <IconButton
+                label={canCreate ? `Copy "${master.name}"` : 'Copy - the limit for masters is reached'}
+                icon={CopyIcon}
+                onClick={() => onClone(master._id)}
+                disabled={isBusy || !canCreate}
+              />
+            )}
+            {mayDelete && <IconButton label={`Delete "${master.name}"`} icon={TrashIcon} variant="danger" onClick={() => setToDelete({ ids: [master._id], label: master.name })} disabled={isBusy} />}
           </div>
         );
       },
@@ -284,9 +296,11 @@ const MastersListPage = ({ onCreate, onEdit, onClone }) => {
             <UsagePill used={limits.mastersUsed} allowed={limits.mastersAllowed} title={`${limits.mastersUsed} of ${limits.mastersAllowed} masters used`} />
           )}
         </div>
-        <Button leftIcon={<PlusIcon className="w-4 h-4" />} onClick={() => onCreate(limits)} disabled={!canCreate}>
-          New master
-        </Button>
+        {mayCreate && (
+          <Button leftIcon={<PlusIcon className="w-4 h-4" />} onClick={() => onCreate(limits)} disabled={!canCreate}>
+            New master
+          </Button>
+        )}
       </div>
 
       {isNotSetUp && <Alert variant="warning">Masters have not been set up for your account yet. Please contact support.</Alert>}
@@ -311,10 +325,10 @@ const MastersListPage = ({ onCreate, onEdit, onClone }) => {
           selectedCount={selectedCount}
           onClear={() => setSelectedKeys([])}
           actions={[
-            { key: 'activate', label: `Mark active (${selectedCount})`, variant: 'outline', onClick: () => handleBulkStatus('activate'), loading: bulkAction === 'activate', disabled: bulkAction !== null },
-            { key: 'deactivate', label: `Mark inactive (${selectedCount})`, variant: 'outline', onClick: () => handleBulkStatus('deactivate'), loading: bulkAction === 'deactivate', disabled: bulkAction !== null },
-            { key: 'delete', label: `Delete (${selectedCount})`, variant: 'danger', onClick: () => setToDelete({ ids: selectedKeys, label: `${selectedCount} masters` }), disabled: bulkAction !== null },
-          ]}
+            mayEdit && { key: 'activate', label: `Mark active (${selectedCount})`, variant: 'outline', onClick: () => handleBulkStatus('activate'), loading: bulkAction === 'activate', disabled: bulkAction !== null },
+            mayEdit && { key: 'deactivate', label: `Mark inactive (${selectedCount})`, variant: 'outline', onClick: () => handleBulkStatus('deactivate'), loading: bulkAction === 'deactivate', disabled: bulkAction !== null },
+            mayDelete && { key: 'delete', label: `Delete (${selectedCount})`, variant: 'danger', onClick: () => setToDelete({ ids: selectedKeys, label: `${selectedCount} masters` }), disabled: bulkAction !== null },
+          ].filter(Boolean)}
         />
       )}
 
@@ -322,7 +336,7 @@ const MastersListPage = ({ onCreate, onEdit, onClone }) => {
         columns={columns}
         data={data?.masters || []}
         keyField="_id"
-        selectable
+        selectable={mayEdit || mayDelete}
         selectedKeys={selectedKeys}
         onSelectionChange={setSelectedKeys}
         loading={isLoading && !data}
@@ -355,6 +369,8 @@ const MastersListPage = ({ onCreate, onEdit, onClone }) => {
       {valuesOf && (
         <MasterValuesModal
           master={valuesOf}
+          canEdit={mayEdit}
+          canDelete={mayDelete}
           onClose={(hasChanged) => {
             setValuesOf(null);
             if (hasChanged) reload();

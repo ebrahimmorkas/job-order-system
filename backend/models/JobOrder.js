@@ -1,12 +1,18 @@
 const mongoose = require('mongoose');
 const auditPlugin = require('./plugins/auditPlugin');
 const { CASE_INSENSITIVE_COLLATION, LIVE_STATUSES } = require('../constants/masterConstants');
-const { JOB_ORDER_NUMBER_MAX_LENGTH } = require('../constants/jobOrderConstants');
+const { JOB_ORDER_NUMBER_MAX_LENGTH, DURATION_UNITS } = require('../constants/jobOrderConstants');
 const { CONTROL_TYPE_VALUES } = require('../constants/controlConstants');
 
 // Names are copied in (not only ids), so a job order keeps showing what was
 // picked that day even after a master, value, control, country or rate is
 // renamed, changed or deleted.
+
+// How long the people given a value's work have, e.g. { amount: 2, unit: 'days' }.
+const durationSchema = new mongoose.Schema({
+    amount: { type: Number, required: true },
+    unit: { type: String, enum: DURATION_UNITS, required: true }
+}, { _id: false });
 
 const pickedMasterSchema = new mongoose.Schema({
     masterId: { type: mongoose.Types.ObjectId, required: true },
@@ -21,7 +27,13 @@ const pickedMasterSchema = new mongoose.Schema({
             assignedTo: {
                 type: [{ _id: false, userId: { type: mongoose.Types.ObjectId, required: true }, name: { type: String, required: true } }],
                 default: []
-            }
+            },
+            // When the work was first given (kept on edit unless completeIn
+            // changes), how long they have and so when it is due. All null
+            // without people; completeIn / dueAt null = no deadline.
+            assignedAt: { type: Date, default: null },
+            completeIn: { type: durationSchema, default: null },
+            dueAt: { type: Date, default: null }
         }],
         default: []
     }
@@ -111,6 +123,8 @@ jobOrderSchema.index({ vendorId: 1, jobOrderNumber: 1 }, {
 });
 // The list, newest first.
 jobOrderSchema.index({ vendorId: 1, status: 1, createdAt: -1 });
+// My work: the job orders a user was given work on, newest first.
+jobOrderSchema.index({ vendorId: 1, 'masters.values.assignedTo.userId': 1, status: 1, createdAt: -1 });
 
 jobOrderSchema.plugin(auditPlugin);
 

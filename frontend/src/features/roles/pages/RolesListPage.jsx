@@ -17,6 +17,7 @@ import { useToast } from '../../../components/common/Toast';
 import { useDebouncedValue } from '../../../utils/useDebouncedValue';
 import { ROLE_TYPES, MODULE_LABELS } from '../roleTypes';
 import * as rolesApi from '../api/rolesApi';
+import { useAccess } from '../../access/hooks/useAccess';
 
 const PAGE_SIZE = 25;
 // How many modules / masters a row names before "+N more".
@@ -56,6 +57,11 @@ const accessOf = (role) =>
  */
 const RolesListPage = ({ onCreate, onEdit, onClone }) => {
   const toast = useToast();
+  // What the person may do here (the owner: everything).
+  const { can } = useAccess();
+  const mayCreate = can('roles', 'create');
+  const mayEdit = can('roles', 'edit');
+  const mayDelete = can('roles', 'delete');
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search.trim());
   const [status, setStatus] = useState('all');
@@ -182,9 +188,13 @@ const RolesListPage = ({ onCreate, onEdit, onClone }) => {
       key: 'name',
       label: 'Name',
       render: (role) => (
-        <button type="button" onClick={() => onEdit(role._id)} className="font-medium text-gray-900 hover:text-indigo-600 text-left break-words cursor-pointer">
-          {role.name}
-        </button>
+        mayEdit ? (
+          <button type="button" onClick={() => onEdit(role._id)} className="font-medium text-gray-900 hover:text-indigo-600 text-left break-words cursor-pointer">
+            {role.name}
+          </button>
+        ) : (
+          <span className="font-medium text-gray-900 break-words">{role.name}</span>
+        )
       ),
     },
     {
@@ -219,7 +229,7 @@ const RolesListPage = ({ onCreate, onEdit, onClone }) => {
             size="sm"
             checked={isActive}
             onChange={() => toggleStatus(role)}
-            disabled={busyId === role._id}
+            disabled={!mayEdit || busyId === role._id}
             aria-label={`"${role.name}" ${isActive ? 'is active' : 'is inactive'}`}
             title={isActive ? 'Active' : 'Inactive'}
           />
@@ -235,14 +245,16 @@ const RolesListPage = ({ onCreate, onEdit, onClone }) => {
         const isBusy = busyId === role._id;
         return (
           <div className="flex justify-end gap-0.5">
-            <IconButton label={`Edit "${role.name}"`} icon={EditIcon} onClick={() => onEdit(role._id)} disabled={isBusy} />
-            <IconButton
-              label={isFull ? 'Copy - the roles limit is reached' : `Copy "${role.name}"`}
-              icon={CopyIcon}
-              onClick={() => onClone(role._id)}
-              disabled={isBusy || isFull}
-            />
-            <IconButton label={`Delete "${role.name}"`} icon={TrashIcon} variant="danger" onClick={() => setToDelete({ ids: [role._id], label: role.name })} disabled={isBusy} />
+            {mayEdit && <IconButton label={`Edit "${role.name}"`} icon={EditIcon} onClick={() => onEdit(role._id)} disabled={isBusy} />}
+            {mayCreate && (
+              <IconButton
+                label={isFull ? 'Copy - the roles limit is reached' : `Copy "${role.name}"`}
+                icon={CopyIcon}
+                onClick={() => onClone(role._id)}
+                disabled={isBusy || isFull}
+              />
+            )}
+            {mayDelete && <IconButton label={`Delete "${role.name}"`} icon={TrashIcon} variant="danger" onClick={() => setToDelete({ ids: [role._id], label: role.name })} disabled={isBusy} />}
           </div>
         );
       },
@@ -260,9 +272,11 @@ const RolesListPage = ({ onCreate, onEdit, onClone }) => {
             <UsagePill used={limits.rolesUsed} allowed={limits.rolesAllowed} title={`${limits.rolesUsed} of ${limits.rolesAllowed} roles used`} />
           )}
         </div>
-        <Button leftIcon={<PlusIcon className="w-4 h-4" />} onClick={onCreate} disabled={!limits || isFull}>
-          New role
-        </Button>
+        {mayCreate && (
+          <Button leftIcon={<PlusIcon className="w-4 h-4" />} onClick={onCreate} disabled={!limits || isFull}>
+            New role
+          </Button>
+        )}
       </div>
 
       {isFull && <Alert variant="info">You have reached your limit of {limits.rolesAllowed} roles. Delete one you no longer need to add another.</Alert>}
@@ -289,10 +303,10 @@ const RolesListPage = ({ onCreate, onEdit, onClone }) => {
           selectedCount={selectedCount}
           onClear={() => setSelectedKeys([])}
           actions={[
-            { key: 'activate', label: `Mark active (${selectedCount})`, variant: 'outline', onClick: () => handleBulkStatus('activate'), loading: bulkAction === 'activate', disabled: bulkAction !== null },
-            { key: 'deactivate', label: `Mark inactive (${selectedCount})`, variant: 'outline', onClick: () => handleBulkStatus('deactivate'), loading: bulkAction === 'deactivate', disabled: bulkAction !== null },
-            { key: 'delete', label: `Delete (${selectedCount})`, variant: 'danger', onClick: () => setToDelete({ ids: selectedKeys, label: `${selectedCount} roles` }), disabled: bulkAction !== null },
-          ]}
+            mayEdit && { key: 'activate', label: `Mark active (${selectedCount})`, variant: 'outline', onClick: () => handleBulkStatus('activate'), loading: bulkAction === 'activate', disabled: bulkAction !== null },
+            mayEdit && { key: 'deactivate', label: `Mark inactive (${selectedCount})`, variant: 'outline', onClick: () => handleBulkStatus('deactivate'), loading: bulkAction === 'deactivate', disabled: bulkAction !== null },
+            mayDelete && { key: 'delete', label: `Delete (${selectedCount})`, variant: 'danger', onClick: () => setToDelete({ ids: selectedKeys, label: `${selectedCount} roles` }), disabled: bulkAction !== null },
+          ].filter(Boolean)}
         />
       )}
 
@@ -300,7 +314,7 @@ const RolesListPage = ({ onCreate, onEdit, onClone }) => {
         columns={columns}
         data={data?.roles || []}
         keyField="_id"
-        selectable
+        selectable={mayEdit || mayDelete}
         selectedKeys={selectedKeys}
         onSelectionChange={setSelectedKeys}
         loading={isLoading && !data}

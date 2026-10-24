@@ -1,5 +1,5 @@
 const Joi = require('joi');
-const { JOB_ORDER_NUMBER_MAX_LENGTH, CUSTOMER_ADDRESS_MAX_LENGTH, ANSWER_MAX_LENGTH, ASSIGNEES_PER_VALUE_MAX, JOB_ORDER_LIST_MAX_PAGE_SIZE } = require('../../constants/jobOrderConstants');
+const { JOB_ORDER_NUMBER_MAX_LENGTH, CUSTOMER_ADDRESS_MAX_LENGTH, ANSWER_MAX_LENGTH, ASSIGNEES_PER_VALUE_MAX, DURATION_UNITS, DURATION_AMOUNT_MAX, JOB_ORDER_LIST_MAX_PAGE_SIZE } = require('../../constants/jobOrderConstants');
 const { POSTAL_CODE_MAX_LENGTH } = require('../../constants/taxConstants');
 
 // What the vendor's own masters, controls, countries and rates allow is
@@ -42,7 +42,12 @@ const jobOrderSchema = Joi.object({
         assignments: Joi.array().items(Joi.object({
             valueId: objectId('Value').required(),
             userIds: Joi.array().items(objectId('User')).unique().max(ASSIGNEES_PER_VALUE_MAX).default([]).label('People')
-                .messages({ 'array.max': `At most ${ASSIGNEES_PER_VALUE_MAX} people per value` })
+                .messages({ 'array.max': `At most ${ASSIGNEES_PER_VALUE_MAX} people per value` }),
+            // How long they have, from when the work was given (null = no deadline).
+            completeIn: Joi.object({
+                amount: Joi.number().integer().min(1).max(DURATION_AMOUNT_MAX).required().label('Complete in'),
+                unit: Joi.string().valid(...DURATION_UNITS).required().label('Unit')
+            }).allow(null).default(null).label('Complete in')
         })).unique('valueId').default([]).label('Assigned work')
     })).unique('masterId').default([]).label('Masters'),
     // The answer of each control: text (text field / text area), checked

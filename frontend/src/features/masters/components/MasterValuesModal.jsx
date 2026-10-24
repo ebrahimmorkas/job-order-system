@@ -19,8 +19,10 @@ import * as mastersApi from '../api/mastersApi';
  * @param {Object} props
  * @param {{ _id: string, name: string }} props.master
  * @param {(hasChanged: boolean) => void} props.onClose - hasChanged: reload the list
+ * @param {boolean} [props.canEdit] - Move, default and status (Masters > Edit)
+ * @param {boolean} [props.canDelete] - Delete (Masters > Delete)
  */
-const MasterValuesModal = ({ master, onClose }) => {
+const MasterValuesModal = ({ master, onClose, canEdit = true, canDelete = true }) => {
   const toast = useToast();
   const [values, setValues] = useState(null);
   const [defaultValueId, setDefaultValueId] = useState(null);
@@ -115,10 +117,12 @@ const MasterValuesModal = ({ master, onClose }) => {
             return (
               <li key={value._id} className="flex items-center gap-3 px-3 py-2">
                 <span className="w-6 shrink-0 text-xs text-gray-400 text-right">{index + 1}</span>
-                <div className="flex shrink-0">
-                  <IconButton label={`Move "${value.name}" up`} icon={MoveUpIcon} size="sm" onClick={() => move(index, 'up')} disabled={busyId !== null || index === 0} />
-                  <IconButton label={`Move "${value.name}" down`} icon={MoveDownIcon} size="sm" onClick={() => move(index, 'down')} disabled={busyId !== null || index === values.length - 1} />
-                </div>
+                {canEdit && (
+                  <div className="flex shrink-0">
+                    <IconButton label={`Move "${value.name}" up`} icon={MoveUpIcon} size="sm" onClick={() => move(index, 'up')} disabled={busyId !== null || index === 0} />
+                    <IconButton label={`Move "${value.name}" down`} icon={MoveDownIcon} size="sm" onClick={() => move(index, 'down')} disabled={busyId !== null || index === values.length - 1} />
+                  </div>
+                )}
                 <p className={`flex-1 min-w-0 text-sm break-words ${isActive ? 'text-gray-900' : 'text-gray-400'}`}>{value.name}</p>
                 {confirmId === value._id ? (
                   <div className="flex items-center gap-1 shrink-0">
@@ -134,17 +138,17 @@ const MasterValuesModal = ({ master, onClose }) => {
                       checked={defaultValueId === value._id}
                       isActive={isActive}
                       onToggle={() => toggleDefault(value)}
-                      disabled={busyId !== null}
+                      disabled={!canEdit || busyId !== null}
                     />
                     <Switch
                       size="sm"
                       checked={isActive}
                       onChange={() => toggle(value)}
-                      disabled={busyId !== null}
+                      disabled={!canEdit || busyId !== null}
                       aria-label={`"${value.name}" ${isActive ? 'is active' : 'is inactive'}`}
                     />
                     <span className="w-14 text-xs text-gray-500">{isActive ? 'Active' : 'Inactive'}</span>
-                    <IconButton label={`Delete "${value.name}"`} icon={TrashIcon} variant="danger" onClick={() => setConfirmId(value._id)} disabled={busyId !== null} />
+                    {canDelete && <IconButton label={`Delete "${value.name}"`} icon={TrashIcon} variant="danger" onClick={() => setConfirmId(value._id)} disabled={busyId !== null} />}
                   </div>
                 )}
               </li>

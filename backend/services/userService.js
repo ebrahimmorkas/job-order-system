@@ -171,20 +171,23 @@ const detailsOf = (data) => ({
 
 // ---- the form -------------------------------------------------------------------
 
-// GET /api/users/form-data - what a user can be given.
-const getFormData = async ({ vendorId, websiteMasterData, companyMasterData }) => {
+// GET /api/users/form-data - what a user can be given. Without
+// canAssignRole (the owner, or Users > Assign role) there is nothing to give.
+const getFormData = async ({ vendorId, canAssignRole, websiteMasterData, companyMasterData }) => {
     try {
         const settings = settingsOf(companyMasterData);
+        const canGiveExtras = canAssignRole && settings.canGiveExtraAccess;
         const [roles, masters] = await Promise.all([
             // Inactive ones too, to name a role a user already has.
-            Role.find({ vendorId, status: LIVE }).select('_id name type status').sort({ name: 1 }).collation({ locale: 'en', strength: 2 }).lean(),
-            settings.canGiveExtraAccess ? roleService.roleMastersOf(vendorId) : []
+            canAssignRole ? Role.find({ vendorId, status: LIVE }).select('_id name type status').sort({ name: 1 }).collation({ locale: 'en', strength: 2 }).lean() : [],
+            canGiveExtras ? roleService.roleMastersOf(vendorId) : []
         ]);
         return common.returnResult(true, 200, 'User form fetched successfully.', {
             roles,
-            modules: settings.canGiveExtraAccess ? roleService.availableModulesOf(websiteMasterData, companyMasterData) : [],
+            modules: canGiveExtras ? roleService.availableModulesOf(websiteMasterData, companyMasterData) : [],
             masters,
             settings,
+            canAssignRole,
             limits: limitsOf(companyMasterData),
             today: todayString()
         });
@@ -248,15 +251,21 @@ const getUser = async ({ vendorId, id }) => {
     }
 };
 
-// POST /api/users
-const createUser = async ({ vendorId, data, websiteMasterData, companyMasterData }) => {
+// Roles and extra access are saved only with canAssignRole, and never by a
+// user on their own account (they could give themselves more).
+const NO_ROLES = { assignedRoles: [], extraModules: [], extraMasters: [] };
+
+// POST /api/users - without canAssignRole the new user gets no roles.
+const createUser = async ({ vendorId, canAssignRole, data, websiteMasterData, companyMasterData }) => {
     try {
         const { usersAllowed } = limitsOf(companyMasterData);
         if (usersAllowed !== null && await User.countDocuments({ vendorId, ...USERS, status: LIVE }) >= usersAllowed) {
             return common.returnResult(false, 403, `You can have at most ${usersAllowed} users. Delete one you no longer need to add another.`);
         }
 
-        const { errors, doc } = await checkAccess({ vendorId, data, current: null, websiteMasterData, companyMasterData });
+        const { errors, doc } = canAssignRole
+            ? await checkAccess({ vendorId, data, current: null, websiteMasterData, companyMasterData })
+            : { errors: [], doc: NO_ROLES };
         if (errors.length > 0) return invalid(errors);
 
         let user;
@@ -281,13 +290,17 @@ const createUser = async ({ vendorId, data, websiteMasterData, companyMasterData
 };
 
 // PUT /api/users/:id - details, roles and extra access; a new password
-// (optional) also logs the user out everywhere.
-const updateUser = async ({ vendorId, userId, id, data, websiteMasterData, companyMasterData }) => {
+// (optional) also logs the user out everywhere. Without canAssignRole, or on
+// your own account, the roles and extra access stay as they are.
+const updateUser = async ({ vendorId, userId, canAssignRole, id, data, websiteMasterData, companyMasterData }) => {
     try {
         const current = await User.findOne({ _id: id, vendorId, ...USERS, status: LIVE }).select('assignedRoles').lean();
         if (!current) return common.returnResult(false, 404, 'User not found.');
 
-        const { errors, doc } = await checkAccess({ vendorId, data, current, websiteMasterData, companyMasterData });
+        const canChangeRoles = canAssignRole && idOf(id) !== idOf(userId);
+        const { errors, doc } = canChangeRoles
+            ? await checkAccess({ vendorId, data, current, websiteMasterData, companyMasterData })
+            : { errors: [], doc: {} };
         if (errors.length > 0) return invalid(errors);
 
         const set = { ...detailsOf(data), ...doc };
@@ -312,10 +325,22 @@ const updateUser = async ({ vendorId, userId, id, data, websiteMasterData, compa
     }
 };
 
+// A user can't deactivate or delete themselves; the owner isn't a user here (404).
+const refuseOwnAccount = async ({ vendorId, id }, message) => {
+    try {
+        return await User.exists({ _id: id, vendorId, ...USERS, status: LIVE })
+            ? common.returnResult(false, 400, message)
+            : common.returnResult(false, 404, 'User not found.');
+    } catch (err) {
+        throw err;
+    }
+};
+
 // PATCH /api/users/:id/status - an inactive user is refused on every request
 // (middlewares/authenticate.js).
 const setUserStatus = async ({ vendorId, userId, id, isActive }) => {
     try {
+        if (idOf(id) === idOf(userId)) return await refuseOwnAccount({ vendorId, id }, 'You cannot change the status of your own account.');
         const result = await common.toggleActiveStatus(User, id, userId, isActive, vendorId, USERS);
         if (!result.isSuccess) return result.statusCode === 404 ? common.returnResult(false, 404, 'User not found.') : result;
         return common.returnResult(true, 200, isActive ? 'User marked as active.' : 'User marked as inactive.', {
@@ -330,6 +355,7 @@ const setUserStatus = async ({ vendorId, userId, id, isActive }) => {
 // used again. Their sessions end.
 const deleteUser = async ({ vendorId, userId, id }) => {
     try {
+        if (idOf(id) === idOf(userId)) return await refuseOwnAccount({ vendorId, id }, 'You cannot delete your own account.');
         const result = await common.softDelete(User, id, userId, vendorId, USERS);
         if (!result.isSuccess) return result.statusCode === 404 ? common.returnResult(false, 404, 'User not found.') : result;
         await RefreshToken.deleteMany({ userId: result.meta.document._id });

@@ -9,6 +9,7 @@ import Card from '../../../components/common/Card';
 import Alert from '../../../components/common/Alert';
 import Spinner from '../../../components/common/Spinner';
 import ImageUploader from '../../../components/common/ImageUploader';
+import NumberField from '../../../components/common/NumberField';
 import { BackIcon } from '../../../components/common/ActionIcons';
 import { useUnsavedChanges } from '../../../components/common/UnsavedChanges';
 import JobOrderSummary from '../components/JobOrderSummary';
@@ -16,6 +17,7 @@ import { computeTotals } from '../jobOrderTotals';
 import { summaryRowsOf, masterLabelOf } from '../summaryRows';
 import { PRICE_PATTERN } from '../../controls/controlTypes';
 import { taxLabel } from '../../companySettings/taxRules';
+import { DURATION_UNITS, DURATION_AMOUNT_MAX } from '../workTime';
 import * as jobOrdersApi from '../api/jobOrdersApi';
 
 // Same as the backend (constants/jobOrderConstants.js).
@@ -49,7 +51,11 @@ const freshForm = ({ masters, controls, countries }) => ({
   images: [],
   // valueId -> the ids of the people given its work (role masters only)
   assign: {},
+  // valueId -> how long they have: { amount (null = no deadline), unit }
+  completeIn: {},
 });
+
+const DEFAULT_UNIT = 'days';
 
 // valueId -> the people a saved job order gave its work to ({ userId, name }).
 const earlierPeopleOf = (jobOrder) => new Map((jobOrder?.masters || []).flatMap((master) => master.values.map((value) => [idOf(value.valueId), value.assignedTo || []])));
@@ -87,6 +93,7 @@ const savedForm = ({ masters, controls, countries }, jobOrder) => {
     taxId: idOf(jobOrder.tax?.taxId),
     images: (jobOrder.images || []).map((image) => ({ key: idOf(image.imageId), imageId: idOf(image.imageId), url: image.url })),
     assign: Object.fromEntries([...earlierPeopleOf(jobOrder)].filter(([, people]) => people.length > 0).map(([valueId, people]) => [valueId, people.map((person) => idOf(person.userId))])),
+    completeIn: Object.fromEntries(jobOrder.masters.flatMap((master) => master.values.filter((value) => value.completeIn).map((value) => [idOf(value.valueId), { ...value.completeIn }]))),
   };
 };
 
@@ -249,6 +256,16 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
     clearError(`masters.${masterId}`);
   };
 
+  // How long the people given a value's work have (whole numbers only).
+  const setCompleteIn = (masterId, valueId, changes) => {
+    if (changes.amount !== undefined && changes.amount !== null && !Number.isInteger(changes.amount)) return;
+    setForm((prev) => ({
+      ...prev,
+      completeIn: { ...prev.completeIn, [valueId]: { amount: null, unit: DEFAULT_UNIT, ...prev.completeIn[valueId], ...changes } },
+    }));
+    clearError(`masters.${masterId}`);
+  };
+
   // Who can be given a value's work: those who have it now, and on edit
   // those it was given to before (marked when they no longer have it).
   const peopleOptionsOf = (value) => {
@@ -331,7 +348,10 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
       masters: parts.masters.map((master) => {
         const valueIds = form.picks[master._id];
         const assignments = master.isRoleProvided
-          ? valueIds.filter((valueId) => form.assign[valueId]?.length > 0).map((valueId) => ({ valueId, userIds: form.assign[valueId] }))
+          ? valueIds.filter((valueId) => form.assign[valueId]?.length > 0).map((valueId) => {
+            const time = form.completeIn[valueId];
+            return { valueId, userIds: form.assign[valueId], completeIn: time?.amount ? { amount: time.amount, unit: time.unit } : null };
+          })
           : [];
         return { masterId: master._id, valueIds, assignments };
       }),
@@ -552,6 +572,35 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
                               />
                             ) : (
                               <p className="text-xs text-gray-500">Nobody has {value.name} in their role yet, so its work can't be given to anyone.</p>
+                            )}
+                            {form.assign[value._id]?.length > 0 && (
+                              <div className="mt-2">
+                                <div className="flex items-end gap-2">
+                                  <NumberField
+                                    label="Complete in"
+                                    value={form.completeIn[value._id]?.amount ?? null}
+                                    onChange={(amount) => setCompleteIn(master._id, value._id, { amount })}
+                                    min={1}
+                                    max={DURATION_AMOUNT_MAX}
+                                    allowEmpty
+                                    placeholder="No deadline"
+                                    disabled={isSaving}
+                                    className="w-32"
+                                  />
+                                  <div className="w-36">
+                                    <Dropdown
+                                      name={`complete-unit-${value._id}`}
+                                      options={DURATION_UNITS}
+                                      value={form.completeIn[value._id]?.unit || DEFAULT_UNIT}
+                                      onChange={(unit) => setCompleteIn(master._id, value._id, { unit })}
+                                      size="sm"
+                                      disabled={isSaving}
+                                      aria-label={`Unit for ${value.name}`}
+                                    />
+                                  </div>
+                                </div>
+                                <p className="mt-1 text-xs text-gray-400">From when the work is first given. Leave empty for no deadline.</p>
+                              </div>
                             )}
                           </div>
                         );

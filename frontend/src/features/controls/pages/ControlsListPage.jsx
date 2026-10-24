@@ -17,6 +17,7 @@ import { useToast } from '../../../components/common/Toast';
 import { useDebouncedValue } from '../../../utils/useDebouncedValue';
 import { CONTROL_TYPES, isTypeFull } from '../controlTypes';
 import * as controlsApi from '../api/controlsApi';
+import { useAccess } from '../../access/hooks/useAccess';
 
 const PAGE_SIZE = 25;
 
@@ -44,6 +45,11 @@ const BULK_LABELS = {
  */
 const ControlsListPage = ({ onCreate, onEdit, onClone }) => {
   const toast = useToast();
+  // What the person may do here (the owner: everything).
+  const { can } = useAccess();
+  const mayCreate = can('controls', 'create');
+  const mayEdit = can('controls', 'edit');
+  const mayDelete = can('controls', 'delete');
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search.trim());
   const [status, setStatus] = useState('all');
@@ -190,7 +196,7 @@ const ControlsListPage = ({ onCreate, onEdit, onClone }) => {
           <div className="flex items-center gap-1">
             <span className="w-7 text-gray-500">{index + 1}</span>
             {/* Moving only makes sense when the whole list is shown in order. */}
-            {!isFiltered && (
+            {!isFiltered && mayEdit && (
               <div className="flex">
                 <IconButton label={`Move "${control.label}" up`} icon={MoveUpIcon} size="sm" onClick={() => move(control, 'up')} disabled={isBusy || index === 0} />
                 <IconButton label={`Move "${control.label}" down`} icon={MoveDownIcon} size="sm" onClick={() => move(control, 'down')} disabled={isBusy || index === total - 1} />
@@ -205,9 +211,13 @@ const ControlsListPage = ({ onCreate, onEdit, onClone }) => {
       label: 'Label',
       render: (control) => (
         <div className="min-w-0">
-          <button type="button" onClick={() => onEdit(control._id)} className="font-medium text-gray-900 hover:text-indigo-600 text-left break-words cursor-pointer">
-            {control.label}
-          </button>
+          {mayEdit ? (
+            <button type="button" onClick={() => onEdit(control._id)} className="font-medium text-gray-900 hover:text-indigo-600 text-left break-words cursor-pointer">
+              {control.label}
+            </button>
+          ) : (
+            <span className="font-medium text-gray-900 break-words">{control.label}</span>
+          )}
           {control.optionsCount !== null && <span className="ml-2 text-xs text-gray-500">{control.optionsCount} choices</span>}
         </div>
       ),
@@ -240,7 +250,7 @@ const ControlsListPage = ({ onCreate, onEdit, onClone }) => {
             size="sm"
             checked={isActive}
             onChange={() => toggleStatus(control)}
-            disabled={busyId === control._id}
+            disabled={!mayEdit || busyId === control._id}
             aria-label={`"${control.label}" ${isActive ? 'is active' : 'is inactive'}`}
             title={isActive ? 'Active' : 'Inactive'}
           />
@@ -257,14 +267,16 @@ const ControlsListPage = ({ onCreate, onEdit, onClone }) => {
         const isFull = isTypeFull(limits, control.type);
         return (
           <div className="flex justify-end gap-0.5">
-            <IconButton label={`Edit "${control.label}"`} icon={EditIcon} onClick={() => onEdit(control._id)} disabled={isBusy} />
-            <IconButton
-              label={isFull ? `Copy - the limit for ${CONTROL_TYPES[control.type].plural.toLowerCase()} is reached` : `Copy "${control.label}"`}
-              icon={CopyIcon}
-              onClick={() => onClone(control._id)}
-              disabled={isBusy || isFull}
-            />
-            <IconButton label={`Delete "${control.label}"`} icon={TrashIcon} variant="danger" onClick={() => setToDelete({ ids: [control._id], label: control.label })} disabled={isBusy} />
+            {mayEdit && <IconButton label={`Edit "${control.label}"`} icon={EditIcon} onClick={() => onEdit(control._id)} disabled={isBusy} />}
+            {mayCreate && (
+              <IconButton
+                label={isFull ? `Copy - the limit for ${CONTROL_TYPES[control.type].plural.toLowerCase()} is reached` : `Copy "${control.label}"`}
+                icon={CopyIcon}
+                onClick={() => onClone(control._id)}
+                disabled={isBusy || isFull}
+              />
+            )}
+            {mayDelete && <IconButton label={`Delete "${control.label}"`} icon={TrashIcon} variant="danger" onClick={() => setToDelete({ ids: [control._id], label: control.label })} disabled={isBusy} />}
           </div>
         );
       },
@@ -289,9 +301,11 @@ const ControlsListPage = ({ onCreate, onEdit, onClone }) => {
             />
           ))}
         </div>
-        <Button leftIcon={<PlusIcon className="w-4 h-4" />} onClick={() => onCreate(limits)} disabled={!canCreate}>
-          New control
-        </Button>
+        {mayCreate && (
+          <Button leftIcon={<PlusIcon className="w-4 h-4" />} onClick={() => onCreate(limits)} disabled={!canCreate}>
+            New control
+          </Button>
+        )}
       </div>
 
       {limits && !canCreate && <Alert variant="info">You have reached your limit for every type of control. Delete one you no longer need to add another.</Alert>}
@@ -320,10 +334,10 @@ const ControlsListPage = ({ onCreate, onEdit, onClone }) => {
           selectedCount={selectedCount}
           onClear={() => setSelectedKeys([])}
           actions={[
-            { key: 'activate', label: `Mark active (${selectedCount})`, variant: 'outline', onClick: () => handleBulkStatus('activate'), loading: bulkAction === 'activate', disabled: bulkAction !== null },
-            { key: 'deactivate', label: `Mark inactive (${selectedCount})`, variant: 'outline', onClick: () => handleBulkStatus('deactivate'), loading: bulkAction === 'deactivate', disabled: bulkAction !== null },
-            { key: 'delete', label: `Delete (${selectedCount})`, variant: 'danger', onClick: () => setToDelete({ ids: selectedKeys, label: `${selectedCount} controls` }), disabled: bulkAction !== null },
-          ]}
+            mayEdit && { key: 'activate', label: `Mark active (${selectedCount})`, variant: 'outline', onClick: () => handleBulkStatus('activate'), loading: bulkAction === 'activate', disabled: bulkAction !== null },
+            mayEdit && { key: 'deactivate', label: `Mark inactive (${selectedCount})`, variant: 'outline', onClick: () => handleBulkStatus('deactivate'), loading: bulkAction === 'deactivate', disabled: bulkAction !== null },
+            mayDelete && { key: 'delete', label: `Delete (${selectedCount})`, variant: 'danger', onClick: () => setToDelete({ ids: selectedKeys, label: `${selectedCount} controls` }), disabled: bulkAction !== null },
+          ].filter(Boolean)}
         />
       )}
 
@@ -331,7 +345,7 @@ const ControlsListPage = ({ onCreate, onEdit, onClone }) => {
         columns={columns}
         data={data?.controls || []}
         keyField="_id"
-        selectable
+        selectable={mayEdit || mayDelete}
         selectedKeys={selectedKeys}
         onSelectionChange={setSelectedKeys}
         loading={isLoading && !data}

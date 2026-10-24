@@ -11,6 +11,7 @@ import IconButton from '../../../components/common/IconButton';
 import { ViewIcon, EditIcon, TrashIcon, PlusIcon } from '../../../components/common/ActionIcons';
 import { useToast } from '../../../components/common/Toast';
 import { useDebouncedValue } from '../../../utils/useDebouncedValue';
+import { useAccess } from '../../access/hooks/useAccess';
 import { formatMoney } from '../jobOrderTotals';
 import * as jobOrdersApi from '../api/jobOrdersApi';
 
@@ -20,7 +21,7 @@ const formatDate = (value) => new Date(value).toLocaleDateString('en-IN', { day:
 
 /**
  * The vendor's job orders, newest first: search by number or customer
- * place, page through, view, edit and cancel.
+ * place, page through, view, edit and cancel (each only with its permission).
  *
  * @param {Object} props
  * @param {() => void} props.onCreate
@@ -29,6 +30,10 @@ const formatDate = (value) => new Date(value).toLocaleDateString('en-IN', { day:
  */
 const JobOrdersListPage = ({ onCreate, onView, onEdit }) => {
   const toast = useToast();
+  const { can } = useAccess();
+  const canCreate = can('jobOrders', 'create');
+  const canEdit = can('jobOrders', 'edit');
+  const canCancel = can('jobOrders', 'delete');
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search.trim());
   const [page, setPage] = useState(1);
@@ -130,8 +135,8 @@ const JobOrdersListPage = ({ onCreate, onView, onEdit }) => {
       render: (jobOrder) => (
         <div className="flex justify-end gap-0.5">
           <IconButton label={`View ${jobOrder.jobOrderNumber}`} icon={ViewIcon} onClick={() => onView(jobOrder._id)} />
-          <IconButton label={`Edit ${jobOrder.jobOrderNumber}`} icon={EditIcon} onClick={() => onEdit(jobOrder._id)} />
-          <IconButton label={`Cancel ${jobOrder.jobOrderNumber}`} icon={TrashIcon} variant="danger" onClick={() => setToCancel(jobOrder)} />
+          {canEdit && <IconButton label={`Edit ${jobOrder.jobOrderNumber}`} icon={EditIcon} onClick={() => onEdit(jobOrder._id)} />}
+          {canCancel && <IconButton label={`Cancel ${jobOrder.jobOrderNumber}`} icon={TrashIcon} variant="danger" onClick={() => setToCancel(jobOrder)} />}
         </div>
       ),
     },
@@ -146,9 +151,11 @@ const JobOrdersListPage = ({ onCreate, onView, onEdit }) => {
           <h1 className="text-2xl font-bold text-gray-900">Job Orders</h1>
           {data && <Badge variant="gray" size="sm">{total} {total === 1 ? 'job order' : 'job orders'}</Badge>}
         </div>
-        <Button leftIcon={<PlusIcon className="w-4 h-4" />} onClick={onCreate}>
-          New job order
-        </Button>
+        {canCreate && (
+          <Button leftIcon={<PlusIcon className="w-4 h-4" />} onClick={onCreate}>
+            New job order
+          </Button>
+        )}
       </div>
 
       {error && <Alert variant="error">{error}</Alert>}
@@ -171,7 +178,7 @@ const JobOrdersListPage = ({ onCreate, onView, onEdit }) => {
         emptyComponent={
           <EmptyState
             title={debouncedSearch ? 'No job orders match' : 'No job orders yet'}
-            description={debouncedSearch ? 'Try another search.' : 'Create your first job order.'}
+            description={debouncedSearch ? 'Try another search.' : canCreate ? 'Create your first job order.' : 'Job orders will show here.'}
             size="sm"
           />
         }

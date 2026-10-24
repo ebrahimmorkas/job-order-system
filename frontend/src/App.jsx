@@ -4,6 +4,7 @@ import { useAuth } from './features/auth/hooks/useAuth'
 import { useBranding } from './features/branding/hooks/useBranding'
 import LoginPage from './features/auth/pages/LoginPage'
 import AppShell from './layouts/AppShell'
+import AccessProvider from './features/access/context/AccessProvider'
 
 // No router yet: the app lives at "/" - the login screen until logged in,
 // then the shell. Any other path is a 404 once logged in.
@@ -18,7 +19,11 @@ const App = () => {
   if (isLoading || isBrandingLoading) return <Spinner size="lg" fullScreen />
   if (!isAuthenticated) return <LoginPage />
   if (window.location.pathname !== '/') return <NotFoundPage />
-  return <AppShell />
+  return (
+    <AccessProvider>
+      <AppShell />
+    </AccessProvider>
+  )
 }
 
 export default App

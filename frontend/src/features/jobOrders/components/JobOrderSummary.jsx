@@ -11,8 +11,9 @@ import { formatMoney } from '../jobOrderTotals';
  * @param {number} props.subtotal
  * @param {{ isApplied, reason, name, components: Array<{ label, rate, amount }>, taxableAmount, amount }} props.tax
  * @param {number} props.total
+ * @param {boolean} [props.showAmounts] - false: the details only (My work shows no money)
  */
-const JobOrderSummary = ({ rows, currency, subtotal, tax, total }) => {
+const JobOrderSummary = ({ rows, currency, subtotal, tax, total, showAmounts = true }) => {
   const money = (amount) => formatMoney(amount, currency);
   const details = rows.filter((row) => !row.isPrice);
   const prices = rows.filter((row) => row.isPrice);
@@ -32,6 +33,7 @@ const JobOrderSummary = ({ rows, currency, subtotal, tax, total }) => {
         <p className="text-sm text-gray-400">Nothing filled in yet.</p>
       )}
 
+      {showAmounts && (<>
       <table className="w-full text-sm" aria-label="Amounts">
         <tbody className="divide-y divide-gray-100">
           {prices.map((row) => (
@@ -63,6 +65,7 @@ const JobOrderSummary = ({ rows, currency, subtotal, tax, total }) => {
         </tbody>
       </table>
       {!tax.isApplied && tax.reason && <p className="text-xs text-amber-700" role="note">{tax.reason}</p>}
+      </>)}
     </div>
   );
 };

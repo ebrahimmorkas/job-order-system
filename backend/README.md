@@ -149,8 +149,9 @@ Per vendor:
 
 ## Role Master
 
-Roles the vendor makes, given to users later (the Users module). Owner only,
-and only while RBAC is on (WebsiteMaster and CompanyMaster `isRBACFeatureOn`).
+Roles the vendor makes, given to users (the Users module). The owner, or a
+user whose roles give Role Master permissions (see Users logging in), and
+only while RBAC is on (WebsiteMaster and CompanyMaster `isRBACFeatureOn`).
 
 - Role (`Role`): `name` (unique per vendor, ignoring capital letters), `type`
   (picked at creation, never changes) and, by type:
@@ -170,7 +171,11 @@ and only while RBAC is on (WebsiteMaster and CompanyMaster `isRBACFeatureOn`).
 ## Users
 
 The owner's users (`User` with `role: 'user'`; the owner is never listed or
-changed here). Owner only, and only while RBAC is on.
+changed here). The owner, or a user whose roles give Users permissions, and
+only while RBAC is on. Roles and extra access are given only by the owner or
+with Users > Assign role (`canAssignRole` in the form data; otherwise they
+are ignored on create and kept on edit), and never by a user on their own
+account. A user can't deactivate or delete themselves.
 
 - Details: `name`, `username` (the login username - 3-30 characters,
   starting with a letter), `password` (bcrypt, at least 8 characters) are
@@ -193,17 +198,39 @@ changed here). Owner only, and only while RBAC is on.
 - Dates are calendar days `'YYYY-MM-DD'`, both included; start empty = today,
   end empty = no end.
 - `numberOfUsersAllowed` counts active + inactive users (null = no limit).
-- **Users can't log in yet** - login answers 403 until their roles are applied
-  to what they can see (the next RBAC step). Deactivating or deleting a user
-  ends every request at once; a new password logs them out.
+- Users log in only while RBAC is on (otherwise 403 "Logins for users are
+  switched off"; the refresh token is refused too). Deactivating or deleting
+  a user ends every request at once; a new password logs them out.
 - A database made before the Users module needs its user indexes replaced
   once: `node scripts/syncUserIndexes.js` (shows what changes), then with
   `--apply` while the server is stopped.
 
+## Users logging in (access)
+
+What a logged-in person may do (`services/accessService.js`,
+`GET /api/access`): the owner everything; a user, while RBAC is on, the
+modules and permissions of their active module roles that cover today, plus
+their extra modules (only while `isRoleAssignmentOnUserModuleAllowed` is on).
+Any permission of a module also gives View; modules whose feature is off are
+left out. `hasWork` is true with a master role or extra master access - the
+"My work" menu.
+
+- Every route checks it on the server (`middlewares/requirePermission.js`,
+  403 "You do not have permission to do this."): GET = View, POST = Create,
+  PUT / PATCH and bulk activate / deactivate = Edit, DELETE and bulk delete =
+  Delete; the form data of Job Orders, Users and Role Master needs Create or
+  Edit. The job order form's masters / controls lists stay open to anyone
+  logged in. Layout Master stays owner only; printing needs Job Orders View.
+- My work (`services/myWorkService.js`, users only, RBAC on): the job orders
+  where the user was given a value's work, newest first (search, pages),
+  each with their work (`masterName`, `valueName`, `assignedAt`,
+  `completeIn`, `dueAt`, `coWorkers`); one of them read only. No money is
+  ever sent - prices, subtotal, tax and total are left out.
+
 ## Job orders
 
-What the vendor's users fill in (`models/JobOrder.js`); any logged-in user of
-the vendor can create, edit and cancel them.
+What the vendor's users fill in (`models/JobOrder.js`); the owner, or a user
+whose roles give Job Orders permissions, creates, edits and cancels them.
 
 - The form (`GET /api/job-orders/form-data`): the active masters (in order,
   each with its default) and controls (each only while its feature - or its
@@ -224,6 +251,12 @@ the vendor can create, edit and cancel them.
   are never offered. Only while RBAC is on. Saved on each value as
   `assignedTo: [{ userId, name }]`; on edit, people already given a value may
   stay even after losing it, but nobody new without it can be added.
+- Completion time (optional, one per value, for everyone doing it):
+  `completeIn: { amount (1-9999), unit (seconds / minutes / hours / days /
+  months / years) }`. Saved with `assignedAt` (when the work was first given)
+  and `dueAt` (`utils/days.js` `addDuration`). An edit keeps the clock unless
+  the time itself changes - then it restarts from now. Empty = no deadline;
+  nobody given = all three null.
 - Everything is checked and worked out again on the server
   (`services/jobOrderService.js`, `utils/jobOrderTotals.js`); the browser's
   summary is only a preview (`features/jobOrders/jobOrderTotals.js` - keep the
@@ -323,6 +356,9 @@ uploader's file name is never used. Replacing an image deletes the old file.
 
 ## Main endpoints
 
+Where a row says owner, a user whose roles give that module's permission may
+too (see Users logging in) - except Layout Master, which stays owner only.
+
 | Method | Path | Who |
 | --- | --- | --- |
 | GET | `/api/public/branding` | anyone - company name, login tagline, logo URL |
@@ -336,6 +372,9 @@ uploader's file name is never used. Replacing an image deletes the old file.
 | GET | `/api/company-settings/tax` | owner, tax on - every assigned country with its fields, states, cities, current rates, currency and saved details |
 | PUT | `/api/company-settings/tax/:countryId` | owner, tax on - `{ address, isTaxRegistered, taxFieldValues, defaultTaxId }` of one country |
 | GET | `/api/feature-access` | logged in - which features are on |
+| GET | `/api/access` | logged in - `{ isOwner, modules: { key: [permissions] }, hasWork, userId }` |
+| GET | `/api/my-work` | user, RBAC on - the job orders given to them, newest first (search, page, limit), each with their work |
+| GET | `/api/my-work/:id` | user, RBAC on - one of them, read only, without money, with their work |
 | GET | `/api/masters/for-job-order` | logged in - active masters with their active values and default, for the job order form |
 | GET / POST | `/api/masters` | owner - list (search, status, page, limit) / create with values |
 | GET / PUT / DELETE | `/api/masters/:id` | owner - one master with its values / save details and the full values list / delete |
@@ -368,15 +407,15 @@ uploader's file name is never used. Replacing an image deletes the old file.
 | PATCH | `/api/layouts/:id/default` | owner, Layout Master on - make an active layout the default |
 | PATCH | `/api/layouts/:id/status` | owner, Layout Master on - `{ isActive }` |
 | POST | `/api/layouts/bulk` | owner, Layout Master on - `{ action: activate|deactivate|delete, ids }` |
-| GET | `/api/layouts/for-print` | logged in, Layout Master on - the active layouts, default first |
-| GET | `/api/layouts/for-print/:id` | logged in, Layout Master on - one active layout and what fills it besides the job order |
-| GET | `/api/job-orders/form-data` | logged in - everything the job order form needs (see Job orders) |
-| GET / POST | `/api/job-orders` | logged in - list, newest first (search number or customer place, page, limit) / create |
-| GET / PUT / DELETE | `/api/job-orders/:id` | logged in - one job order / save it (worked out again) / cancel it |
+| GET | `/api/layouts/for-print` | Job Orders View, Layout Master on - the active layouts, default first |
+| GET | `/api/layouts/for-print/:id` | Job Orders View, Layout Master on - one active layout and what fills it besides the job order |
+| GET | `/api/job-orders/form-data` | owner (users: Create or Edit) - everything the job order form needs (see Job orders) |
+| GET / POST | `/api/job-orders` | owner - list, newest first (search number or customer place, page, limit) / create |
+| GET / PUT / DELETE | `/api/job-orders/:id` | owner - one job order / save it (worked out again) / cancel it |
 
 `POST` / `PUT /api/job-orders` take `{ jobOrderNumber, customer: { countryId,
 stateId, cityId, postalCode, address }, masters: [{ masterId, valueIds,
-assignments: [{ valueId, userIds }] }],
+assignments: [{ valueId, userIds, completeIn: { amount, unit } | null }] }],
 controls: [{ controlId, text | checked | optionId }], taxId, keepImageIds }`
 (`taxId` null = the vendor's default rate) as JSON, or as multipart with that
 JSON in `data` and new images in `images`. Field errors are named

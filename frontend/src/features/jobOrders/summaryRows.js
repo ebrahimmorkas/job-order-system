@@ -2,6 +2,8 @@
 // stores it (models/JobOrder.js): the customer, every master picked and
 // control filled in, then the prices. Used by the form and the view.
 
+import { formatDueAt } from './workTime';
+
 /** The customer's address as one line ("" when nothing is filled in). */
 export const customerLineOf = (customer) =>
   [customer?.address, customer?.cityName, customer?.stateName, customer?.postalCode, customer?.countryName].filter(Boolean).join(', ');
@@ -9,8 +11,13 @@ export const customerLineOf = (customer) =>
 /** A master's name on screen: its short name when short names are used. */
 export const masterLabelOf = (master, useShortNames) => (useShortNames && master.shortName) || master.name;
 
-// "Round cutting (Ravi, Sam)": a value and who was given its work.
-const valueTextOf = (value) => (value.assignedTo?.length ? `${value.name} (${value.assignedTo.map((person) => person.name).join(', ')})` : value.name);
+// "Round cutting (Ravi, Sam - due 24 Oct 2026, 05:00 pm)": a value, who was
+// given its work and by when.
+const valueTextOf = (value) => {
+  if (!value.assignedTo?.length) return value.name;
+  const due = value.dueAt ? ` - due ${formatDueAt(value.dueAt)}` : '';
+  return `${value.name} (${value.assignedTo.map((person) => person.name).join(', ')}${due})`;
+};
 
 /**
  * @param {{ customer, masters, controls }} jobOrder
