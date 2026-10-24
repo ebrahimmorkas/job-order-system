@@ -1,4 +1,4 @@
-import { NotFoundPage, StatusErrorPage } from './components/errors'
+import { StatusErrorPage } from './components/errors'
 import Spinner from './components/common/Spinner'
 import { useAuth } from './features/auth/hooks/useAuth'
 import { useBranding } from './features/branding/hooks/useBranding'
@@ -6,8 +6,9 @@ import LoginPage from './features/auth/pages/LoginPage'
 import AppShell from './layouts/AppShell'
 import AccessProvider from './features/access/context/AccessProvider'
 
-// No router yet: the app lives at "/" - the login screen until logged in,
-// then the shell. Any other path is a 404 once logged in.
+// The login screen at any address until logged in (the address is kept, so
+// logging in opens the page that was asked for), then the shell, which shows
+// the page of the address.
 const App = () => {
   const { isAuthenticated, isLoading } = useAuth()
   const { isLoading: isBrandingLoading, error: brandingError, retry } = useBranding()
@@ -18,7 +19,6 @@ const App = () => {
   }
   if (isLoading || isBrandingLoading) return <Spinner size="lg" fullScreen />
   if (!isAuthenticated) return <LoginPage />
-  if (window.location.pathname !== '/') return <NotFoundPage />
   return (
     <AccessProvider>
       <AppShell />

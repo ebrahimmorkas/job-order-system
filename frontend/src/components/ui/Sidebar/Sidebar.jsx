@@ -41,10 +41,15 @@ const NavLinks = ({ items, activeKey, onSelect }) => (
       const isActive = item.key === activeKey;
       const Icon = item.icon;
       return (
-        <button
+        <a
           key={item.key}
-          type="button"
-          onClick={() => onSelect(item.key)}
+          href={item.path}
+          // A plain click stays in the app; Ctrl / middle click opens a new tab.
+          onClick={(e) => {
+            if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+            e.preventDefault();
+            onSelect(item.key);
+          }}
           className={`group relative w-full flex items-center gap-3 pl-3.5 pr-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150 cursor-pointer ${
             isActive ? theme.link.active : theme.link.base
           }`}
@@ -53,7 +58,7 @@ const NavLinks = ({ items, activeKey, onSelect }) => (
           {isActive && <span className={`absolute left-0 top-1.5 bottom-1.5 w-1 rounded-full ${theme.link.activeBar}`} />}
           {Icon && <Icon className={`w-5 h-5 shrink-0 ${isActive ? theme.link.iconActive : theme.link.iconBase}`} />}
           <span className="truncate">{item.label}</span>
-        </button>
+        </a>
       );
     })}
   </nav>
@@ -100,7 +105,7 @@ const UserFooter = ({ user, onLogout }) => {
  * @param {string} [props.brand] - Company name shown at the top.
  * @param {string|null} [props.logoUrl] - Company logo; the name's first letter is shown when absent.
  * @param {string} [props.subtitle] - Small text shown under the brand name.
- * @param {Array<{key: string, label: string, icon?: Function}>} [props.items] - Nav links, defaults to DEFAULT_NAV_ITEMS.
+ * @param {Array<{key: string, path: string, label: string, icon?: Function}>} [props.items] - Nav links, defaults to DEFAULT_NAV_ITEMS.
  * @param {string} props.activeKey - Key of the currently active item.
  * @param {Function} props.onNavigate - Called with an item's key when it is selected.
  * @param {Object} [props.user] - Current user ({ name, username, email, role }); footer is omitted if absent.

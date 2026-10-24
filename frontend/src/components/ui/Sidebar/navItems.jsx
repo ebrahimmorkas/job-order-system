@@ -1,6 +1,7 @@
 import { DashboardIcon, MyWorkIcon, JobOrdersIcon, MastersIcon, ControlsIcon, UsersIcon, RolesIcon, LayoutsIcon, CompanySettingsIcon } from './icons';
 
 // The sidebar's default menu. Add each new module here as it is built.
+// path is the section's address; its screens add to it (e.g. /users/new).
 // featureFlag (optional) names a feature that must be on - see
 // filterNavItemsByFeatureAccess below. Who sees an item - see
 // filterNavItemsByAccess below:
@@ -8,15 +9,15 @@ import { DashboardIcon, MyWorkIcon, JobOrdersIcon, MastersIcon, ControlsIcon, Us
 //   ownerOnly - the owner only
 //   workOnly  - a user who is given work (master roles)
 export const DEFAULT_NAV_ITEMS = [
-  { key: 'dashboard', label: 'Dashboard', icon: DashboardIcon },
-  { key: 'myWork', label: 'My work', icon: MyWorkIcon, workOnly: true },
-  { key: 'jobOrders', label: 'Job Orders', icon: JobOrdersIcon, module: 'jobOrders' },
-  { key: 'masters', label: 'Masters', icon: MastersIcon, featureFlag: 'isMasterModuleFeatureOn', module: 'masters' },
-  { key: 'controls', label: 'Controls', icon: ControlsIcon, featureFlag: 'isControlsFeatureOn', module: 'controls' },
-  { key: 'users', label: 'Users', icon: UsersIcon, featureFlag: 'isRBACFeatureOn', module: 'users' },
-  { key: 'roles', label: 'Role Master', icon: RolesIcon, featureFlag: 'isRBACFeatureOn', module: 'roles' },
-  { key: 'layouts', label: 'Layout Master', icon: LayoutsIcon, featureFlag: 'isLayoutMasterFeatureOn', ownerOnly: true },
-  { key: 'companySettings', label: 'Company Settings', icon: CompanySettingsIcon, module: 'companySettings' },
+  { key: 'dashboard', path: '/', label: 'Dashboard', icon: DashboardIcon },
+  { key: 'myWork', path: '/my-work', label: 'My work', icon: MyWorkIcon, workOnly: true },
+  { key: 'jobOrders', path: '/job-orders', label: 'Job Orders', icon: JobOrdersIcon, module: 'jobOrders' },
+  { key: 'masters', path: '/masters', label: 'Masters', icon: MastersIcon, featureFlag: 'isMasterModuleFeatureOn', module: 'masters' },
+  { key: 'controls', path: '/controls', label: 'Controls', icon: ControlsIcon, featureFlag: 'isControlsFeatureOn', module: 'controls' },
+  { key: 'users', path: '/users', label: 'Users', icon: UsersIcon, featureFlag: 'isRBACFeatureOn', module: 'users' },
+  { key: 'roles', path: '/roles', label: 'Role Master', icon: RolesIcon, featureFlag: 'isRBACFeatureOn', module: 'roles' },
+  { key: 'layouts', path: '/layouts', label: 'Layout Master', icon: LayoutsIcon, featureFlag: 'isLayoutMasterFeatureOn', ownerOnly: true },
+  { key: 'companySettings', path: '/company-settings', label: 'Company Settings', icon: CompanySettingsIcon, module: 'companySettings' },
 ];
 
 /**

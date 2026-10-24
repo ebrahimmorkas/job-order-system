@@ -52,28 +52,50 @@ const toFieldErrors = (errors) => {
  * @param {Object} props
  * @param {'create'|'clone'|'edit'} props.mode
  * @param {string} [props.masterId] - The master to edit, or to copy (clone)
- * @param {number|null} [props.valuesAllowed] - The vendor's limit, known from the list (create)
+ * @param {number|null} [props.valuesAllowed] - The vendor's limit, known from the list (create;
+ *   undefined = asked for here, when the form is opened straight from its address)
  * @param {Object|null} [props.featureAccess] - Which features are on; the role checkbox needs RBAC
  * @param {(message: string) => void} props.onDone - Back to the list after saving
  * @param {() => void} props.onBack
  */
-const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed = null, featureAccess = null, onDone, onBack }) => {
+const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed, featureAccess = null, onDone, onBack }) => {
   const isEdit = mode === 'edit';
   const nextKey = useRef(0);
   const createKey = () => `new-${nextKey.current++}`;
 
-  const [isLoading, setIsLoading] = useState(mode !== 'create');
+  const [isLoading, setIsLoading] = useState(mode !== 'create' || knownValuesAllowed === undefined);
   const [loadError, setLoadError] = useState('');
   const [details, setDetails] = useState(EMPTY_DETAILS);
   const [values, setValues] = useState([]);
   const [savedSnapshot, setSavedSnapshot] = useState(() => toSnapshot(EMPTY_DETAILS, []));
-  const [valuesAllowed, setValuesAllowed] = useState(knownValuesAllowed);
+  const [valuesAllowed, setValuesAllowed] = useState(knownValuesAllowed ?? null);
   const [status, setStatus] = useState('A');
   const [newName, setNewName] = useState('');
   const [addError, setAddError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+
+  // Create opened straight from its address: the limits the list shows.
+  useEffect(() => {
+    if (mode !== 'create' || knownValuesAllowed !== undefined) return undefined;
+    let cancelled = false;
+    mastersApi
+      .listMasters({ limit: 1 })
+      .then(({ limits }) => {
+        if (cancelled) return;
+        if (limits.mastersAllowed === null || limits.valuesAllowedPerMaster === null) {
+          setLoadError('Masters have not been set up for your account yet. Please contact support.');
+        } else if (limits.mastersUsed >= limits.mastersAllowed) {
+          setLoadError(`You have reached your limit of ${limits.mastersAllowed} masters. Delete one you no longer need to add another.`);
+        } else {
+          setValuesAllowed(limits.valuesAllowedPerMaster);
+        }
+      })
+      .catch((err) => !cancelled && setLoadError(err.message))
+      .finally(() => !cancelled && setIsLoading(false));
+    return () => { cancelled = true; };
+  }, [mode, knownValuesAllowed]);
 
   useEffect(() => {
     if (mode === 'create') return undefined;

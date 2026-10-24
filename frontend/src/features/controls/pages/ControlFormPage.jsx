@@ -52,7 +52,8 @@ const toFieldErrors = (errors) => {
  * @param {Object} props
  * @param {'create'|'clone'|'edit'} props.mode
  * @param {string} [props.controlId] - The control to edit, or to copy (clone)
- * @param {Object} [props.limits] - The vendor's limits, known from the list (create)
+ * @param {Object} [props.limits] - The vendor's limits, known from the list (create; asked for
+ *   here when the form is opened straight from its address)
  * @param {(message: string) => void} props.onDone - Back to the list after saving
  * @param {() => void} props.onBack
  */
@@ -62,7 +63,7 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
   const createKey = () => `new-${nextKey.current++}`;
 
   const firstFreeType = knownLimits?.assignedTypes.find((t) => !isTypeFull(knownLimits, t)) ?? null;
-  const [isLoading, setIsLoading] = useState(mode !== 'create');
+  const [isLoading, setIsLoading] = useState(mode !== 'create' || !knownLimits);
   const [loadError, setLoadError] = useState('');
   const [limits, setLimits] = useState(knownLimits);
   const [type, setType] = useState(firstFreeType);
@@ -75,6 +76,28 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+
+  // Create opened straight from its address: the limits the list shows.
+  useEffect(() => {
+    if (mode !== 'create' || knownLimits) return undefined;
+    let cancelled = false;
+    controlsApi
+      .listControls({ limit: 1 })
+      .then(({ limits: loadedLimits }) => {
+        if (cancelled) return;
+        const freeType = loadedLimits.assignedTypes.find((t) => !isTypeFull(loadedLimits, t)) ?? null;
+        if (!freeType) {
+          setLoadError('You have reached your limit for every type of control. Delete one you no longer need to add another.');
+          return;
+        }
+        setLimits(loadedLimits);
+        setType(freeType);
+        setSavedSnapshot(toSnapshot(freeType, EMPTY_FIELDS, []));
+      })
+      .catch((err) => !cancelled && setLoadError(err.message))
+      .finally(() => !cancelled && setIsLoading(false));
+    return () => { cancelled = true; };
+  }, [mode, knownLimits]);
 
   useEffect(() => {
     if (mode === 'create') return undefined;

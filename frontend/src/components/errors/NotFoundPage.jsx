@@ -8,9 +8,11 @@ const goHome = () => { window.location.href = '/'; };
  *
  * @param {Object} props
  * @param {() => void} [props.onGoHome] - Defaults to a full navigation to "/".
+ * @param {boolean} [props.embedded] - Inside the logged-in layout
  */
-const NotFoundPage = ({ onGoHome = goHome }) => (
+const NotFoundPage = ({ onGoHome = goHome, embedded = false }) => (
   <ErrorPage
+    embedded={embedded}
     icon={<NotFoundIcon />}
     code="404"
     title="Page not found"

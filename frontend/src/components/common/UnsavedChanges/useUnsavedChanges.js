@@ -46,4 +46,15 @@ export const useUnsavedChanges = (isDirty) => {
  */
 export const useConfirmLeave = () => useGuard().confirmLeave;
 
+/**
+ * For the router: whether the current page has unsaved changes right now,
+ * and confirmLeave.
+ *
+ * @returns {{ isDirty: () => boolean, confirmLeave: (action: () => void) => void }}
+ */
+export const useUnsavedChangesGuard = () => {
+  const { isDirty, confirmLeave } = useGuard();
+  return { isDirty, confirmLeave };
+};
+
 export default useUnsavedChanges;

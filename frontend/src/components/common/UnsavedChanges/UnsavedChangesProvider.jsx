@@ -5,7 +5,8 @@ import ConfirmDialog from '../ConfirmDialog';
 /**
  * Guards against losing unsaved changes. A page with a form reports whether
  * it has unsaved changes (useUnsavedChanges); anything that would leave it
- * (Back, the sidebar, logout) goes through confirmLeave, which asks first.
+ * (Back, the sidebar, logout) goes through confirmLeave, which asks first;
+ * the browser's Back / Forward is checked by the router (isDirty).
  * Closing or refreshing the tab is covered by useUnsavedChanges itself.
  */
 const UnsavedChangesProvider = ({ children }) => {
@@ -17,6 +18,7 @@ const UnsavedChangesProvider = ({ children }) => {
   const [pendingAction, setPendingAction] = useState(null);
 
   const setDirty = useCallback((isDirty) => { isDirtyRef.current = isDirty; }, []);
+  const isDirty = useCallback(() => isDirtyRef.current, []);
 
   const confirmLeave = useCallback((action) => {
     if (!isDirtyRef.current) return action();
@@ -33,7 +35,7 @@ const UnsavedChangesProvider = ({ children }) => {
     isLeavingRef.current = false;
   };
 
-  const value = useMemo(() => ({ setDirty, confirmLeave, isLeavingRef }), [setDirty, confirmLeave]);
+  const value = useMemo(() => ({ setDirty, isDirty, confirmLeave, isLeavingRef }), [setDirty, isDirty, confirmLeave]);
 
   return (
     <UnsavedChangesContext.Provider value={value}>

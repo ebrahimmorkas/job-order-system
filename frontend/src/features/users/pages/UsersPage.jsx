@@ -1,24 +1,31 @@
-import { useState } from 'react';
 import { useToast } from '../../../components/common/Toast';
+import { NotFoundPage } from '../../../components/errors';
+import { useRouter, screenOf } from '../../../router';
 import UsersListPage from './UsersListPage';
 import UserFormPage from './UserFormPage';
 
 /**
- * The Users section: the list, or the create / edit screen.
- * (No router yet - the screen shown is kept here.)
+ * The Users section: the list (/users), or the create (/users/new) / edit
+ * (/users/:id/edit) screen.
+ *
+ * @param {Object} props
+ * @param {string} props.basePath - '/users'
+ * @param {string[]} props.segments - The address after it
  */
-const UsersPage = () => {
+const UsersPage = ({ basePath, segments }) => {
   const toast = useToast();
-  // { mode: 'list' } | { mode: 'create' } | { mode: 'edit', id }
-  const [screen, setScreen] = useState({ mode: 'list' });
+  const { navigate } = useRouter();
+  const screen = screenOf(segments, { actions: { edit: 'edit' } });
 
-  const backToList = () => setScreen({ mode: 'list' });
+  const backToList = () => navigate(basePath);
+
+  if (!screen) return <NotFoundPage embedded onGoHome={() => navigate('/')} />;
 
   if (screen.mode === 'list') {
     return (
       <UsersListPage
-        onCreate={() => setScreen({ mode: 'create' })}
-        onEdit={(id) => setScreen({ mode: 'edit', id })}
+        onCreate={() => navigate(`${basePath}/new`)}
+        onEdit={(id) => navigate(`${basePath}/${id}/edit`)}
       />
     );
   }

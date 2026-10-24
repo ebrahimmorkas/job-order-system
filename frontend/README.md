@@ -14,6 +14,31 @@ The backend must be running too (`cd ../backend && npm run dev`, port 5000).
 In development, Vite forwards every `/api` request (and `/uploads`, the
 images stored on the server itself, such as logos) to it.
 
+In production, the web server must answer every address that isn't a file
+with `index.html` (each screen has its own address, e.g. `/users/123/edit`),
+for example in nginx: `location / { try_files $uri /index.html; }`.
+
+## Page addresses
+
+Every screen has its own address, so a refresh, or a link opened in a new
+tab, stays on it:
+
+| Address | Screen |
+|---|---|
+| `/` | Dashboard |
+| `/my-work`, `/my-work/:id` | My work list, a job order's view |
+| `/job-orders`, `/job-orders/new`, `/job-orders/:id`, `/job-orders/:id/edit`, `/job-orders/:id/print` | Job Orders |
+| `/masters`, `/controls`, `/roles`, `/layouts` (+ `/new`, `/:id/edit`, `/:id/copy`) | list, create, edit, copy |
+| `/users`, `/users/new`, `/users/:id/edit` | Users |
+| `/company-settings`, `/company-settings/tax` | Company Settings tabs |
+
+Logged out, any address shows the login page and logging in opens it.
+A section the person can't open (or a switched-off feature) goes to the
+dashboard; an unknown address shows "Page not found" beside the menu.
+The browser's Back / Forward on a page with unsaved changes asks first.
+Each section's code is downloaded the first time it is opened
+(`utils/lazyPage.js`), so the first load stays small.
+
 ## What the app shows
 
 - **Login page** - the company name, login tagline and logo come from the
@@ -155,7 +180,14 @@ To try a second vendor on the same computer:
   person may do), `myWork`, `dashboard`, `masters`, `controls`,
   `companySettings`, `jobOrders` and `layouts` (the designer, the drawing
   shared by the designer, printing and exports, and the PDF / image export).
-- `src/layouts/AppShell.jsx` - the logged-in layout: sidebar + current page.
+- `src/layouts/AppShell.jsx` - the logged-in layout: sidebar + the page of
+  the address.
+- `src/router/` - the page address (`useRouter()` - pathname, navigate;
+  `screenOf` turns a section's address into list / create / edit / copy /
+  view). No router library.
+- `src/utils/lazyPage.js` - loads a page's code when first opened (reloads
+  once if a new version went online); `PageLoadBoundary` in
+  `components/errors` shows "Reload" if it still can't load.
 - `src/utils/apiClient.js` - every API call goes through it (access token,
   refresh on 401, error handling).
 - `src/utils/validations.js` - field validators for InputField/TextArea/Form

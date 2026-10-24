@@ -1,25 +1,32 @@
-import { useState } from 'react';
 import { useToast } from '../../../components/common/Toast';
+import { NotFoundPage } from '../../../components/errors';
+import { useRouter, screenOf } from '../../../router';
 import RolesListPage from './RolesListPage';
 import RoleFormPage from './RoleFormPage';
 
 /**
- * The Role Master section: the list, or the create / copy / edit screen.
- * (No router yet - the screen shown is kept here.)
+ * The Role Master section: the list (/roles), or the create (/roles/new),
+ * copy (/roles/:id/copy) or edit (/roles/:id/edit) screen.
+ *
+ * @param {Object} props
+ * @param {string} props.basePath - '/roles'
+ * @param {string[]} props.segments - The address after it
  */
-const RolesPage = () => {
+const RolesPage = ({ basePath, segments }) => {
   const toast = useToast();
-  // { mode: 'list' } | { mode: 'create' } | { mode: 'edit' | 'clone', id }
-  const [screen, setScreen] = useState({ mode: 'list' });
+  const { navigate } = useRouter();
+  const screen = screenOf(segments, { actions: { edit: 'edit', copy: 'clone' } });
 
-  const backToList = () => setScreen({ mode: 'list' });
+  const backToList = () => navigate(basePath);
+
+  if (!screen) return <NotFoundPage embedded onGoHome={() => navigate('/')} />;
 
   if (screen.mode === 'list') {
     return (
       <RolesListPage
-        onCreate={() => setScreen({ mode: 'create' })}
-        onEdit={(id) => setScreen({ mode: 'edit', id })}
-        onClone={(id) => setScreen({ mode: 'clone', id })}
+        onCreate={() => navigate(`${basePath}/new`)}
+        onEdit={(id) => navigate(`${basePath}/${id}/edit`)}
+        onClone={(id) => navigate(`${basePath}/${id}/copy`)}
       />
     );
   }

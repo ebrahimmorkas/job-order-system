@@ -7,6 +7,7 @@ import AuthProvider from './features/auth/context/AuthProvider'
 import BrandingProvider from './features/branding/context/BrandingProvider'
 import ToastProvider from './components/common/Toast/ToastProvider'
 import UnsavedChangesProvider from './components/common/UnsavedChanges/UnsavedChangesProvider'
+import { RouterProvider } from './router'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -16,7 +17,9 @@ createRoot(document.getElementById('root')).render(
         <AuthProvider>
           <ToastProvider>
             <UnsavedChangesProvider>
-              <App />
+              <RouterProvider>
+                <App />
+              </RouterProvider>
             </UnsavedChangesProvider>
           </ToastProvider>
         </AuthProvider>

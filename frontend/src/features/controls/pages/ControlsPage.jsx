@@ -1,25 +1,33 @@
-import { useState } from 'react';
 import { useToast } from '../../../components/common/Toast';
+import { NotFoundPage } from '../../../components/errors';
+import { useRouter, screenOf } from '../../../router';
 import ControlsListPage from './ControlsListPage';
 import ControlFormPage from './ControlFormPage';
 
 /**
- * The Controls section: the list, or the create / copy / edit screen.
- * (No router yet - the screen shown is kept here.)
+ * The Controls section: the list (/controls), or the create (/controls/new),
+ * copy (/controls/:id/copy) or edit (/controls/:id/edit) screen.
+ *
+ * @param {Object} props
+ * @param {string} props.basePath - '/controls'
+ * @param {string[]} props.segments - The address after it
  */
-const ControlsPage = () => {
+const ControlsPage = ({ basePath, segments }) => {
   const toast = useToast();
-  // { mode: 'list' } | { mode: 'create', limits } | { mode: 'edit' | 'clone', id }
-  const [screen, setScreen] = useState({ mode: 'list' });
+  const { navigate, state } = useRouter();
+  const screen = screenOf(segments, { actions: { edit: 'edit', copy: 'clone' } });
 
-  const backToList = () => setScreen({ mode: 'list' });
+  const backToList = () => navigate(basePath);
+
+  if (!screen) return <NotFoundPage embedded onGoHome={() => navigate('/')} />;
 
   if (screen.mode === 'list') {
     return (
       <ControlsListPage
-        onCreate={(limits) => setScreen({ mode: 'create', limits })}
-        onEdit={(id) => setScreen({ mode: 'edit', id })}
-        onClone={(id) => setScreen({ mode: 'clone', id })}
+        // The list already knows the limits; opened straight from the address the form asks itself.
+        onCreate={(limits) => navigate(`${basePath}/new`, { state: { limits } })}
+        onEdit={(id) => navigate(`${basePath}/${id}/edit`)}
+        onClone={(id) => navigate(`${basePath}/${id}/copy`)}
       />
     );
   }
@@ -30,7 +38,7 @@ const ControlsPage = () => {
       key={`${screen.mode}-${screen.id || ''}`}
       mode={screen.mode}
       controlId={screen.id}
-      limits={screen.limits}
+      limits={state?.limits ?? null}
       onBack={backToList}
       onDone={(message) => {
         toast.success(message);

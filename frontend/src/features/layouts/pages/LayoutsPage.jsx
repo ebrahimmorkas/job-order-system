@@ -1,21 +1,28 @@
-import { useState } from 'react';
+import { NotFoundPage } from '../../../components/errors';
+import { useRouter, screenOf } from '../../../router';
 import LayoutsListPage from './LayoutsListPage';
 import LayoutDesignerPage from './LayoutDesignerPage';
 
 /**
- * The Layout Master section: the list, or the designer (create / copy /
- * edit). (No router yet - the screen shown is kept here.)
+ * The Layout Master section: the list (/layouts), or the designer - create
+ * (/layouts/new), copy (/layouts/:id/copy) or edit (/layouts/:id/edit).
+ *
+ * @param {Object} props
+ * @param {string} props.basePath - '/layouts'
+ * @param {string[]} props.segments - The address after it
  */
-const LayoutsPage = () => {
-  // { mode: 'list' } | { mode: 'create' } | { mode: 'edit' | 'clone', id }
-  const [screen, setScreen] = useState({ mode: 'list' });
+const LayoutsPage = ({ basePath, segments }) => {
+  const { navigate } = useRouter();
+  const screen = screenOf(segments, { actions: { edit: 'edit', copy: 'clone' } });
+
+  if (!screen) return <NotFoundPage embedded onGoHome={() => navigate('/')} />;
 
   if (screen.mode === 'list') {
     return (
       <LayoutsListPage
-        onCreate={() => setScreen({ mode: 'create' })}
-        onEdit={(id) => setScreen({ mode: 'edit', id })}
-        onClone={(id) => setScreen({ mode: 'clone', id })}
+        onCreate={() => navigate(`${basePath}/new`)}
+        onEdit={(id) => navigate(`${basePath}/${id}/edit`)}
+        onClone={(id) => navigate(`${basePath}/${id}/copy`)}
       />
     );
   }
@@ -26,7 +33,7 @@ const LayoutsPage = () => {
       key={`${screen.mode}-${screen.id || ''}`}
       mode={screen.mode}
       layoutId={screen.id}
-      onBack={() => setScreen({ mode: 'list' })}
+      onBack={() => navigate(basePath)}
     />
   );
 };
