@@ -48,8 +48,9 @@ const workOf = (masters, userId, { withHistory = false } = {}) => {
     }
 };
 
-// GET /api/my-work - newest first; search by number or customer place.
-const listMyWork = async ({ vendorId, userId, search, page, limit }) => {
+// GET /api/my-work - newest first; search by number or customer place. With
+// the vendor's steps, so the list can move work too (none while steps are off).
+const listMyWork = async ({ vendorId, userId, search, page, limit, websiteMasterData, companyMasterData }) => {
     try {
         const filter = { vendorId, 'masters.values.assignedTo.userId': userId, status: 'A' };
         if (search) {
@@ -63,7 +64,8 @@ const listMyWork = async ({ vendorId, userId, search, page, limit }) => {
         const me = idOf(userId);
         return common.returnResult(true, 200, 'Your work fetched successfully.', {
             jobOrders: jobOrders.map(({ masters, ...jobOrder }) => ({ ...jobOrder, work: workOf(masters, me) })),
-            pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
+            pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+            steps: stepService.stepsOf(websiteMasterData, companyMasterData)
         });
     } catch (err) {
         throw err;

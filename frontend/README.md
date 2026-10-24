@@ -73,8 +73,9 @@ Each section's code is downloaded the first time it is opened
   and the time left ("Overdue", "Completed on time", "Completed late by 2
   hours", "No deadline", or not counting
   until their first step), who else does it, and a read-only view of the job
-  order without any money. With steps on, the view moves the work to a step
-  (In progress asks the %, Hold asks why) and shows its history. The
+  order without any money. With steps on, the list ("Change step" under each
+  piece of work) and the view move the work to a step (In progress asks the %,
+  Hold asks why); the view also shows its history. The
   dashboard links to it. The owner's job order list shows how the work is
   going (done / on hold / working) and the view has a Work progress card
   with everyone's step, start, due time and history. Company Settings asks

@@ -12,6 +12,7 @@ import { ViewIcon } from '../../../components/common/ActionIcons';
 import { useDebouncedValue } from '../../../utils/useDebouncedValue';
 import { useNow } from '../../../utils/useNow';
 import WorkItem from '../components/WorkItem';
+import StepChanger from '../components/StepChanger';
 import * as myWorkApi from '../api/myWorkApi';
 
 const PAGE_SIZE = 25;
@@ -21,6 +22,7 @@ const formatDate = (value) => new Date(value).toLocaleDateString('en-IN', { day:
 /**
  * The job orders the user is given work on, newest first: what they do on
  * each and by when. Search by number or customer place, page through, view.
+ * With steps on, "Change step" under a piece of work moves it right here.
  *
  * @param {Object} props
  * @param {(id: string) => void} props.onView
@@ -37,6 +39,8 @@ const MyWorkListPage = ({ onView }) => {
   const [loadedKey, setLoadedKey] = useState(null);
   // Bumped when the server says the person's work changed.
   const [reloadKey, setReloadKey] = useState(0);
+  // The work whose step changer is open: '<jobOrderId>|<valueId>'.
+  const [openStepKey, setOpenStepKey] = useState(null);
 
   // A new search starts again from page 1.
   const [lastSearch, setLastSearch] = useState(debouncedSearch);
@@ -68,6 +72,9 @@ const MyWorkListPage = ({ onView }) => {
 
   useRealtimeEvent([REALTIME_EVENTS.MY_WORK_CHANGED, REALTIME_EVENTS.RECONNECTED], () => setReloadKey((n) => n + 1));
 
+  // The vendor's steps (none while steps are off).
+  const steps = data?.steps || [];
+
   const columns = [
     {
       key: 'jobOrderNumber',
@@ -84,7 +91,35 @@ const MyWorkListPage = ({ onView }) => {
       label: 'Your work',
       render: (jobOrder) => (
         <ul className="space-y-3">
-          {jobOrder.work.map((work, index) => <li key={index}><WorkItem work={work} now={now} /></li>)}
+          {jobOrder.work.map((work, index) => {
+            const stepKey = `${jobOrder._id}|${work.valueId}`;
+            const isOpen = openStepKey === stepKey;
+            return (
+              <li key={index} className="space-y-2">
+                <WorkItem work={work} now={now} />
+                {steps.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setOpenStepKey(isOpen ? null : stepKey)}
+                    aria-expanded={isOpen}
+                    aria-label={`${isOpen ? 'Close step for' : 'Change step for'} ${work.valueName}`}
+                    className="text-xs font-medium text-indigo-600 hover:text-indigo-700 cursor-pointer"
+                  >
+                    {isOpen ? 'Close' : 'Change step'}
+                  </button>
+                )}
+                {isOpen && (
+                  <StepChanger
+                    key={work.step?.at || 'none'}
+                    jobOrderId={jobOrder._id}
+                    work={work}
+                    steps={steps}
+                    onChanged={() => { setOpenStepKey(null); setReloadKey((n) => n + 1); }}
+                  />
+                )}
+              </li>
+            );
+          })}
         </ul>
       ),
     },

@@ -497,7 +497,7 @@ too (see Users logging in) - except Layout Master, which stays owner only.
 | PUT | `/api/company-settings/tax/:countryId` | owner, tax on - `{ address, isTaxRegistered, taxFieldValues, defaultTaxId }` of one country |
 | GET | `/api/feature-access` | logged in - which features are on |
 | GET | `/api/access` | logged in - `{ isOwner, modules: { key: [permissions] }, hasWork, userId }` |
-| GET | `/api/my-work` | user, RBAC on - the job orders given to them, newest first (search, page, limit), each with their work |
+| GET | `/api/my-work` | user, RBAC on - the job orders given to them, newest first (search, page, limit), each with their work, and the vendor's `steps` |
 | GET | `/api/my-work/summary` | user, RBAC on - their own dashboard: totals and what is due next |
 | GET | `/api/dashboard` | owner (users: Dashboard) - the company dashboard (see Dashboard) |
 | GET | `/api/my-work/:id` | user, RBAC on - one of them, read only, without money, with their work, history and the vendor's `steps` |

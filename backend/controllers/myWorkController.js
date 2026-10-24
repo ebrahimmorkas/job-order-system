@@ -8,7 +8,9 @@ const { logInfo, logException } = require('../utils/logger');
 // GET /api/my-work
 const listMyWork = async (req, res) => {
     try {
-        const result = await myWorkService.listMyWork({ vendorId: req.vendorId, userId: req.user._id, ...req.query });
+        const result = await myWorkService.listMyWork({
+            vendorId: req.vendorId, userId: req.user._id, ...req.query, websiteMasterData: req.websiteMasterData, companyMasterData: req.companyMasterData
+        });
         return sendResult(res, result);
     } catch (err) {
         logException('Error while fetching your work', err);
