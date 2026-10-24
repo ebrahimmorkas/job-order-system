@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import UsagePill from '../UsagePill';
 
 const IMAGE_LABELS = { 'image/jpeg': 'JPG', 'image/png': 'PNG', 'image/webp': 'WebP', 'image/gif': 'GIF' };
 
@@ -74,12 +75,16 @@ const ImageUploader = ({
   const hint = [
     listNames(accept),
     maxSizeMB !== null && `up to ${maxSizeMB} MB each`,
-    maxCount !== null && `${images.length} / ${maxCount}`,
   ].filter(Boolean).join(' · ');
   const message = error || rejected;
 
   return (
     <div>
+      {canAdd && maxCount !== null && (
+        <div className="flex justify-end mb-2">
+          <UsagePill used={images.length} allowed={maxCount} label="images" title={`At most ${maxCount} ${maxCount === 1 ? 'image' : 'images'}`} />
+        </div>
+      )}
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4" aria-label={label}>
         {images.map((image) => (
           <li key={image.key} className="group relative aspect-square overflow-hidden rounded-lg border border-gray-200 bg-gray-50">

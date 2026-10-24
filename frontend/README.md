@@ -201,7 +201,7 @@ To try a second vendor on the same computer:
   Accordion, Alert, Autocomplete, Avatar, Badge, Breadcrumbs, BulkActionBar,
   ActionIcons, Button, Card, Checkbox, ColorField (colour picker with its code), ConfirmDialog, DatePicker, DefaultChoice,
   Divider, Dropdown, EmptyState, FileUpload, Form, HtmlEditor, IconButton,
-  ImageUploader (a grid of images with add / remove, checking type, size and count),
+  ImageUploader (a grid of images with add / remove, checking type, size and count; a usage pill when the count is limited),
   InputField, ListItemsEditor (an ordered, editable list of named items with a
   default), Menu, Modal, NumberField (a small number box with a unit), Pagination,
   ProgressBar, Radio, SearchInput, Skeleton, Slider, Spinner, Stepper, Switch,
