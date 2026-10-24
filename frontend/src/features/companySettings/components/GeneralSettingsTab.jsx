@@ -7,6 +7,8 @@ import Spinner from '../../../components/common/Spinner';
 import { useToast } from '../../../components/common/Toast';
 import { useBranding } from '../../branding/hooks/useBranding';
 import JobOrderSettingsCard from './JobOrderSettingsCard';
+import ShopSettingsCard from './ShopSettingsCard';
+import { useAccess } from '../../access/hooks/useAccess';
 import * as companySettingsApi from '../api/companySettingsApi';
 
 const COMPANY_NAME_MAX_LENGTH = 100;
@@ -26,6 +28,8 @@ const LOGO_TYPES = 'image/jpeg,image/png,image/webp,image/gif';
 const GeneralSettingsTab = ({ onDirtyChange, showWorkTime = false }) => {
   const toast = useToast();
   const { updateBranding } = useBranding();
+  // Closing the shop: the owner only (a user would lock themselves out).
+  const isOwner = useAccess().access.isOwner;
   const fileInputRef = useRef(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -164,6 +168,7 @@ const GeneralSettingsTab = ({ onDirtyChange, showWorkTime = false }) => {
       </Card>
 
       {jobOrderSettings && <JobOrderSettingsCard initial={jobOrderSettings} onDirtyChange={onDirtyChange} showWorkTime={showWorkTime} />}
+      {isOwner && <ShopSettingsCard onDirtyChange={onDirtyChange} />}
     </div>
   );
 };

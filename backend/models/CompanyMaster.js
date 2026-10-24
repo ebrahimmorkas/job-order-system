@@ -13,6 +13,7 @@ const auditPlugin = require('./plugins/auditPlugin');
 const cacheInvalidationPlugin = require('./plugins/cacheInvalidationPlugin');
 const redisKeys = require('../utils/redisKeys');
 const { VALID_STORAGE_PROVIDERS, ACCOUNT_NOTES_MAX_LENGTH, IMAGE_FORMAT_VALUES, MAX_IMAGE_UPLOAD_MB } = require('../constants/storageConstants');
+const { SERVICE_MESSAGE_MAX_LENGTH } = require('../constants/serviceStatusConstants');
 
 // The vendor's own storage accounts (storageCredentials below). Secrets are
 // encrypted with common.encryptSecret and only ever decrypted inside
@@ -218,6 +219,32 @@ const companyMasterSchema = new mongoose.Schema({
     isControlFeatureInLayoutOn: {
         type: Boolean,
         default: false
+    },
+
+    // ---- Maintenance and payment --------------------------------------------
+    // On: this vendor's app (owner and users, even the login page) shows the
+    // maintenance page, with maintenanceMessage when set.
+    underMaintenance: {
+        type: Boolean,
+        default: false
+    },
+    maintenanceMessage: {
+        type: String,
+        trim: true,
+        maxlength: SERVICE_MESSAGE_MAX_LENGTH,
+        default: null
+    },
+    // On: after logging in, the owner sees the payment page (with
+    // paymentMessage when set); users only "unavailable, contact your owner".
+    paymentNotDone: {
+        type: Boolean,
+        default: false
+    },
+    paymentMessage: {
+        type: String,
+        trim: true,
+        maxlength: SERVICE_MESSAGE_MAX_LENGTH,
+        default: null
     },
 
     // ---- Steps of assigned work ----------------------------------------------

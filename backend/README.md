@@ -58,6 +58,27 @@ for Controls: while the vendor's `isControlsFeatureOn` is off, only
 types). `GET /api/feature-access` returns `canFetchMastersForJobOrder` and
 `canFetchControlsForJobOrder` so the job order form knows what it gets.
 
+## Maintenance, payment and the shop closed
+
+Set in the database by you (the seller), except the shop, which the owner
+closes from Company Settings. Checked on every request after the login
+(`middlewares/requireServiceOpen.js`, `services/serviceStatusService.js`),
+which answers 503 with `data.block = { state, message, ... }`; the frontend
+then shows a full page instead of the app.
+
+| What | Where | Who is stopped | What they see |
+| --- | --- | --- | --- |
+| Maintenance for everyone | WebsiteMaster `underMaintenance` (+ optional `maintenanceMessage`) | everyone, also the login | "Under maintenance" with the message |
+| Maintenance for one vendor | CompanyMaster `underMaintenance` (+ optional `maintenanceMessage`) | that vendor, also the login | the same |
+| Payment not done | CompanyMaster `paymentNotDone` (+ optional `paymentMessage`) | that vendor after login | the owner: "Payment pending" with the message; users: "System unavailable, contact your owner" (never why) |
+| Shop closed | CompanySettings `shopClosed`, `shopClosedMessage`, `estimatedResumeTime` | that vendor's users (the owner keeps working, with a banner) | "Shop closed" with the message and, when set, when it opens again |
+
+With `estimatedResumeTime` the shop opens by itself at that time (the
+message and time are cleared); without it the shop stays closed until the
+owner opens it again. A background job (`services/serviceStatusWatcher.js`,
+every 15 s) notices changes made straight in the database, clears the cache
+and opens shops whose time has come. Messages are at most 500 characters.
+
 ## Masters
 
 A master is a vendor's own dropdown list for the job order form, e.g. "My
@@ -400,6 +421,9 @@ too (see Users logging in) - except Layout Master, which stays owner only.
 | Method | Path | Who |
 | --- | --- | --- |
 | GET | `/api/public/branding` | anyone - company name, login tagline, logo URL |
+| GET | `/api/public/status` | anyone - `{ block }`: maintenance before logging in, else null |
+| GET | `/api/service-status` | logged in - `{ block, shop }` (works while blocked; the owner gets the shop's message and time) |
+| PUT | `/api/service-status/shop` | owner - `{ shopClosed, shopClosedMessage, estimatedResumeTime }` (a future time or null) |
 | POST | `/api/auth/login` | anyone - username, email or phone + password |
 | POST | `/api/auth/refresh-token` | the refresh-token cookie |
 | POST | `/api/auth/logout` | the refresh-token cookie |

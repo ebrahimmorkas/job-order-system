@@ -81,6 +81,15 @@ const reportServerError = (status, payload) => {
   return reference;
 };
 
+// Notified when the backend says the app isn't open for this person (503 with
+// data.block - maintenance, payment, shop closed: backend
+// middlewares/requireServiceOpen.js). ServiceStatusProvider subscribes to it
+// and shows the page at once.
+let serviceBlockedHandler = null;
+export const onServiceBlocked = (handler) => {
+  serviceBlockedHandler = handler;
+};
+
 // Endpoints that must never trigger a refresh-and-retry: refreshing on a failed
 // login makes no sense (there's no session yet), and retrying the refresh call
 // itself on its own 401 would loop forever.
@@ -181,6 +190,8 @@ export const apiRequest = async (path, { method = 'GET', body, auth = true, head
     sessionExpiredHandler?.();
   }
 
+  if (response.status === 503 && payload?.data?.block) serviceBlockedHandler?.(payload.data.block);
+
   if (!response.ok || !payload?.success) {
     const message = payload?.message || `Request failed with status ${response.status}`;
     const reference = reportServerError(response.status, payload);
@@ -231,6 +242,7 @@ export const apiDownload = async (path, { auth = true, _isRetry = false } = {}) 
     } catch {
       // Non-JSON error body; fall back to the status text below
     }
+    if (response.status === 503 && payload?.data?.block) serviceBlockedHandler?.(payload.data.block);
     const reference = reportServerError(response.status, payload);
     throw new ApiError(payload?.message || `Request failed with status ${response.status}`, response.status, payload?.errors || null, reference);
   }

@@ -140,6 +140,16 @@ Each section's code is downloaded the first time it is opened
   and the default tax rate. Tabs keep what was typed; leaving with unsaved
   changes asks first.
 - An unknown host name shows "No account is set up for this domain".
+- **Maintenance, payment and the shop closed** (`features/serviceStatus`) -
+  when the backend answers 503 with a block, a full page replaces the app:
+  "Under maintenance" (also instead of the login page), "Payment pending"
+  for the owner or "System unavailable" for users, and "Shop closed" with
+  the owner's message and when it opens again. The page checks again every
+  30 seconds and opens the app by itself at the shop's time; "Check again"
+  checks at once. While the shop is closed the owner keeps working, with a
+  banner on every page and an "Open shop" button. The owner closes the shop
+  in Company Settings > General > Shop (message and an optional time to open
+  again; without a time it stays closed until opened by hand).
 
 ## Vendors in local development
 

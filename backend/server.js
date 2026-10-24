@@ -29,6 +29,9 @@ const layoutRoutes = require('./routes/layoutRoutes');
 const masterRoutes = require('./routes/masterRoutes');
 const accessRoutes = require('./routes/accessRoutes');
 const myWorkRoutes = require('./routes/myWorkRoutes');
+const serviceStatusRoutes = require('./routes/serviceStatusRoutes');
+const requireServiceOpen = require('./middlewares/requireServiceOpen');
+const serviceStatusWatcher = require('./services/serviceStatusWatcher');
 const storageProviderConfig = require('./config/storageProviderConfig');
 
 // Every model must carry the audit history (or be listed as exempt) - refuse
@@ -91,6 +94,11 @@ app.use('/api/public', publicRoutes);
 // below it unless they truly must be public.
 app.use('/api', authenticate);
 
+// Reachable while the app is blocked (maintenance, payment, shop closed) -
+// the blocked page asks here; everything below answers 503 then.
+app.use('/api/service-status', serviceStatusRoutes);
+app.use('/api', requireServiceOpen);
+
 app.use('/api/company-settings', companySettingsRoutes);
 app.use('/api/feature-access', featureAccessRoutes);
 app.use('/api/masters', masterRoutes);
@@ -109,6 +117,10 @@ app.use((req, res) => common.sendError(res, 404, `Route not found: ${req.method}
 // Must stay after every route: turns anything thrown outside a controller's
 // try/catch into an ErrorLog + the error-page 500 (or a 4xx for bad input).
 app.use(require('./middlewares/errorHandler'));
+
+// Maintenance / payment switched straight in the database take effect within
+// seconds (see the watcher).
+serviceStatusWatcher.start();
 
 const server = app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);

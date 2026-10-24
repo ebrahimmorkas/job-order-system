@@ -3,6 +3,7 @@ const auditPlugin = require('./plugins/auditPlugin');
 const cacheInvalidationPlugin = require('./plugins/cacheInvalidationPlugin');
 const redisKeys = require('../utils/redisKeys');
 const { VALID_STORAGE_PROVIDERS } = require('../constants/storageConstants');
+const { SERVICE_MESSAGE_MAX_LENGTH } = require('../constants/serviceStatusConstants');
 
 // Platform-wide switchboard - a single document for the whole website. A
 // feature works for a vendor only when it is on here AND in that vendor's
@@ -58,6 +59,20 @@ const websiteMasterSchema = mongoose.Schema({
     isStepFeatureOn: {
         type: Boolean,
         default: true
+    },
+
+    // ---- Maintenance -------------------------------------------------------
+    // On: every vendor's app (owners and users, even the login page) shows
+    // the maintenance page, with maintenanceMessage when set.
+    underMaintenance: {
+        type: Boolean,
+        default: false
+    },
+    maintenanceMessage: {
+        type: String,
+        trim: true,
+        maxlength: SERVICE_MESSAGE_MAX_LENGTH,
+        default: null
     },
 
     // ---- Storage ----------------------------------------------------------

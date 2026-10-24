@@ -10,12 +10,15 @@ const sendSuccess = (res, statusCode, message, data = null) => {
   return res.status(statusCode).json(payload);
 };
 
-const sendError = (res, statusCode, message, errors = null) => {
+// data: anything else the page needs to show the failure (e.g. the
+// maintenance page's block).
+const sendError = (res, statusCode, message, errors = null, data = null) => {
   // logException() may already have answered this request with a 500 (error
   // page + reference) - a second response would throw ERR_HTTP_HEADERS_SENT.
   if (res.headersSent) return;
   const payload = { success: false, message };
   if (errors) payload.errors = errors;
+  if (data) payload.data = data;
   return res.status(statusCode).json(payload);
 };
 
