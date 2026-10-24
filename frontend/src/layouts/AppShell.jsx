@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import Sidebar, { DEFAULT_NAV_ITEMS, filterNavItemsByFeatureAccess, filterNavItemsByAccess } from '../components/ui/Sidebar';
 import EmptyState from '../components/common/EmptyState';
 import Spinner from '../components/common/Spinner';
@@ -26,6 +26,18 @@ const PAGES = {
   layouts: lazyPage(() => import('../features/layouts/pages/LayoutsPage')),
   companySettings: lazyPage(() => import('../features/companySettings/pages/CompanySettingsPage')),
 };
+
+// The person's own choice of a folded menu, kept in this browser.
+const MENU_FOLDED_KEY = 'menuFolded';
+const readMenuFolded = () => {
+  try {
+    return localStorage.getItem(MENU_FOLDED_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+// Sections that need the whole width: the menu folds on entering them.
+const WIDE_SECTIONS = ['layouts'];
 
 /**
  * The logged-in layout: the sidebar (company name + logo from branding, the
@@ -56,6 +68,28 @@ const AppShell = () => {
     if (!isUnknown && !isAllowed) navigate('/', { replace: true });
   }, [isUnknown, isAllowed, navigate]);
 
+  // Folded by the person (kept), or - in a wide section - folded on entering
+  // it until they open it there; leaving goes back to their own choice.
+  const [isFoldedByChoice, setIsFoldedByChoice] = useState(readMenuFolded);
+  const isWide = WIDE_SECTIONS.includes(section?.key);
+  const [isFoldedInWide, setIsFoldedInWide] = useState(true);
+  const [lastIsWide, setLastIsWide] = useState(isWide);
+  if (lastIsWide !== isWide) {
+    setLastIsWide(isWide);
+    if (isWide) setIsFoldedInWide(true);
+  }
+  const isMenuFolded = isWide ? isFoldedInWide : isFoldedByChoice;
+  const toggleMenu = () => {
+    if (isWide) return setIsFoldedInWide(!isFoldedInWide);
+    setIsFoldedByChoice(!isFoldedByChoice);
+    try {
+      localStorage.setItem(MENU_FOLDED_KEY, isFoldedByChoice ? '0' : '1');
+    } catch {
+      // Not kept (private window); folding still works.
+    }
+    return undefined;
+  };
+
   const goHome = () => navigate('/');
   const Page = isAllowed && !isUnknown ? PAGES[section.key] : null;
 
@@ -75,6 +109,8 @@ const AppShell = () => {
         activeKey={isAllowed ? section.key : null}
         onNavigate={(key) => confirmLeave(() => navigate(DEFAULT_NAV_ITEMS.find((item) => item.key === key).path))}
         user={user}
+        isCollapsed={isMenuFolded}
+        onToggleCollapse={toggleMenu}
         // The next person to log in starts on the dashboard.
         onLogout={() => confirmLeave(() => {
           navigate('/', { replace: true });

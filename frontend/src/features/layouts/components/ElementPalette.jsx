@@ -10,13 +10,14 @@ const SHAPES = [
   { kind: 'table', label: 'Table', hint: 'Text or fields in cells' },
   { kind: 'logo', label: 'Company logo' },
 ];
+const JOB_ORDER_IMAGE = { kind: 'image', label: 'Job order image', hint: 'An image added to the job order: Image 1, Image 2...' };
 
 /**
  * What can go on the page, in groups: job order fields, masters, controls,
  * shapes. Drag an item onto the page, or click it to add it.
  *
  * @param {Object} props
- * @param {{ masters, controls, systemFields }} props.sources
+ * @param {{ masters, controls, systemFields, settings }} props.sources
  * @param {(item: { kind, field?, label }) => void} props.onAdd
  */
 const ElementPalette = ({ sources, onAdd }) => {
@@ -27,7 +28,7 @@ const ElementPalette = ({ sources, onAdd }) => {
     { title: 'Job order', items: sources.systemFields.map((f) => ({ kind: 'field', field: { source: 'system', key: f.key }, label: f.label })) },
     { title: 'Masters', items: sources.masters.map((m) => ({ kind: 'field', field: { source: 'master', refId: m._id }, label: m.name })) },
     { title: 'Controls', items: sources.controls.map((c) => ({ kind: 'field', field: { source: 'control', refId: c._id }, label: c.label })) },
-    { title: 'Shapes & more', items: SHAPES },
+    { title: 'Shapes & more', items: sources.settings?.canPlaceJobOrderImages ? [...SHAPES, JOB_ORDER_IMAGE] : SHAPES },
   ]
     .map((group) => ({ ...group, items: query ? group.items.filter((item) => item.label.toLowerCase().includes(query)) : group.items }))
     .filter((group) => group.items.length > 0);

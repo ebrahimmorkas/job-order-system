@@ -9,7 +9,7 @@ import ColorField from '../../../components/common/ColorField';
 import { CopyIcon, TrashIcon } from '../../../components/common/ActionIcons';
 import {
   CUSTOM_PAPER_MAX_MM, DEFAULT_STROKE, DEFAULT_STYLE, ELEMENT_LABELS, FONT_FAMILIES, FONT_SIZE_MAX, FONT_SIZE_MIN,
-  MIN_SIZE_MM, STROKE_WIDTH_MAX, TABLE_COLS_MAX, TABLE_ROWS_MAX,
+  IMAGE_FITS, IMAGE_NUMBER_MAX, MIN_SIZE_MM, elementName, STROKE_WIDTH_MAX, TABLE_COLS_MAX, TABLE_ROWS_MAX,
 } from '../layoutConstants';
 
 const LABEL_MAX_LENGTH = 60;
@@ -222,7 +222,7 @@ const PropertiesPanel = ({ element, paper, sources, resolve, canFormatText, onCh
     ...sources.controls.map((c) => ({ value: `control:${c._id}`, label: `Control: ${c.label}` })),
   ];
   const hasText = ['field', 'text', 'table'].includes(element.type);
-  const title = element.type === 'field' ? resolve(element.field).label : ELEMENT_LABELS[element.type];
+  const title = element.type === 'field' ? resolve(element.field).label : elementName(element, resolve);
 
   return (
     <div className="space-y-3">
@@ -265,6 +265,20 @@ const PropertiesPanel = ({ element, paper, sources, resolve, canFormatText, onCh
       )}
 
       {element.type === 'logo' && <p className="text-xs text-gray-500">Shows the logo from Company Settings, fitted inside the box.</p>}
+
+      {element.type === 'image' && (
+        <Section title="Image">
+          <NumberField
+            label="Image number"
+            min={1}
+            max={IMAGE_NUMBER_MAX}
+            value={element.imageNumber}
+            onChange={(value) => Number.isInteger(value) && onChange({ imageNumber: value }, 'imageNumber')}
+          />
+          <Dropdown label="Fit" aria-label="Image fit" size="sm" options={IMAGE_FITS} value={element.fit || 'contain'} onChange={(value) => onChange({ fit: value })} />
+          <p className="text-xs text-gray-500">Prints the job order's image of this number (1 = the first one added). Left empty when the job order has fewer images.</p>
+        </Section>
+      )}
 
       {hasText && canFormatText && <StyleFields style={element.style} onChange={onChange} />}
 

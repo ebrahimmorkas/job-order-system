@@ -31,8 +31,12 @@ const ELEMENT_TYPES = {
     RECTANGLE: 'rectangle',
     CIRCLE: 'circle',
     TABLE: 'table',
-    LOGO: 'logo'
+    LOGO: 'logo',
+    // One of the job order's own images: imageNumber 1 = its first image.
+    IMAGE: 'image'
 };
+// How a job order image sits in its box: all of it inside, or filling the box.
+const IMAGE_FITS = ['contain', 'cover'];
 const ELEMENT_TYPE_VALUES = Object.values(ELEMENT_TYPES);
 
 // Where a field's value comes from: a master, a control, or the job order /
@@ -80,6 +84,7 @@ module.exports = {
     CUSTOM_PAPER_MAX_MM,
     LABEL_DEFAULTS,
     ELEMENT_TYPES,
+    IMAGE_FITS,
     ELEMENT_TYPE_VALUES,
     FIELD_SOURCES,
     FIELD_SOURCE_VALUES,

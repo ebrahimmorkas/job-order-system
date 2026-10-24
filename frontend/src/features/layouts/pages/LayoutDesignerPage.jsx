@@ -9,7 +9,7 @@ import InputField from '../../../components/common/InputField';
 import { BackIcon } from '../../../components/common/ActionIcons';
 import { useToast } from '../../../components/common/Toast';
 import { useUnsavedChanges } from '../../../components/common/UnsavedChanges';
-import DesignerCanvas from '../components/DesignerCanvas';
+import DesignerCanvas, { ZOOM_MAX, ZOOM_MIN } from '../components/DesignerCanvas';
 import ElementPalette from '../components/ElementPalette';
 import PropertiesPanel from '../components/PropertiesPanel';
 import PaperSetup from '../components/PaperSetup';
@@ -18,7 +18,7 @@ import { useLayoutHistory } from '../useLayoutHistory';
 import { placeholderResolver } from '../fieldValues';
 import { EXPORT_FORMATS, exportPage } from '../exportLayout';
 import {
-  CUSTOM_PAPER, ELEMENTS_MAX, NAME_MAX_LENGTH, PX_PER_MM, createElement, describePaper, elementName, fitOnPage, newElementId, paperOf,
+  CUSTOM_PAPER, ELEMENTS_MAX, IMAGE_NUMBER_MAX, NAME_MAX_LENGTH, PX_PER_MM, createElement, describePaper, elementName, fitOnPage, newElementId, paperOf,
 } from '../layoutConstants';
 import * as layoutsApi from '../api/layoutsApi';
 
@@ -61,7 +61,8 @@ const Designer = ({ mode, initial, formData, onBack }) => {
   const { doc } = history;
   const [savedSnapshot, setSavedSnapshot] = useState(() => (mode === 'clone' ? null : JSON.stringify(toPayload({ ...initial, doc: history.doc }))));
   const [selectedId, setSelectedId] = useState(null);
-  const [zoomChoice, setZoomChoice] = useState('fit');
+  // Opens at real size, so text is readable; a bigger page scrolls in its area.
+  const [zoomChoice, setZoomChoice] = useState('1');
   const [areaWidth, setAreaWidth] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [exporting, setExporting] = useState(null);
@@ -82,15 +83,19 @@ const Designer = ({ mode, initial, formData, onBack }) => {
   const isDirty = snapshot !== savedSnapshot;
   const confirmLeave = useUnsavedChanges(isDirty && !isSaving);
 
-  // The page fills the area's width at "Fit".
+  // The page fills the area's width at "Fit" (the area's padding keeps the edges to stretch it).
   useEffect(() => {
     if (step !== 'design' || !areaRef.current) return undefined;
     const observer = new ResizeObserver(([entry]) => setAreaWidth(entry.contentRect.width));
     observer.observe(areaRef.current);
     return () => observer.disconnect();
   }, [step]);
-  const fitZoom = areaWidth > 0 ? Math.min(2, Math.max(0.2, (areaWidth - 48) / (paper.widthMm * PX_PER_MM))) : 0.5;
+  const fitZoom = areaWidth > 0 ? Math.min(2, Math.max(ZOOM_MIN, (areaWidth - 8) / (paper.widthMm * PX_PER_MM))) : 0.5;
   const zoom = zoomChoice === 'fit' ? fitZoom : Number(zoomChoice);
+  // A zoom made by stretching the page shows in the list too.
+  const zoomOptions = ZOOM_OPTIONS.some((option) => option.value === zoomChoice)
+    ? ZOOM_OPTIONS
+    : [...ZOOM_OPTIONS, { value: zoomChoice, label: `${Math.round(Number(zoomChoice) * 100)}%` }];
 
   const checkName = () => {
     const trimmed = name.trim();
@@ -112,7 +117,9 @@ const Designer = ({ mode, initial, formData, onBack }) => {
     if (doc.elements.length >= ELEMENTS_MAX) return toast.warning(`A layout can have at most ${ELEMENTS_MAX} items.`);
     const offset = (doc.elements.length % 10) * ADD_STEP_MM;
     const spot = at || { x: ADD_SPOT_MM + offset, y: ADD_SPOT_MM + offset };
-    const element = fitOnPage(createElement(item.kind, { ...spot, field: item.field, labelDefault }), paper);
+    // A new job order image takes the next number.
+    const imageNumber = Math.min(IMAGE_NUMBER_MAX, Math.max(0, ...doc.elements.filter((e) => e.type === 'image').map((e) => e.imageNumber)) + 1);
+    const element = fitOnPage(createElement(item.kind, { ...spot, field: item.field, labelDefault, imageNumber }), paper);
     history.change((d) => ({ ...d, elements: [...d.elements, element] }));
     setSelectedId(element.id);
     return areaRef.current?.focus({ preventScroll: true });
@@ -313,7 +320,7 @@ const Designer = ({ mode, initial, formData, onBack }) => {
           <Button variant="ghost" size="sm" onClick={history.undo} disabled={!history.canUndo} title="Undo (Ctrl+Z)">Undo</Button>
           <Button variant="ghost" size="sm" onClick={history.redo} disabled={!history.canRedo} title="Redo (Ctrl+Y)">Redo</Button>
           <div className="w-24">
-            <Dropdown size="sm" options={ZOOM_OPTIONS} value={zoomChoice} onChange={(value) => setZoomChoice(value)} aria-label="Zoom" />
+            <Dropdown size="sm" options={zoomOptions} value={zoomChoice} onChange={(value) => setZoomChoice(value)} aria-label="Zoom" />
           </div>
           <Menu align="right" width="w-48" trigger={<Button variant="outline" size="sm" loading={exporting !== null} loadingText="Exporting...">Export</Button>} items={exportItems} />
           <Button size="sm" onClick={save} loading={isSaving} loadingText="Saving...">{layoutId ? 'Save' : 'Create layout'}</Button>
@@ -355,6 +362,7 @@ const Designer = ({ mode, initial, formData, onBack }) => {
               }}
               onDropItem={(item, x, y) => addItem(item, { x, y })}
               zoom={zoom}
+              onZoomChange={(value) => setZoomChoice(String(Math.min(ZOOM_MAX, value)))}
               resolve={resolve}
               canFormatText={canFormatText}
               logoUrl={formData.company.logoUrl}

@@ -8,14 +8,16 @@ const common = require('../utils/common');
 const { LIVE_STATUSES } = require('../constants/masterConstants');
 const { SHORT_NAME_PLACES } = require('../constants/jobOrderConstants');
 const { jobOrderSettingsOf } = require('./companySettingsService');
+const { FEATURE_FLAGS } = require('../constants/featureConstants');
 const {
-    PAPER_SIZES, CUSTOM_PAPER, ELEMENT_TYPES, FIELD_SOURCES, SYSTEM_FIELDS, SYSTEM_FIELD_KEYS
+    PAPER_SIZES, CUSTOM_PAPER, ELEMENT_TYPES, IMAGE_FITS, FIELD_SOURCES, SYSTEM_FIELDS, SYSTEM_FIELD_KEYS
 } = require('../constants/layoutConstants');
 
 // The vendor's print layouts (Layout Master). Every function is scoped by
 // vendorId. A layout is a page (paper size) with elements placed on it in
 // millimetres: fields (masters, controls, job order / company details), text,
-// lines, rectangles, circles, tables and the logo. Printing a job order fills
+// lines, rectangles, circles, tables, the logo and the job order's own images
+// ("Image 1", "Image 2"... - one image each). Printing a job order fills
 // the fields in (the frontend does it from the job order itself).
 //
 // Text formatting is kept only while CompanyMaster.isControlFeatureInLayoutOn
@@ -89,6 +91,7 @@ const checkLayout = ({ data, sources, settings }) => {
             }
             const element = { ...source };
             if (element.type === ELEMENT_TYPES.LINE && !element.direction) element.direction = 'horizontal';
+            if (element.type === ELEMENT_TYPES.IMAGE && !element.fit) element.fit = IMAGE_FITS[0];
             if (!settings.canFormatText) delete element.style;
             elements.push(element);
         }
@@ -144,15 +147,19 @@ const companyByCountryOf = async (companySettingsData) => {
 
 // ---- the designer ---------------------------------------------------------------
 
-// GET /api/layouts/form-data - what can be placed on a layout.
-const getFormData = async ({ vendorId, companyMasterData, companySettingsData }) => {
+// GET /api/layouts/form-data - what can be placed on a layout. Job order
+// images are offered only while image upload is on (saved ones still print).
+const getFormData = async ({ vendorId, websiteMasterData, companyMasterData, companySettingsData }) => {
     try {
         const sources = await sourcesOf(vendorId);
         return common.returnResult(true, 200, 'Layout form fetched successfully.', {
             ...sources,
             systemFields: SYSTEM_FIELD_KEYS.map((key) => ({ key, label: SYSTEM_FIELDS[key] })),
             paperSizes: Object.entries(PAPER_SIZES).map(([key, size]) => ({ key, ...size })),
-            settings: settingsOf(companyMasterData),
+            settings: {
+                ...settingsOf(companyMasterData),
+                canPlaceJobOrderImages: websiteMasterData?.[FEATURE_FLAGS.IMAGE_UPLOAD] === true && companyMasterData?.[FEATURE_FLAGS.IMAGE_UPLOAD] === true
+            },
             limits: limitsOf(companyMasterData),
             company: { name: companySettingsData?.companyName || '', logoUrl: companySettingsData?.logo?.url || null }
         });

@@ -15,6 +15,7 @@ const respond = (res, result, meta) => {
 // The vendor's cached documents (text formatting switch, limit, company).
 const vendorData = (req) => ({
     vendorId: req.vendorId,
+    websiteMasterData: req.websiteMasterData,
     companyMasterData: req.companyMasterData,
     companySettingsData: req.companySettingsData
 });

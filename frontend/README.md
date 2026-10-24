@@ -32,7 +32,7 @@ tab, stays on it:
 | `/job-orders`, `/job-orders/new`, `/job-orders/:id`, `/job-orders/:id/edit`, `/job-orders/:id/print` | Job Orders |
 | `/masters`, `/controls`, `/roles`, `/layouts` (+ `/new`, `/:id/edit`, `/:id/copy`) | list, create, edit, copy |
 | `/users`, `/users/new`, `/users/:id/edit` | Users |
-| `/company-settings`, `/company-settings/tax` | Company Settings tabs |
+| `/company-settings`, `/company-settings/job-orders`, `/company-settings/shop`, `/company-settings/tax` | Company Settings tabs |
 
 Logged out, any address shows the login page and logging in opens it.
 A section the person can't open (or a switched-off feature) goes to the
@@ -49,7 +49,9 @@ Each section's code is downloaded the first time it is opened
   title, and the logo the tab icon. Without a logo, the first letter of the
   name is shown instead.
 - **After login** - the sidebar (company name + logo, the user, logout) and
-  the dashboard. Menu items of features switched off for the vendor are
+  the dashboard. On a computer the sidebar folds down to its icons with the
+  button at its top (kept in the browser); Layout Master folds it by itself
+  for the room, and leaving it brings back the person's own choice. Menu items of features switched off for the vendor are
   hidden; items whose page is not built yet show "coming soon". What the
   person may do is loaded once before the pages show (`features/access`,
   `useAccess().can(module, permission)`): a user sees only the modules their
@@ -113,7 +115,8 @@ Each section's code is downloaded the first time it is opened
   with a default. "Include this price in tax" shows only while tax is
   available (the tax feature on and one country's tax details filled in).
 - **Job Orders** - the list (newest first, search by number or customer
-  place, view / edit / cancel) and the job order form: the number (only when
+  place, view / print / edit / cancel; Back on a print opened from the list
+  returns to the list) and the job order form: the number (only when
   typed by hand), the customer address (only when asked; the country is
   locked when the vendor has one), every master as a searchable dropdown
   (multi-select where allowed, default picked, short name when chosen in
@@ -137,18 +140,26 @@ Each section's code is downloaded the first time it is opened
   layout: name, paper (A3 / A4 / A5 / Letter / Legal portrait or landscape, or
   a custom width and height) and which labels show by default. Then the
   designer: items on the left (job order fields, masters, controls, text,
-  line, rectangle, circle, table, logo - drag onto the page or click), the
-  page in the middle (move and resize in 1 mm steps, Alt for finer; arrows,
-  Delete, Ctrl+Z / Y / D; zoom), and the selected item's settings on the
+  line, rectangle, circle, table, logo and - with image upload on - "Job
+  order image": Image 1, Image 2... each prints that image of the job order,
+  so a layout with 2 prints 2 even when the job order has 4 - drag onto the
+  page or click), the page in the middle (opens at real size; move and resize
+  in 1 mm steps, Alt for finer; arrows, Delete, Ctrl+Z / Y / D; zoom, or drag
+  any of the page's 4 edges to make it bigger or smaller on screen - a page
+  bigger than its area scrolls inside it; the selected item shows how far it
+  is from the left, right, top and bottom of the page, or of the table it
+  sits in), and the selected item's settings on the
   right (place and size, label on / off and its text, table cells, line and
   fill, and - when allowed - font, size, bold, italic, underline, alignment,
   colour). Export downloads the template as PDF, PNG or JPEG. Leaving with
   unsaved changes asks first.
 - **Company Settings** - tabs: General (company name, login tagline, logo -
-  the menu and browser tab update at once - and Job orders: automatic
-  numbers, ask the customer address, where to use master short names and -
-  with Layout Master and RBAC on - what the printed "Work given" field shows:
-  who does it, start date, due time, step and %, hold reason) and Tax (only with the tax feature
+  the menu and browser tab update at once), Job Orders (automatic numbers,
+  ask the customer address, where to use master short names, when the work
+  time starts with steps on, and - with Layout Master and RBAC on - what the
+  printed "Work given" field shows: who does it, start date, due time, step
+  and %, hold reason), Shop (the owner only: close and open the shop) and
+  Tax (only with the tax feature
   on): one form per assigned country - business address with state / city
   dropdowns, "I am registered for GST / VAT" with that country's own fields,
   and the default tax rate. Tabs keep what was typed; leaving with unsaved
@@ -172,7 +183,7 @@ Each section's code is downloaded the first time it is opened
   30 seconds and opens the app by itself at the shop's time; "Check again"
   checks at once. While the shop is closed the owner keeps working, with a
   banner on every page and an "Open shop" button. The owner closes the shop
-  in Company Settings > General > Shop (message and an optional time to open
+  in Company Settings > Shop (message and an optional time to open
   again; without a time it stays closed until opened by hand).
 
 ## Vendors in local development

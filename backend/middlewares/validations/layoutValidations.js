@@ -1,11 +1,12 @@
 const Joi = require('joi');
 const {
     LAYOUT_NAME_MIN_LENGTH, LAYOUT_NAME_MAX_LENGTH, LAYOUT_LIST_MAX_PAGE_SIZE, PAPER_SIZE_VALUES, CUSTOM_PAPER,
-    ORIENTATIONS, CUSTOM_PAPER_MIN_MM, CUSTOM_PAPER_MAX_MM, LABEL_DEFAULTS, ELEMENT_TYPES, ELEMENT_TYPE_VALUES,
+    ORIENTATIONS, CUSTOM_PAPER_MIN_MM, CUSTOM_PAPER_MAX_MM, LABEL_DEFAULTS, ELEMENT_TYPES, ELEMENT_TYPE_VALUES, IMAGE_FITS,
     FIELD_SOURCES, FIELD_SOURCE_VALUES, SYSTEM_FIELD_KEYS, FONT_FAMILIES, TEXT_ALIGNS, FONT_SIZE_MIN, FONT_SIZE_MAX,
     STROKE_WIDTH_MAX, ELEMENTS_MAX, TEXT_MAX_LENGTH, LABEL_MAX_LENGTH, TABLE_ROWS_MAX, TABLE_COLS_MAX,
     COLOR_PATTERN, ELEMENT_ID_PATTERN
 } = require('../../constants/layoutConstants');
+const { MAX_IMAGES_PER_REQUEST } = require('../../constants/storageConstants');
 
 // Whether the masters / controls exist, ids are unique and every element is
 // on the page are checked in services/layoutService.js.
@@ -73,7 +74,10 @@ const element = Joi.object({
     direction: onlyFor([ELEMENT_TYPES.LINE], Joi.string().valid('horizontal', 'vertical')),
     fill: onlyFor([ELEMENT_TYPES.RECTANGLE, ELEMENT_TYPES.CIRCLE], color('Fill colour').allow(null)),
     radius: onlyFor([ELEMENT_TYPES.RECTANGLE], Joi.number().min(0).max(100).precision(2).label('Corner radius')),
-    table: requiredFor([ELEMENT_TYPES.TABLE], table)
+    table: requiredFor([ELEMENT_TYPES.TABLE], table),
+    imageNumber: requiredFor([ELEMENT_TYPES.IMAGE], Joi.number().integer().min(1).max(MAX_IMAGES_PER_REQUEST).label('Image number')),
+    // 'contain' when left out (the service sets it).
+    fit: onlyFor([ELEMENT_TYPES.IMAGE], Joi.string().valid(...IMAGE_FITS).label('Image fit'))
 }).label('Element');
 
 const paper = Joi.object({

@@ -35,8 +35,9 @@ const printCss = (paper) => `
  * @param {Object} props
  * @param {string} props.jobOrderId
  * @param {() => void} props.onBack
+ * @param {string} [props.backLabel]
  */
-const JobOrderPrintPage = ({ jobOrderId, onBack }) => {
+const JobOrderPrintPage = ({ jobOrderId, onBack, backLabel = 'Back to the job order' }) => {
   const toast = useToast();
   const [jobOrder, setJobOrder] = useState(null);
   const [layouts, setLayouts] = useState(null);
@@ -84,10 +85,11 @@ const JobOrderPrintPage = ({ jobOrderId, onBack }) => {
   }, [hasPreview]);
 
   const resolve = useMemo(() => (hasPreview ? jobOrderResolver(jobOrder, printData) : null), [hasPreview, jobOrder, printData]);
+  const images = useMemo(() => (jobOrder?.images || []).map((image) => image.url), [jobOrder]);
 
   const backLink = (
     <button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 cursor-pointer">
-      <BackIcon className="w-4 h-4" /> Back to the job order
+      <BackIcon className="w-4 h-4" /> {backLabel}
     </button>
   );
 
@@ -127,6 +129,7 @@ const JobOrderPrintPage = ({ jobOrderId, onBack }) => {
       resolve={resolve}
       canFormatText={printData.settings.canFormatText}
       logoUrl={printData.company.logoUrl}
+      images={images}
     />
   );
 
@@ -181,6 +184,7 @@ const JobOrderPrintPage = ({ jobOrderId, onBack }) => {
             resolve={resolve}
             canFormatText={printData.settings.canFormatText}
             logoUrl={printData.company.logoUrl}
+            images={images}
           />
         </div>,
         document.body,

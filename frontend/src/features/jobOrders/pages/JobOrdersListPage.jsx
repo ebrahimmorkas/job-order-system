@@ -10,7 +10,7 @@ import Pagination from '../../../components/common/Pagination';
 import EmptyState from '../../../components/common/EmptyState';
 import ConfirmDialog from '../../../components/common/ConfirmDialog';
 import IconButton from '../../../components/common/IconButton';
-import { ViewIcon, EditIcon, TrashIcon, PlusIcon } from '../../../components/common/ActionIcons';
+import { ViewIcon, EditIcon, PrintIcon, TrashIcon, PlusIcon } from '../../../components/common/ActionIcons';
 import { useToast } from '../../../components/common/Toast';
 import { useDebouncedValue } from '../../../utils/useDebouncedValue';
 import { useAccess } from '../../access/hooks/useAccess';
@@ -23,14 +23,16 @@ const formatDate = (value) => new Date(value).toLocaleDateString('en-IN', { day:
 
 /**
  * The vendor's job orders, newest first: search by number or customer
- * place, page through, view, edit and cancel (each only with its permission).
+ * place, page through, view, print, edit and cancel (each only with its
+ * permission; print also needs Layout Master).
  *
  * @param {Object} props
  * @param {() => void} props.onCreate
  * @param {(id: string) => void} props.onView
  * @param {(id: string) => void} props.onEdit
+ * @param {((id: string) => void)|null} props.onPrint - null while Layout Master is off
  */
-const JobOrdersListPage = ({ onCreate, onView, onEdit }) => {
+const JobOrdersListPage = ({ onCreate, onView, onEdit, onPrint }) => {
   const toast = useToast();
   const { can } = useAccess();
   const canCreate = can('jobOrders', 'create');
@@ -151,10 +153,11 @@ const JobOrdersListPage = ({ onCreate, onView, onEdit }) => {
       key: 'actions',
       label: 'Actions',
       align: 'right',
-      width: '130px',
+      width: '160px',
       render: (jobOrder) => (
         <div className="flex justify-end gap-0.5">
           {canOpen && <IconButton label={`View ${jobOrder.jobOrderNumber}`} icon={ViewIcon} onClick={() => onView(jobOrder._id)} />}
+          {canOpen && onPrint && <IconButton label={`Print ${jobOrder.jobOrderNumber}`} icon={PrintIcon} onClick={() => onPrint(jobOrder._id)} />}
           {canEdit && <IconButton label={`Edit ${jobOrder.jobOrderNumber}`} icon={EditIcon} onClick={() => onEdit(jobOrder._id)} />}
           {canCancel && <IconButton label={`Cancel ${jobOrder.jobOrderNumber}`} icon={TrashIcon} variant="danger" onClick={() => setToCancel(jobOrder)} />}
         </div>

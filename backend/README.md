@@ -386,8 +386,12 @@ designer; any logged-in user can print a job order with an active one.
   number, date, customer address, subtotal, tax, total, company name,
   address, tax numbers, work given; `showLabel`, `labelText`), `text`, `line`,
   `rectangle`, `circle`, `table` (up to 30 x 10 cells, each typed text or
-  a field) and `logo` (the Company Settings logo). Every element must be on
-  the page and every master / control must still exist.
+  a field), `logo` (the Company Settings logo) and `image` (one of the job
+  order's images: `imageNumber` 1 = its first, `fit` `contain` / `cover`;
+  empty when the job order has fewer). Every element must be on the page and
+  every master / control must still exist. The form-data's
+  `settings.canPlaceJobOrderImages` (image upload on) says whether the
+  designer offers `image`.
 - Text `style` (font, size, bold, italic, underline, alignment, colour) is
   kept only while CompanyMaster `isControlFeatureInLayoutOn` is on.
 - The first layout (or the first while none is the default) becomes the

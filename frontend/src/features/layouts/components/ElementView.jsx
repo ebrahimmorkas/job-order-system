@@ -59,9 +59,10 @@ const TableView = ({ element, resolve, canFormatText }) => {
  * @param {(field) => { label, value }} props.resolve - From fieldValues.js
  * @param {boolean} props.canFormatText
  * @param {string|null} props.logoUrl
- * @param {boolean} [props.isDesigner] - Shows a box where nothing would print (no logo)
+ * @param {string[]|null} [props.images] - The job order's image URLs (null in the designer)
+ * @param {boolean} [props.isDesigner] - Shows a box where nothing would print (no logo, no image)
  */
-const ElementView = ({ element, resolve, canFormatText, logoUrl, isDesigner = false }) => {
+const ElementView = ({ element, resolve, canFormatText, logoUrl, images = null, isDesigner = false }) => {
   switch (element.type) {
     case 'field':
     case 'text': {
@@ -103,6 +104,21 @@ const ElementView = ({ element, resolve, canFormatText, logoUrl, isDesigner = fa
           Logo (none uploaded)
         </div>
       ) : null;
+    case 'image': {
+      // A job order with fewer images leaves the box empty.
+      const url = images?.[element.imageNumber - 1];
+      if (url) return <img src={url} alt={`Job order image ${element.imageNumber}`} crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: element.fit || 'contain' }} />;
+      return isDesigner ? (
+        <div className="flex h-full w-full flex-col items-center justify-center gap-1 border border-dashed border-gray-400 bg-gray-50 text-[9pt] text-gray-500 text-center">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ width: '6mm', height: '6mm' }} aria-hidden="true">
+            <rect x="3" y="4.5" width="18" height="15" rx="2" />
+            <circle cx="8.5" cy="9.5" r="1.5" />
+            <path d="M21 15.5l-5-5L5 19.5" />
+          </svg>
+          Job order image {element.imageNumber}
+        </div>
+      ) : null;
+    }
     default:
       return null;
   }

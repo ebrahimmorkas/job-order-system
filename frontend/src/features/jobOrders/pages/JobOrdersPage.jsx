@@ -25,7 +25,7 @@ const JobOrderPrintPage = lazy(() => import('./JobOrderPrintPage'));
 const JobOrdersPage = ({ featureAccess, basePath, segments }) => {
   const toast = useToast();
   const { can } = useAccess();
-  const { navigate } = useRouter();
+  const { navigate, state } = useRouter();
   const canPrint = featureAccess?.isLayoutMasterFeatureOn !== false;
   const screen = screenOf(segments, { view: true, actions: { edit: 'edit', ...(canPrint ? { print: 'print' } : {}) } });
 
@@ -40,6 +40,8 @@ const JobOrdersPage = ({ featureAccess, basePath, segments }) => {
         onCreate={() => navigate(`${basePath}/new`)}
         onView={openView}
         onEdit={(id) => navigate(`${basePath}/${id}/edit`)}
+        // Printed from the list: Back returns to the list.
+        onPrint={canPrint ? (id) => navigate(`${basePath}/${id}/print`, { state: { from: 'list' } }) : null}
       />
     );
   }
@@ -59,7 +61,9 @@ const JobOrdersPage = ({ featureAccess, basePath, segments }) => {
   if (screen.mode === 'print') {
     return (
       <Suspense fallback={<div className="py-24 flex justify-center"><Spinner size="lg" /></div>}>
-        <JobOrderPrintPage key={screen.id} jobOrderId={screen.id} onBack={() => openView(screen.id)} />
+        {state?.from === 'list'
+          ? <JobOrderPrintPage key={screen.id} jobOrderId={screen.id} onBack={backToList} backLabel="Back to job orders" />
+          : <JobOrderPrintPage key={screen.id} jobOrderId={screen.id} onBack={() => openView(screen.id)} />}
       </Suspense>
     );
   }

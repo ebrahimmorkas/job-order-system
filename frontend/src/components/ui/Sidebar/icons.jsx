@@ -81,6 +81,21 @@ export const CloseIcon = (props) => (
   </svg>
 );
 
+// A panel with an arrow: fold the menu away / bring it back.
+export const CollapseIcon = (props) => (
+  <svg {...base} {...props}>
+    <rect x="3.75" y="4.5" width="16.5" height="15" rx="2" />
+    <path d="M9 4.5v15M15.75 9.75L13.5 12l2.25 2.25" />
+  </svg>
+);
+
+export const ExpandIcon = (props) => (
+  <svg {...base} {...props}>
+    <rect x="3.75" y="4.5" width="16.5" height="15" rx="2" />
+    <path d="M9 4.5v15M13.5 9.75L15.75 12 13.5 14.25" />
+  </svg>
+);
+
 export const LogoutIcon = (props) => (
   <svg {...base} {...props}>
     <path d="M8.25 9V5.25A2.25 2.25 0 0110.5 3h6a2.25 2.25 0 012.25 2.25v13.5A2.25 2.25 0 0116.5 21h-6a2.25 2.25 0 01-2.25-2.25V15" />

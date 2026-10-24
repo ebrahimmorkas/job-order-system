@@ -3,12 +3,8 @@ import InputField from '../../../components/common/InputField';
 import Button from '../../../components/common/Buttons';
 import Card from '../../../components/common/Card';
 import Alert from '../../../components/common/Alert';
-import Spinner from '../../../components/common/Spinner';
 import { useToast } from '../../../components/common/Toast';
 import { useBranding } from '../../branding/hooks/useBranding';
-import JobOrderSettingsCard from './JobOrderSettingsCard';
-import ShopSettingsCard from './ShopSettingsCard';
-import { useAccess } from '../../access/hooks/useAccess';
 import * as companySettingsApi from '../api/companySettingsApi';
 
 const COMPANY_NAME_MAX_LENGTH = 100;
@@ -18,50 +14,24 @@ const LOGO_TYPES = 'image/jpeg,image/png,image/webp,image/gif';
 
 /**
  * Company Settings > General: the company name and login tagline (saved
- * together), the logo (uploaded as soon as it is picked) and the job order
- * settings. The sidebar, login page and browser tab show the change at once.
+ * together) and the logo (uploaded as soon as it is picked). The sidebar,
+ * login page and browser tab show the change at once.
  *
  * @param {Object} props
+ * @param {{ companyName: string|null, loginTagline: string|null, logoUrl: string|null }} props.initial
  * @param {(key: string, isDirty: boolean) => void} props.onDirtyChange
- * @param {boolean} [props.showWorkTime] - Ask when the work time starts (steps on)
- * @param {boolean} [props.showPrintWork] - Ask what printed work shows (layouts and RBAC on)
  */
-const GeneralSettingsTab = ({ onDirtyChange, showWorkTime = false, showPrintWork = false }) => {
+const GeneralSettingsTab = ({ initial, onDirtyChange }) => {
   const toast = useToast();
   const { updateBranding } = useBranding();
-  // Closing the shop: the owner only (a user would lock themselves out).
-  const isOwner = useAccess().access.isOwner;
   const fileInputRef = useRef(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
-  const [saved, setSaved] = useState({ companyName: '', loginTagline: '' });
+  const [saved, setSaved] = useState(() => ({ companyName: initial.companyName || '', loginTagline: initial.loginTagline || '' }));
   const [fields, setFields] = useState(saved);
-  const [logoUrl, setLogoUrl] = useState(null);
-  const [jobOrderSettings, setJobOrderSettings] = useState(null);
+  const [logoUrl, setLogoUrl] = useState(initial.logoUrl);
   const [errors, setErrors] = useState({});
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [logoError, setLogoError] = useState('');
-
-  useEffect(() => {
-    const controller = new AbortController();
-    companySettingsApi
-      .getGeneralSettings({ signal: controller.signal })
-      .then(({ settings }) => {
-        const loaded = { companyName: settings.companyName || '', loginTagline: settings.loginTagline || '' };
-        setSaved(loaded);
-        setFields(loaded);
-        setLogoUrl(settings.logoUrl);
-        setJobOrderSettings(settings.jobOrder);
-        setIsLoading(false);
-      })
-      .catch((err) => {
-        if (err?.name === 'AbortError') return;
-        setLoadError(err.message);
-        setIsLoading(false);
-      });
-    return () => controller.abort();
-  }, []);
 
   const isDirty = fields.companyName !== saved.companyName || fields.loginTagline !== saved.loginTagline;
   useEffect(() => { onDirtyChange('general', isDirty); }, [isDirty, onDirtyChange]);
@@ -114,9 +84,6 @@ const GeneralSettingsTab = ({ onDirtyChange, showWorkTime = false, showPrintWork
     }
   };
 
-  if (isLoading) return <div className="py-16 flex justify-center"><Spinner size="lg" /></div>;
-  if (loadError) return <Alert variant="error">{loadError}</Alert>;
-
   return (
     <div className="space-y-6">
       <form onSubmit={handleSubmit} noValidate>
@@ -167,9 +134,6 @@ const GeneralSettingsTab = ({ onDirtyChange, showWorkTime = false, showPrintWork
         </div>
         {logoError && <p className="mt-3 text-sm text-red-600" role="alert">{logoError}</p>}
       </Card>
-
-      {jobOrderSettings && <JobOrderSettingsCard initial={jobOrderSettings} onDirtyChange={onDirtyChange} showWorkTime={showWorkTime} showPrintWork={showPrintWork} />}
-      {isOwner && <ShopSettingsCard onDirtyChange={onDirtyChange} />}
     </div>
   );
 };

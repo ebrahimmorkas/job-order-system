@@ -16,6 +16,8 @@ export const TABLE_COLS_MAX = 10;
 export const FONT_SIZE_MIN = 6;
 export const FONT_SIZE_MAX = 72;
 export const STROKE_WIDTH_MAX = 10;
+/** Highest job order image number (the backend's MAX_IMAGES_PER_REQUEST). */
+export const IMAGE_NUMBER_MAX = 50;
 /** Smallest item side in the designer. */
 export const MIN_SIZE_MM = 2;
 
@@ -44,14 +46,23 @@ export const ELEMENT_LABELS = {
   circle: 'Circle',
   table: 'Table',
   logo: 'Company logo',
+  image: 'Job order image',
 };
+
+export const IMAGE_FITS = [
+  { value: 'contain', label: 'Whole image inside the box' },
+  { value: 'cover', label: 'Fill the box (edges may be cut)' },
+];
 
 /** The type a palette item carries while dragged onto the page. */
 export const PALETTE_DRAG_TYPE = 'application/x-layout-item';
 
-/** "Field: Customer address", "Rectangle". */
-export const elementName = (element, resolve) =>
-  element.type === 'field' ? `Field: ${resolve(element.field).label}` : ELEMENT_LABELS[element.type];
+/** "Field: Customer address", "Job order image 2", "Rectangle". */
+export const elementName = (element, resolve) => {
+  if (element.type === 'field') return `Field: ${resolve(element.field).label}`;
+  if (element.type === 'image') return `${ELEMENT_LABELS.image} ${element.imageNumber}`;
+  return ELEMENT_LABELS[element.type];
+};
 
 // Job order / company fields that show their label when dropped.
 const LABELLED_SYSTEM_FIELDS = ['jobOrderNumber', 'jobOrderDate', 'subtotal', 'taxSummary', 'total'];
@@ -83,9 +94,10 @@ export const newElementId = () => `el${Date.now().toString(36)}${(nextId++).toSt
 
 /**
  * A new element of a kind, at x / y (mm), at its default size.
- * kind: 'field' (with field), 'text', 'line', 'rectangle', 'circle', 'table', 'logo'.
+ * kind: 'field' (with field), 'text', 'line', 'rectangle', 'circle', 'table', 'logo',
+ * 'image' (with imageNumber).
  */
-export const createElement = (kind, { x = 10, y = 10, field = null, labelDefault = 'none' } = {}) => {
+export const createElement = (kind, { x = 10, y = 10, field = null, labelDefault = 'none', imageNumber = 1 } = {}) => {
   const base = { id: newElementId(), type: kind, x, y };
   switch (kind) {
     case 'field':
@@ -108,6 +120,8 @@ export const createElement = (kind, { x = 10, y = 10, field = null, labelDefault
       };
     case 'logo':
       return { ...base, width: 40, height: 20 };
+    case 'image':
+      return { ...base, width: 50, height: 40, imageNumber, fit: 'contain' };
     default:
       throw new Error(`Unknown element kind: ${kind}`);
   }
