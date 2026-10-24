@@ -1,4 +1,4 @@
-const jwt = require("jsonwebtoken");
+const { verifyAccessToken } = require("../utils/token");
 const User = require("../models/User");
 const { sendError } = require("../utils/common");
 const { logException } = require("../utils/logger");
@@ -14,12 +14,13 @@ const authenticate = async (req, res, next) => {
 
     let decoded;
     try {
-      decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+      decoded = verifyAccessToken(token);
     } catch (err) {
       return sendError(res, 401, "Please Login Again");
     }
 
     // Runs on every request: only the three fields it needs, as a plain object.
+    if (!decoded.userId) return sendError(res, 401, "Please Login Again");
     const user = await User.findById(decoded.userId).select("role status vendorId").lean();
 
     if (!user || user.status === "D")

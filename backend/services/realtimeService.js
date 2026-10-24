@@ -2,6 +2,8 @@ const { Server } = require('socket.io');
 const Vendor = require('../models/Vendor');
 const User = require('../models/User');
 const { verifyAccessToken } = require('../utils/token');
+// Live updates carry encoded ids, like every response.
+const { encodeIds } = require('../utils/idEncryption');
 const logger = require('../utils/logger');
 const { ROLES } = require('../constants/roleConstants');
 
@@ -37,7 +39,7 @@ const authenticateSocket = async (socket, next) => {
         } catch {
             decoded = null;
         }
-        if (!decoded) return next(new Error('unauthorized'));
+        if (!decoded?.userId) return next(new Error('unauthorized'));
 
         const [vendor, user] = await Promise.all([
             Vendor.findOne({ domain, status: 'A' }).select('_id').lean(),
@@ -76,7 +78,7 @@ const start = (server) => {
 const toUsers = (userIds, event, data) => {
     try {
         const targets = [...new Set(userIds.map(String))].map(rooms.user);
-        if (io && targets.length > 0) io.to(targets).emit(event, data);
+        if (io && targets.length > 0) io.to(targets).emit(event, encodeIds(data));
     } catch (err) {
         throw err;
     }
@@ -84,7 +86,7 @@ const toUsers = (userIds, event, data) => {
 
 const toOwners = (vendorId, event, data) => {
     try {
-        if (io) io.to(rooms.owners(vendorId)).emit(event, data);
+        if (io) io.to(rooms.owners(vendorId)).emit(event, encodeIds(data));
     } catch (err) {
         throw err;
     }
@@ -92,7 +94,7 @@ const toOwners = (vendorId, event, data) => {
 
 const toVendor = (vendorId, event, data) => {
     try {
-        if (io) io.to(rooms.vendor(vendorId)).emit(event, data);
+        if (io) io.to(rooms.vendor(vendorId)).emit(event, encodeIds(data));
     } catch (err) {
         throw err;
     }

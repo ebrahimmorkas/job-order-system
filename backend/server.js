@@ -16,6 +16,7 @@ const { requestContext } = require('./middlewares/requestContext');
 const vendorDetection = require('./middlewares/vendorDetection');
 const ensureVendorDataCached = require('./middlewares/ensureVendorDataCached');
 const authenticate = require('./middlewares/authenticate');
+const idEncryption = require('./middlewares/idEncryption');
 // Routes
 const authRoutes = require('./routes/authRoutes');
 const publicRoutes = require('./routes/publicRoutes');
@@ -80,6 +81,10 @@ app.use(storageProviderConfig.local.baseUrl, express.static(storageProviderConfi
 
 app.use(express.json({ limit: '100kb' }));
 app.use(cookieParser(process.env.COOKIE_SECRET));
+
+// Ids in and out are encoded: decoded here before every route, encoded in
+// every response (see utils/idEncryption.js).
+app.use(idEncryption);
 
 // Apply middlewares to all routes
 app.use(vendorDetection);

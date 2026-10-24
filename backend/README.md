@@ -10,6 +10,29 @@ cp .env.example .env   # then fill it in - never commit .env
 npm run dev            # http://localhost:5000, restarts on file changes
 ```
 
+## Ids are encrypted
+
+No raw MongoDB id ever reaches a page: every id in a JSON response, a live
+update (socket.io) or a login token is encoded with `common.encodeId`
+(AES-256-CBC with `ID_ENCRYPTION_KEY` / `ID_ENCRYPTION_IV` from `.env` - the
+same id always gives the same string, so links keep working). Pages send
+those encoded ids back; `middlewares/idEncryption.js` (mounted before every
+route) decodes them in the URL, the query and the body, and
+`parseMultipartData` does the same for the JSON of a multipart request. So
+validations, controllers and services only ever see real ids and need no
+changes. The rules are in `utils/idEncryption.js`:
+
+- out: ObjectIds anywhere, 24-hex strings under id keys (`_id`, `id`,
+  `ids`, `...Id`, `...Ids`), object keys that are ids, and the ids inside
+  field error names (`masters.<id>`);
+- in: any encoded id is decoded; a raw id under an id key (or in the URL)
+  is made invalid, so it is refused like any bad id; a tampered one is
+  refused too. Passwords and the login identifier are never touched.
+
+Set both keys before going live and never change them: a missing key falls
+back to a random one per start, and every link and open page breaks on
+restart. Login tokens made before this keep working until they end.
+
 ## Add a vendor
 
 Every vendor is picked by the host name the app is opened on (`Vendor.domain`).

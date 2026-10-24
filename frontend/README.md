@@ -157,8 +157,9 @@ Each section's code is downloaded the first time it is opened
   sits in), and the selected item's settings on the
   right (place and size, label on / off and its text, table cells, line and
   fill, and - when allowed - font, size, bold, italic, underline, alignment,
-  colour). Close items / Close settings hide either side panel and the page
-  gets the room (kept in the browser). Export downloads the template as PDF,
+  colour). Each side panel has a fold button on its canvas side: folded, it
+  becomes a slim strip (with the button to open it again) and the page gets
+  the room (kept in the browser). Export downloads the template as PDF,
   PNG or JPEG. Leaving with unsaved changes asks first.
 - **Company Settings** - tabs: General (company name, login tagline, logo -
   the menu and browser tab update at once), Job Orders (automatic numbers,

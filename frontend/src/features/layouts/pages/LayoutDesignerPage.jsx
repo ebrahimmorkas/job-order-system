@@ -12,6 +12,7 @@ import { useUnsavedChanges } from '../../../components/common/UnsavedChanges';
 import DesignerCanvas, { ZOOM_MAX, ZOOM_MIN } from '../components/DesignerCanvas';
 import ElementPalette from '../components/ElementPalette';
 import PropertiesPanel from '../components/PropertiesPanel';
+import SidePanel from '../components/SidePanel';
 import PaperSetup from '../components/PaperSetup';
 import LayoutPage from '../components/LayoutPage';
 import { useLayoutHistory } from '../useLayoutHistory';
@@ -25,7 +26,7 @@ import * as layoutsApi from '../api/layoutsApi';
 const NAME_MIN_LENGTH = 2;
 
 // Which side panels are open (items on the left, settings on the right),
-// kept in this browser. A closed panel gives its room to the page.
+// kept in this browser. A folded panel gives its room to the page.
 const PANELS_KEY = 'layoutPanels';
 const readPanels = () => {
   try {
@@ -34,12 +35,12 @@ const readPanels = () => {
     return { items: true, settings: true };
   }
 };
-// Written out in full so Tailwind keeps every one.
+// A folded panel keeps a slim strip. Written out in full so Tailwind keeps every one.
 const GRID_COLUMNS = {
   'items-settings': 'lg:grid-cols-[220px_minmax(0,1fr)_300px]',
-  items: 'lg:grid-cols-[220px_minmax(0,1fr)]',
-  settings: 'lg:grid-cols-[minmax(0,1fr)_300px]',
-  '': 'lg:grid-cols-[minmax(0,1fr)]',
+  items: 'lg:grid-cols-[220px_minmax(0,1fr)_2.75rem]',
+  settings: 'lg:grid-cols-[2.75rem_minmax(0,1fr)_300px]',
+  '': 'lg:grid-cols-[2.75rem_minmax(0,1fr)_2.75rem]',
 };
 const COPY_SUFFIX = ' (copy)';
 const NEW_LAYOUT = { name: '', paper: { size: 'A4', orientation: 'portrait' }, labelDefault: 'none', elements: [] };
@@ -347,8 +348,6 @@ const Designer = ({ mode, initial, formData, onBack }) => {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => togglePanel('items')} aria-pressed={panels.items}>{panels.items ? 'Close items' : 'Open items'}</Button>
-          <Button variant="outline" size="sm" onClick={() => togglePanel('settings')} aria-pressed={panels.settings}>{panels.settings ? 'Close settings' : 'Open settings'}</Button>
           <Button variant="ghost" size="sm" onClick={history.undo} disabled={!history.canUndo} title="Undo (Ctrl+Z)">Undo</Button>
           <Button variant="ghost" size="sm" onClick={history.redo} disabled={!history.canRedo} title="Redo (Ctrl+Y)">Redo</Button>
           <div className="w-24">
@@ -370,11 +369,16 @@ const Designer = ({ mode, initial, formData, onBack }) => {
       )}
 
       <div className={`grid gap-4 lg:h-[calc(100vh-12rem)] lg:min-h-[520px] ${gridColumns}`}>
-        {panels.items && (
-        <aside className="rounded-xl border border-gray-200 bg-white p-3 lg:overflow-hidden max-lg:max-h-80 max-lg:overflow-y-auto" aria-label="Items">
+        <SidePanel
+          side="left"
+          title="Items"
+          ariaLabel="Items"
+          isOpen={panels.items}
+          onToggle={() => togglePanel('items')}
+          className="rounded-xl border border-gray-200 bg-white p-3 lg:overflow-hidden max-lg:max-h-80 max-lg:overflow-y-auto"
+        >
           <ElementPalette sources={formData} onAdd={(item) => addItem(item)} />
-        </aside>
-        )}
+        </SidePanel>
 
         <div
           ref={areaRef}
@@ -404,8 +408,14 @@ const Designer = ({ mode, initial, formData, onBack }) => {
           </div>
         </div>
 
-        {panels.settings && (
-        <aside className="rounded-xl border border-gray-200 bg-white p-4 lg:overflow-y-auto" aria-label={selected ? 'Item settings' : 'Page settings'}>
+        <SidePanel
+          side="right"
+          title="Settings"
+          ariaLabel={selected ? 'Item settings' : 'Page settings'}
+          isOpen={panels.settings}
+          onToggle={() => togglePanel('settings')}
+          className="rounded-xl border border-gray-200 bg-white p-4 lg:overflow-hidden"
+        >
           {selected ? (
             <div className="space-y-3">
               {elementErrors[selected.id] && <Alert variant="error">{elementErrors[selected.id]}</Alert>}
@@ -453,8 +463,7 @@ const Designer = ({ mode, initial, formData, onBack }) => {
               {!canFormatText && <p className="text-xs text-gray-500">Text formatting (font, size, bold...) is not part of your plan.</p>}
             </div>
           )}
-        </aside>
-        )}
+        </SidePanel>
       </div>
 
       <div aria-hidden="true" style={{ position: 'fixed', left: -100000, top: 0, pointerEvents: 'none' }}>
