@@ -382,6 +382,44 @@ designer; any logged-in user can print a job order with an active one.
   order's tax country, else its customer's country), and whether master short
   names are used on print.
 
+## Notifications and live updates
+
+Open pages get updates at once over socket.io (`services/realtimeService.js`,
+same port, path `/socket.io`). A page connects with its access token
+(`auth: { token }`); like every request, the vendor comes from the host name
+and the user must belong to it and be active. Switching a user off or
+deleting them disconnects their pages.
+
+| Who | Notification (saved, in the bell) |
+| --- | --- |
+| A user | work given to them, taken away (also a cancelled job order), its time changed - one per job order |
+| The owner | someone moved their work to a step (with %), put it on hold (with the reason), completed it; work past its due time |
+
+Besides notifications the pages hear `jobOrders:changed` (every page of the
+vendor: lists and views load again), `myWork:changed` (the people given
+work on that job order) and `serviceStatus:changed` (maintenance, payment
+or the shop changed - the page checks at once instead of every 30 s).
+
+Overdue work (`services/overdueWatcher.js`, every minute): work that went
+past its due time in the last 24 hours and isn't completed is announced to
+the owner once (a key with the due time; also safe across restarts).
+Notifications delete themselves after 90 days.
+
+The notifications are sent after the job order is saved; a failure there is
+only logged (WARNING) and never fails the save.
+
+Behind nginx, `/socket.io` needs the WebSocket headers:
+
+```
+location /socket.io/ {
+    proxy_pass http://127.0.0.1:5000;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+}
+```
+
 ## Image storage (logos and later images)
 
 Where an upload goes:
@@ -424,6 +462,8 @@ too (see Users logging in) - except Layout Master, which stays owner only.
 | GET | `/api/public/status` | anyone - `{ block }`: maintenance before logging in, else null |
 | GET | `/api/service-status` | logged in - `{ block, shop }` (works while blocked; the owner gets the shop's message and time) |
 | PUT | `/api/service-status/shop` | owner - `{ shopClosed, shopClosedMessage, estimatedResumeTime }` (a future time or null) |
+| GET | `/api/notifications` | logged in - their own, newest first (`before` a createdAt, `limit` up to 50): `{ notifications, hasMore, unreadCount }` |
+| PATCH | `/api/notifications/read` | logged in - `{ ids }` of their own (none = all): `{ unreadCount }` |
 | POST | `/api/auth/login` | anyone - username, email or phone + password |
 | POST | `/api/auth/refresh-token` | the refresh-token cookie |
 | POST | `/api/auth/logout` | the refresh-token cookie |

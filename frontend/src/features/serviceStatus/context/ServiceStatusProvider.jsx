@@ -3,6 +3,8 @@ import { ServiceStatusContext } from './ServiceStatusContext';
 import * as serviceStatusApi from '../api/serviceStatusApi';
 import { onServiceBlocked } from '../../../utils/apiClient';
 import { useAuth } from '../../auth/hooks/useAuth';
+import { useRealtimeEvent } from '../../realtime/hooks/useRealtimeEvent';
+import { REALTIME_EVENTS } from '../../realtime/events';
 
 // While blocked, how often to look whether the app is open again.
 const RECHECK_MS = 30 * 1000;
@@ -13,8 +15,8 @@ const MAX_TIMEOUT_MS = 2 ** 31 - 1;
  * Whether the app is open (backend services/serviceStatusService.js): asked
  * once before logging in (maintenance only) and again after; any request the
  * backend refuses with a block shows the page at once. While blocked it looks
- * again every 30 seconds, and at the shop's time to open again, so the page
- * goes away by itself.
+ * again every 30 seconds, at the shop's time to open again and whenever the
+ * server says it changed, so the page comes and goes by itself.
  */
 const ServiceStatusProvider = ({ children }) => {
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
@@ -41,6 +43,9 @@ const ServiceStatusProvider = ({ children }) => {
   }, []);
 
   const refresh = useCallback(() => setAttempt((n) => n + 1), []);
+
+  // The server says something changed (maintenance, payment, the shop): ask now.
+  useRealtimeEvent([REALTIME_EVENTS.SERVICE_STATUS_CHANGED, REALTIME_EVENTS.RECONNECTED], refresh);
 
   // Blocked: look again every so often.
   useEffect(() => {

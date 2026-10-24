@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useRealtimeEvent } from '../../realtime/hooks/useRealtimeEvent';
+import { REALTIME_EVENTS } from '../../realtime/events';
 import Table from '../../../components/common/tables';
 import Badge from '../../../components/common/Badge';
 import Alert from '../../../components/common/Alert';
@@ -33,6 +35,8 @@ const MyWorkListPage = ({ onView }) => {
   const [error, setError] = useState('');
   // The request whose answer is on screen; loading while it differs from the current one.
   const [loadedKey, setLoadedKey] = useState(null);
+  // Bumped when the server says the person's work changed.
+  const [reloadKey, setReloadKey] = useState(0);
 
   // A new search starts again from page 1.
   const [lastSearch, setLastSearch] = useState(debouncedSearch);
@@ -41,12 +45,12 @@ const MyWorkListPage = ({ onView }) => {
     setPage(1);
   }
 
-  const requestKey = `${debouncedSearch}|${page}`;
+  const requestKey = `${debouncedSearch}|${page}|${reloadKey}`;
   const isLoading = loadedKey !== requestKey;
 
   useEffect(() => {
     const controller = new AbortController();
-    const key = `${debouncedSearch}|${page}`;
+    const key = `${debouncedSearch}|${page}|${reloadKey}`;
     myWorkApi
       .listMyWork({ search: debouncedSearch, page, limit: PAGE_SIZE }, { signal: controller.signal })
       .then((result) => {
@@ -60,7 +64,9 @@ const MyWorkListPage = ({ onView }) => {
         setLoadedKey(key);
       });
     return () => controller.abort();
-  }, [debouncedSearch, page]);
+  }, [debouncedSearch, page, reloadKey]);
+
+  useRealtimeEvent([REALTIME_EVENTS.MY_WORK_CHANGED, REALTIME_EVENTS.RECONNECTED], () => setReloadKey((n) => n + 1));
 
   const columns = [
     {

@@ -154,6 +154,9 @@ jobOrderSchema.index({ vendorId: 1, jobOrderNumber: 1 }, {
 jobOrderSchema.index({ vendorId: 1, status: 1, createdAt: -1 });
 // My work: the job orders a user was given work on, newest first.
 jobOrderSchema.index({ vendorId: 1, 'masters.values.assignedTo.userId': 1, status: 1, createdAt: -1 });
+// Work that just went past its due time (services/overdueWatcher.js).
+jobOrderSchema.index({ status: 1, 'masters.values.dueAt': 1 });
+jobOrderSchema.index({ status: 1, 'masters.values.assignedTo.dueAt': 1 });
 
 jobOrderSchema.plugin(auditPlugin);
 

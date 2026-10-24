@@ -16,7 +16,9 @@ images stored on the server itself, such as logos) to it.
 
 In production, the web server must answer every address that isn't a file
 with `index.html` (each screen has its own address, e.g. `/users/123/edit`),
-for example in nginx: `location / { try_files $uri /index.html; }`.
+for example in nginx: `location / { try_files $uri /index.html; }`. Live
+updates use a WebSocket at `/socket.io` (see the backend README for its nginx
+lines; `npm run dev` forwards it to the backend).
 
 ## Page addresses
 
@@ -140,6 +142,16 @@ Each section's code is downloaded the first time it is opened
   and the default tax rate. Tabs keep what was typed; leaving with unsaved
   changes asks first.
 - An unknown host name shows "No account is set up for this domain".
+- **Notifications and live updates** (`features/realtime`,
+  `features/notifications`) - after logging in the app keeps one live
+  connection (socket.io, loaded only then). The bell at the top of every page
+  shows how many are unread and the list (newest first, "Show older", "Mark
+  all as read"); a new one arrives with a toast, and opening one marks it read
+  and opens its job order (the owner's job order view, or the user's My work).
+  Users hear about work given, taken away and time changes; the owner about
+  step changes, holds, completed and overdue work. The job order list and
+  view, My work and the blocked pages load again by themselves when something
+  changes; after losing the connection everything loads again once.
 - **Maintenance, payment and the shop closed** (`features/serviceStatus`) -
   when the backend answers 503 with a block, a full page replaces the app:
   "Under maintenance" (also instead of the login page), "Payment pending"

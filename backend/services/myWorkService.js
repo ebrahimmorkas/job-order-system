@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const JobOrder = require('../models/JobOrder');
 const common = require('../utils/common');
 const stepService = require('./stepService');
+const notificationService = require('./notificationService');
 const { addDuration } = require('../utils/days');
 const { FIXED_STEPS, WORK_TIME_STARTS, STEP_HISTORY_MAX } = require('../constants/stepConstants');
 
@@ -105,7 +106,7 @@ const setMyStep = async ({ vendorId, userId, id, data, websiteMasterData, compan
         if (!step) return common.returnResult(false, 400, 'This step is no longer available. Please reload the page.', { errors: [{ field: 'stepKey', message: 'This step is no longer available' }] });
 
         const jobOrder = await JobOrder.findOne({ _id: id, vendorId, 'masters.values.assignedTo.userId': userId, status: 'A' })
-            .select('masters.masterId masters.values.valueId masters.values.completeIn masters.values.timeStartsOn masters.values.assignedTo.userId masters.values.assignedTo.startedAt')
+            .select('jobOrderNumber masters.masterId masters.values.valueId masters.values.name masters.values.completeIn masters.values.timeStartsOn masters.values.assignedTo.userId masters.values.assignedTo.name masters.values.assignedTo.startedAt')
             .lean();
         const me = idOf(userId);
         let found = null;
@@ -148,6 +149,9 @@ const setMyStep = async ({ vendorId, userId, id, data, websiteMasterData, compan
             }
         );
         if (result.matchedCount === 0) return common.returnResult(false, 404, 'This work is no longer given to you.');
+        notificationService.inBackground('Announcing a step change failed', () => notificationService.announceStep({
+            vendorId, jobOrderId: jobOrder._id, jobOrderNumber: jobOrder.jobOrderNumber, valueName: found.value.name, workerName: found.person.name, step: entry
+        }));
         return common.returnResult(true, 200, `Moved to ${step.name}.`, { step: entry });
     } catch (err) {
         throw err;

@@ -5,6 +5,7 @@ const RefreshToken = require('../models/RefreshToken');
 const common = require('../utils/common');
 const { todayString } = require('../utils/days');
 const roleService = require('./roleService');
+const realtimeService = require('./realtimeService');
 const { ROLES } = require('../constants/roleConstants');
 const { LIVE_STATUSES } = require('../constants/masterConstants');
 const { MODULES } = require('../constants/rbacConstants');
@@ -343,6 +344,7 @@ const setUserStatus = async ({ vendorId, userId, id, isActive }) => {
         if (idOf(id) === idOf(userId)) return await refuseOwnAccount({ vendorId, id }, 'You cannot change the status of your own account.');
         const result = await common.toggleActiveStatus(User, id, userId, isActive, vendorId, USERS);
         if (!result.isSuccess) return result.statusCode === 404 ? common.returnResult(false, 404, 'User not found.') : result;
+        if (!isActive) realtimeService.disconnectUser(result.meta.document._id);
         return common.returnResult(true, 200, isActive ? 'User marked as active.' : 'User marked as inactive.', {
             user: { _id: result.meta.document._id, status: result.meta.document.status }
         });
@@ -359,6 +361,7 @@ const deleteUser = async ({ vendorId, userId, id }) => {
         const result = await common.softDelete(User, id, userId, vendorId, USERS);
         if (!result.isSuccess) return result.statusCode === 404 ? common.returnResult(false, 404, 'User not found.') : result;
         await RefreshToken.deleteMany({ userId: result.meta.document._id });
+        realtimeService.disconnectUser(result.meta.document._id);
         return common.returnResult(true, 200, 'User deleted.');
     } catch (err) {
         throw err;

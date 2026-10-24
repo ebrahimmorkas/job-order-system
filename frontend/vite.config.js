@@ -27,6 +27,12 @@ export default defineConfig({
         target: 'http://localhost:5000',
         changeOrigin: false,
       },
+      // Live updates (socket.io) - a WebSocket, so ws must be on.
+      '/socket.io': {
+        target: 'http://localhost:5000',
+        changeOrigin: false,
+        ws: true,
+      },
     },
   },
 })

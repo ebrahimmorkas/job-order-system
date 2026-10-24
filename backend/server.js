@@ -32,6 +32,10 @@ const myWorkRoutes = require('./routes/myWorkRoutes');
 const serviceStatusRoutes = require('./routes/serviceStatusRoutes');
 const requireServiceOpen = require('./middlewares/requireServiceOpen');
 const serviceStatusWatcher = require('./services/serviceStatusWatcher');
+const notificationRoutes = require('./routes/notificationRoutes');
+const realtimeService = require('./services/realtimeService');
+const overdueWatcher = require('./services/overdueWatcher');
+const { REALTIME_EVENTS } = require('./constants/notificationConstants');
 const storageProviderConfig = require('./config/storageProviderConfig');
 
 // Every model must carry the audit history (or be listed as exempt) - refuse
@@ -109,6 +113,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/layouts', layoutRoutes);
 app.use('/api/access', accessRoutes);
 app.use('/api/my-work', myWorkRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // No route matched: the same JSON shape as every other error, instead of
 // Express's default HTML page.
@@ -125,6 +130,15 @@ serviceStatusWatcher.start();
 const server = app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
+
+// Live updates for the open pages (socket.io on the same port, /socket.io).
+realtimeService.start(server);
+// Maintenance or payment switched, or a shop opened by itself: the pages check again.
+serviceStatusWatcher.onChange(({ vendorId }) => (vendorId
+    ? realtimeService.toVendor(vendorId, REALTIME_EVENTS.SERVICE_STATUS_CHANGED, {})
+    : realtimeService.toEveryone(REALTIME_EVENTS.SERVICE_STATUS_CHANGED, {})));
+// Work past its due time is announced to the owner.
+overdueWatcher.start();
 
 // On stop (Ctrl+C, or SIGTERM from pm2/docker/systemd): stop taking new
 // requests, let the ones in progress finish, then close MongoDB and Redis

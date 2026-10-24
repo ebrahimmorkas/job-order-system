@@ -11,6 +11,7 @@ import { useAccess } from '../features/access/hooks/useAccess';
 import { useRouter, segmentsOf } from '../router';
 import { lazyPage } from '../utils/lazyPage';
 import ShopClosedBanner from '../features/serviceStatus/components/ShopClosedBanner';
+import NotificationBell from '../features/notifications/components/NotificationBell';
 
 // Sidebar key -> page, each loaded the first time it is opened (so the app's
 // first load stays small). Keys without a page yet show a placeholder.
@@ -81,6 +82,9 @@ const AppShell = () => {
         })}
       />
       <main className="flex-1 min-w-0 px-4 py-6 sm:px-6 lg:px-8">
+        <div className="-mt-2 mb-2 flex justify-end">
+          <NotificationBell />
+        </div>
         {access.isOwner && <ShopClosedBanner />}
         <PageLoadBoundary key={section?.key}>
           <Suspense fallback={<div className="py-24 flex justify-center"><Spinner size="lg" /></div>}>

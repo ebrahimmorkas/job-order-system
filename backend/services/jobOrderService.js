@@ -9,6 +9,7 @@ const featureAccessService = require('./featureAccessService');
 const imageUploadService = require('./imageUploadService');
 const workAssignmentService = require('./workAssignmentService');
 const stepService = require('./stepService');
+const notificationService = require('./notificationService');
 const { jobOrderSettingsOf } = require('./companySettingsService');
 const { assignedCountryIdsOf, isTaxOn, taxReadyCountryIds, loadCountries, detailsByCountry } = require('./taxSettingsService');
 const { LIVE_STATUSES, CASE_INSENSITIVE_COLLATION } = require('../constants/masterConstants');
@@ -549,6 +550,9 @@ const createJobOrder = async ({ userId, data, files = [], ...vendorData }) => {
             if (duplicate) return duplicate;
             throw err;
         }
+        notificationService.inBackground('Announcing a new job order failed', () => notificationService.announceJobOrderSaved({
+            vendorId, jobOrderId: jobOrder._id, jobOrderNumber, after: doc.masters
+        }));
         return common.returnResult(true, 201, `Job order ${jobOrderNumber} created.`, { jobOrder: { _id: jobOrder._id, jobOrderNumber } });
     } catch (err) {
         throw err;
@@ -600,6 +604,9 @@ const updateJobOrder = async ({ userId, id, data, files = [], ...vendorData }) =
             return common.returnResult(false, 404, 'Job order not found.');
         }
         if (removed.length > 0) await removeImages({ vendorId, userId, images: removed });
+        notificationService.inBackground('Announcing a saved job order failed', () => notificationService.announceJobOrderSaved({
+            vendorId, jobOrderId: jobOrder._id, jobOrderNumber, before: current.masters, after: doc.masters
+        }));
         return common.returnResult(true, 200, `Job order ${jobOrderNumber} saved.`, { jobOrder });
     } catch (err) {
         throw err;
@@ -669,7 +676,11 @@ const cancelJobOrder = async ({ vendorId, userId, id }) => {
     try {
         const result = await common.softDelete(JobOrder, id, userId, vendorId);
         if (!result.isSuccess) return result.statusCode === 404 ? common.returnResult(false, 404, 'Job order not found.') : result;
-        return common.returnResult(true, 200, `Job order ${result.meta.document.jobOrderNumber} cancelled.`);
+        const { _id: jobOrderId, jobOrderNumber, masters } = result.meta.document;
+        notificationService.inBackground('Announcing a cancelled job order failed', () => notificationService.announceJobOrderSaved({
+            vendorId, jobOrderId, jobOrderNumber, before: masters, isCancelled: true
+        }));
+        return common.returnResult(true, 200, `Job order ${jobOrderNumber} cancelled.`);
     } catch (err) {
         throw err;
     }

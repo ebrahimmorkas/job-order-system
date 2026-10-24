@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useRealtimeEvent } from '../../realtime/hooks/useRealtimeEvent';
+import { REALTIME_EVENTS } from '../../realtime/events';
 import Card from '../../../components/common/Card';
 import Alert from '../../../components/common/Alert';
 import Spinner from '../../../components/common/Spinner';
@@ -26,7 +28,7 @@ const MyWorkViewPage = ({ jobOrderId, onBack }) => {
   const now = useNow();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
-  // Bumped after a step change to load the job order again.
+  // Bumped after a step change (or when the server says it changed) to load the job order again.
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -37,6 +39,10 @@ const MyWorkViewPage = ({ jobOrderId, onBack }) => {
       .catch((err) => err?.name !== 'AbortError' && setError(err.message));
     return () => controller.abort();
   }, [jobOrderId, reloadKey]);
+
+  useRealtimeEvent([REALTIME_EVENTS.MY_WORK_CHANGED, REALTIME_EVENTS.RECONNECTED], (data) => {
+    if (!data.jobOrderId || data.jobOrderId === jobOrderId) setReloadKey((n) => n + 1);
+  });
 
   const backLink = (
     <button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 cursor-pointer">

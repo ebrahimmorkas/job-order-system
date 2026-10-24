@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useRealtimeEvent } from '../../realtime/hooks/useRealtimeEvent';
+import { REALTIME_EVENTS } from '../../realtime/events';
 import Table from '../../../components/common/tables';
 import Button from '../../../components/common/Buttons';
 import Badge from '../../../components/common/Badge';
@@ -76,6 +78,9 @@ const JobOrdersListPage = ({ onCreate, onView, onEdit }) => {
       });
     return () => controller.abort();
   }, [debouncedSearch, page, reloadKey]);
+
+  // A job order created, saved or its work moved (by anyone): load again.
+  useRealtimeEvent([REALTIME_EVENTS.JOB_ORDERS_CHANGED, REALTIME_EVENTS.RECONNECTED], () => setReloadKey((n) => n + 1));
 
   const confirmCancel = async () => {
     setIsCancelling(true);

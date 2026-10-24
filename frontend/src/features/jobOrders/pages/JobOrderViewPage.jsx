@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useRealtimeEvent } from '../../realtime/hooks/useRealtimeEvent';
+import { REALTIME_EVENTS } from '../../realtime/events';
 import Button from '../../../components/common/Buttons';
 import Card from '../../../components/common/Card';
 import Alert from '../../../components/common/Alert';
@@ -24,6 +26,8 @@ const formatDateTime = (value) => new Date(value).toLocaleString('en-IN', { day:
 const JobOrderViewPage = ({ jobOrderId, onBack, onEdit, onPrint }) => {
   const [jobOrder, setJobOrder] = useState(null);
   const [error, setError] = useState('');
+  // Bumped when the server says this job order changed.
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -32,7 +36,11 @@ const JobOrderViewPage = ({ jobOrderId, onBack, onEdit, onPrint }) => {
       .then((result) => setJobOrder(result.jobOrder))
       .catch((err) => err?.name !== 'AbortError' && setError(err.message));
     return () => controller.abort();
-  }, [jobOrderId]);
+  }, [jobOrderId, reloadKey]);
+
+  useRealtimeEvent([REALTIME_EVENTS.JOB_ORDERS_CHANGED, REALTIME_EVENTS.RECONNECTED], (data) => {
+    if (!data.jobOrderId || data.jobOrderId === jobOrderId) setReloadKey((n) => n + 1);
+  });
 
   const backLink = (
     <button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 cursor-pointer">

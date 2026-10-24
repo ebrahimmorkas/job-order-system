@@ -1,5 +1,7 @@
 const CompanySettings = require('../models/CompanySettings');
 const common = require('../utils/common');
+const realtimeService = require('./realtimeService');
+const { REALTIME_EVENTS } = require('../constants/notificationConstants');
 const { ROLES } = require('../constants/roleConstants');
 const { SERVICE_STATES } = require('../constants/serviceStatusConstants');
 
@@ -115,6 +117,8 @@ const updateShop = async ({ vendorId, userId, data }) => {
             { returnDocument: 'after', runValidators: true, projection: { shopClosed: 1, shopClosedMessage: 1, estimatedResumeTime: 1 }, auditUserId: userId }
         ).lean();
         if (!settings) return common.returnResult(false, 404, 'Company settings have not been set up yet.');
+        // The users' open pages close (or open) at once.
+        realtimeService.toVendor(vendorId, REALTIME_EVENTS.SERVICE_STATUS_CHANGED, {});
         return common.returnResult(true, 200, data.shopClosed ? 'The shop is closed.' : 'The shop is open.', { shop: shopOf(settings) });
     } catch (err) {
         throw err;
