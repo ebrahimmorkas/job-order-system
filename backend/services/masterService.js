@@ -455,7 +455,7 @@ const deleteValue = async ({ vendorId, userId, id, valueId }) => {
 const getMastersForJobOrder = async ({ vendorId }) => {
     try {
         const masters = await Master.find({ vendorId, status: 'A' })
-            .select('_id name shortName isRequired isMultiselectAllowed defaultValueId').sort({ precedence: 1 }).lean();
+            .select('_id name shortName isRequired isMultiselectAllowed isRoleProvided defaultValueId').sort({ precedence: 1 }).lean();
         const values = masters.length === 0 ? [] : await MasterValue.find({ vendorId, masterId: { $in: masters.map((m) => m._id) }, status: 'A' })
             .select('_id masterId name').sort({ precedence: 1 }).lean();
 

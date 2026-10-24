@@ -7,6 +7,7 @@ const masterService = require('./masterService');
 const controlService = require('./controlService');
 const featureAccessService = require('./featureAccessService');
 const imageUploadService = require('./imageUploadService');
+const workAssignmentService = require('./workAssignmentService');
 const { jobOrderSettingsOf } = require('./companySettingsService');
 const { assignedCountryIdsOf, isTaxOn, taxReadyCountryIds, loadCountries, detailsByCountry } = require('./taxSettingsService');
 const { LIVE_STATUSES, CASE_INSENSITIVE_COLLATION } = require('../constants/masterConstants');
@@ -28,6 +29,10 @@ const { IMAGE_FORMATS, IMAGE_FORMAT_VALUES, IMAGE_MODULES, MAX_IMAGES_PER_REQUES
 // Images come as files with Create / Save. Every file is checked before any
 // is stored; if storing or saving fails, the files stored for it are removed
 // again, and images taken off a job order are removed once it is saved.
+//
+// Work: each picked value of a role master can be given to people who have
+// that value (see workAssignmentService). On edit, people already given a
+// value may stay even if they no longer have it.
 
 const LIVE = { $in: LIVE_STATUSES };
 const LIST_FIELDS = '_id jobOrderNumber customer.countryName customer.stateName customer.cityName currency subtotal tax.isApplied tax.amount total createdAt updatedAt';
@@ -130,6 +135,8 @@ const loadFormParts = async ({ vendorId, websiteMasterData, companyMasterData, c
         const settings = jobOrderSettingsOf(companySettingsData);
 
         const imageRules = imageRulesOf(websiteMasterData, companyMasterData);
+        const masters = mastersResult?.meta.masters || [];
+        const work = await workAssignmentService.workersOf({ vendorId, masters, websiteMasterData, companyMasterData });
         return {
             isTaxOn: taxOn,
             images: { isOn: imageRules.isOn, maxCount: imageRules.maxCount, maxSizeMB: imageRules.maxSizeMB, formats: imageRules.formats },
@@ -137,7 +144,12 @@ const loadFormParts = async ({ vendorId, websiteMasterData, companyMasterData, c
                 ...settings,
                 useShortNames: [SHORT_NAME_PLACES.JOB_ORDER, SHORT_NAME_PLACES.BOTH].includes(settings.useShortNamesOn)
             },
-            masters: mastersResult?.meta.masters || [],
+            // Each value of a role master lists who can be given its work.
+            masters: masters.map((master) => (master.isRoleProvided
+                ? { ...master, values: master.values.map((value) => ({ ...value, workerIds: [...(work.byValue.get(String(value._id)) || [])] })) }
+                : master)),
+            workers: work.workers,
+            canAssignWork: work.workers.length > 0,
             controls: controlsResult?.meta.controls || [],
             countries: countries.map(({ taxFields, ...country }) => {
                 const key = String(country._id);
@@ -169,11 +181,33 @@ const getFormData = async (vendorData) => {
 
 // ---- building a job order ---------------------------------------------------
 
+// Who a picked value's work goes to: [{ userId, name }], or a message.
+// previous: the people it was given to before (on edit), who may stay.
+const assigneesOf = ({ master, value, userIds, workerById, previous }) => {
+    try {
+        if (userIds.length > 0 && !master.isRoleProvided) return { message: `Work can't be given for ${master.name}.` };
+        const before = new Map((previous.get(String(value._id)) || []).map((person) => [String(person.userId), person]));
+        const assignees = [];
+        for (const userId of userIds) {
+            const worker = (value.workerIds || []).includes(userId) && workerById.get(userId);
+            const kept = !worker && before.get(userId);
+            if (!worker && !kept) return { message: `Someone picked for ${value.name} doesn't have it any more. Please pick again.` };
+            assignees.push(worker ? { userId: worker._id, name: worker.name } : { userId: kept.userId, name: kept.name });
+        }
+        return { assignees };
+    } catch (err) {
+        throw err;
+    }
+};
+
 // The masters picked: field errors by master, and what to store.
-const pickMasters = (masters, input) => {
+// previous: valueId -> the people given its work before (on edit).
+const pickMasters = (masters, input, workers, previous) => {
     try {
         const errors = [];
         const picked = new Map(input.map((entry) => [entry.masterId, entry.valueIds]));
+        const assignmentsOf = new Map(input.map((entry) => [entry.masterId, entry.assignments || []]));
+        const workerById = new Map(workers.map((worker) => [String(worker._id), worker]));
         const known = new Set(masters.map((master) => String(master._id)));
         for (const masterId of picked.keys()) {
             if (!known.has(masterId)) errors.push({ field: `masters.${masterId}`, message: 'This list is no longer available. Please reload the page.' });
@@ -197,12 +231,33 @@ const pickMasters = (masters, input) => {
                 errors.push({ field, message: `Pick a ${master.name}` });
                 continue;
             }
+            const assignments = assignmentsOf.get(masterId) || [];
+            if (assignments.some((assignment) => !valueIds.includes(assignment.valueId))) {
+                errors.push({ field, message: 'Work can be given only for a value picked here.' });
+                continue;
+            }
+            const userIdsOf = new Map(assignments.map((assignment) => [assignment.valueId, assignment.userIds]));
+            const values = [];
+            let message = null;
+            for (const valueId of valueIds) {
+                const value = valueById.get(valueId);
+                const result = assigneesOf({ master, value, userIds: userIdsOf.get(valueId) || [], workerById, previous });
+                if (result.message) {
+                    message = result.message;
+                    break;
+                }
+                values.push({ valueId: value._id, name: value.name, assignedTo: result.assignees });
+            }
+            if (message) {
+                errors.push({ field, message });
+                continue;
+            }
             if (valueIds.length === 0) continue;
             stored.push({
                 masterId: master._id,
                 name: master.name,
                 shortName: master.shortName || null,
-                values: valueIds.map((valueId) => ({ valueId: valueById.get(valueId)._id, name: valueById.get(valueId).name }))
+                values
             });
         }
         return { errors, stored };
@@ -357,9 +412,14 @@ const workOutMoney = ({ parts, prices, taxCountry, customerStateId, taxId }) => 
 };
 
 // Everything checked and worked out: { errors } or { doc } (without the number).
-const buildJobOrder = (parts, data) => {
+// current: the job order being edited (its masters), or null.
+const buildJobOrder = (parts, data, current = null) => {
     try {
-        const masters = pickMasters(parts.masters, data.masters);
+        const previous = new Map();
+        for (const master of current?.masters || []) {
+            for (const value of master.values) previous.set(String(value.valueId), value.assignedTo || []);
+        }
+        const masters = pickMasters(parts.masters, data.masters, parts.workers, previous);
         const controls = answerControls(parts.controls, data.controls);
         const customer = parts.settings.askCustomerAddress ? customerAddress(parts.countries, data.customer) : { errors: [], stored: {} };
 
@@ -447,7 +507,7 @@ const updateJobOrder = async ({ userId, id, data, files = [], ...vendorData }) =
     try {
         const { vendorId, websiteMasterData, companyMasterData } = vendorData;
         const [current, parts] = await Promise.all([
-            JobOrder.findOne({ _id: id, vendorId, status: LIVE }).select('jobOrderNumber images').lean(),
+            JobOrder.findOne({ _id: id, vendorId, status: LIVE }).select('jobOrderNumber images masters').lean(),
             loadFormParts(vendorData)
         ]);
         if (!current) return common.returnResult(false, 404, 'Job order not found.');
@@ -459,7 +519,7 @@ const updateJobOrder = async ({ userId, id, data, files = [], ...vendorData }) =
 
         const isAuto = parts.settings.isJobOrderNumberAutoGenerated;
         const rules = imageRulesOf(websiteMasterData, companyMasterData);
-        const { errors, doc } = buildJobOrder(parts, data);
+        const { errors, doc } = buildJobOrder(parts, data, current);
         const numberError = !isAuto && !data.jobOrderNumber ? [{ field: 'jobOrderNumber', message: 'Enter the job order number' }] : [];
         const imageErrors = checkImages({ rules, files, keptCount: kept.length, companyMasterData });
         if (numberError.length > 0 || errors || imageErrors.length > 0) return invalid([...numberError, ...(errors || []), ...imageErrors]);

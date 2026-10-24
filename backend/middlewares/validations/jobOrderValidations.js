@@ -1,5 +1,5 @@
 const Joi = require('joi');
-const { JOB_ORDER_NUMBER_MAX_LENGTH, CUSTOMER_ADDRESS_MAX_LENGTH, ANSWER_MAX_LENGTH, JOB_ORDER_LIST_MAX_PAGE_SIZE } = require('../../constants/jobOrderConstants');
+const { JOB_ORDER_NUMBER_MAX_LENGTH, CUSTOMER_ADDRESS_MAX_LENGTH, ANSWER_MAX_LENGTH, ASSIGNEES_PER_VALUE_MAX, JOB_ORDER_LIST_MAX_PAGE_SIZE } = require('../../constants/jobOrderConstants');
 const { POSTAL_CODE_MAX_LENGTH } = require('../../constants/taxConstants');
 
 // What the vendor's own masters, controls, countries and rates allow is
@@ -34,10 +34,16 @@ const jobOrderSchema = Joi.object({
         postalCode: optionalText('Postal code', POSTAL_CODE_MAX_LENGTH),
         address: optionalText('Address', CUSTOMER_ADDRESS_MAX_LENGTH)
     }).default({ countryId: null, stateId: null, cityId: null, postalCode: null, address: null }).label('Customer'),
-    // The values picked in each master (one, or several for a multi-select one).
+    // The values picked in each master (one, or several for a multi-select
+    // one) and, for a role master, who is given each picked value's work.
     masters: Joi.array().items(Joi.object({
         masterId: objectId('Master').required(),
-        valueIds: Joi.array().items(objectId('Value')).unique().default([]).label('Values')
+        valueIds: Joi.array().items(objectId('Value')).unique().default([]).label('Values'),
+        assignments: Joi.array().items(Joi.object({
+            valueId: objectId('Value').required(),
+            userIds: Joi.array().items(objectId('User')).unique().max(ASSIGNEES_PER_VALUE_MAX).default([]).label('People')
+                .messages({ 'array.max': `At most ${ASSIGNEES_PER_VALUE_MAX} people per value` })
+        })).unique('valueId').default([]).label('Assigned work')
     })).unique('masterId').default([]).label('Masters'),
     // The answer of each control: text (text field / text area), checked
     // (checkbox) or optionId (radio).

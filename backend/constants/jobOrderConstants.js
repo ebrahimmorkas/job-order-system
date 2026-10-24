@@ -22,6 +22,9 @@ const CUSTOMER_ADDRESS_MAX_LENGTH = 500;
 // A text field / text area answer when the vendor set no limit.
 const ANSWER_MAX_LENGTH = 5000;
 
+// Most people one picked master value (its work) can be given to.
+const ASSIGNEES_PER_VALUE_MAX = 20;
+
 // Largest page the job order list returns.
 const JOB_ORDER_LIST_MAX_PAGE_SIZE = 100;
 
@@ -33,5 +36,6 @@ module.exports = {
     JOB_ORDER_NUMBER_MAX_LENGTH,
     CUSTOMER_ADDRESS_MAX_LENGTH,
     ANSWER_MAX_LENGTH,
+    ASSIGNEES_PER_VALUE_MAX,
     JOB_ORDER_LIST_MAX_PAGE_SIZE
 };

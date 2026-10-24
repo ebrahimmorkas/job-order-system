@@ -214,6 +214,16 @@ the vendor can create, edit and cancel them.
   control answered, `currency`, `subtotal`, `tax` (`isApplied`, `reason` when
   not, rate, `components`, `taxableAmount`, `amount`) and `total`. Names are
   copied in, so an old job order still shows what was picked that day.
+- Assigning work (`services/workAssignmentService.js`): each picked value of
+  a master ticked "Role will be provided" can be given to any number of
+  people (optional, at most 20). Offered (form data: `workers`, each value's
+  `workerIds`, `canAssignWork`) are active users who have that value today:
+  through an active master role naming the value or "Whole master", or
+  through their own extra access (only while
+  `isRoleAssignmentOnUserModuleAllowed` is on). Users with module roles only
+  are never offered. Only while RBAC is on. Saved on each value as
+  `assignedTo: [{ userId, name }]`; on edit, people already given a value may
+  stay even after losing it, but nobody new without it can be added.
 - Everything is checked and worked out again on the server
   (`services/jobOrderService.js`, `utils/jobOrderTotals.js`); the browser's
   summary is only a preview (`features/jobOrders/jobOrderTotals.js` - keep the
@@ -365,7 +375,8 @@ uploader's file name is never used. Replacing an image deletes the old file.
 | GET / PUT / DELETE | `/api/job-orders/:id` | logged in - one job order / save it (worked out again) / cancel it |
 
 `POST` / `PUT /api/job-orders` take `{ jobOrderNumber, customer: { countryId,
-stateId, cityId, postalCode, address }, masters: [{ masterId, valueIds }],
+stateId, cityId, postalCode, address }, masters: [{ masterId, valueIds,
+assignments: [{ valueId, userIds }] }],
 controls: [{ controlId, text | checked | optionId }], taxId, keepImageIds }`
 (`taxId` null = the vendor's default rate) as JSON, or as multipart with that
 JSON in `data` and new images in `images`. Field errors are named

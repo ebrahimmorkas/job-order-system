@@ -9,6 +9,9 @@ export const customerLineOf = (customer) =>
 /** A master's name on screen: its short name when short names are used. */
 export const masterLabelOf = (master, useShortNames) => (useShortNames && master.shortName) || master.name;
 
+// "Round cutting (Ravi, Sam)": a value and who was given its work.
+const valueTextOf = (value) => (value.assignedTo?.length ? `${value.name} (${value.assignedTo.map((person) => person.name).join(', ')})` : value.name);
+
 /**
  * @param {{ customer, masters, controls }} jobOrder
  * @param {{ useShortNames?: boolean, showCustomer?: boolean }} options
@@ -21,7 +24,7 @@ export const summaryRowsOf = ({ customer, masters, controls }, { useShortNames =
 
   for (const master of masters) {
     if (master.values.length === 0) continue;
-    rows.push({ key: `m-${master.masterId}`, label: masterLabelOf(master, useShortNames), value: master.values.map((value) => value.name).join(', ') });
+    rows.push({ key: `m-${master.masterId}`, label: masterLabelOf(master, useShortNames), value: master.values.map(valueTextOf).join(', ') });
   }
   for (const control of controls) {
     const key = `c-${control.controlId}`;

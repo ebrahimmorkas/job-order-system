@@ -13,7 +13,16 @@ const pickedMasterSchema = new mongoose.Schema({
     name: { type: String, required: true },
     shortName: { type: String, default: null },
     values: {
-        type: [{ _id: false, valueId: { type: mongoose.Types.ObjectId, required: true }, name: { type: String, required: true } }],
+        type: [{
+            _id: false,
+            valueId: { type: mongoose.Types.ObjectId, required: true },
+            name: { type: String, required: true },
+            // The users given this value's work (a role master only); names copied in.
+            assignedTo: {
+                type: [{ _id: false, userId: { type: mongoose.Types.ObjectId, required: true }, name: { type: String, required: true } }],
+                default: []
+            }
+        }],
         default: []
     }
 }, { _id: false });

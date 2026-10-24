@@ -47,7 +47,12 @@ const freshForm = ({ masters, controls, countries }) => ({
   taxId: '',
   // { key, imageId, url } saved / { key, file, src, name } picked now
   images: [],
+  // valueId -> the ids of the people given its work (role masters only)
+  assign: {},
 });
+
+// valueId -> the people a saved job order gave its work to ({ userId, name }).
+const earlierPeopleOf = (jobOrder) => new Map((jobOrder?.masters || []).flatMap((master) => master.values.map((value) => [idOf(value.valueId), value.assignedTo || []])));
 
 // A saved job order on today's form: answers of masters, values, controls
 // and choices no longer available are left out.
@@ -81,6 +86,7 @@ const savedForm = ({ masters, controls, countries }, jobOrder) => {
     })),
     taxId: idOf(jobOrder.tax?.taxId),
     images: (jobOrder.images || []).map((image) => ({ key: idOf(image.imageId), imageId: idOf(image.imageId), url: image.url })),
+    assign: Object.fromEntries([...earlierPeopleOf(jobOrder)].filter(([, people]) => people.length > 0).map(([valueId, people]) => [valueId, people.map((person) => idOf(person.userId))])),
   };
 };
 
@@ -99,6 +105,8 @@ const savedForm = ({ masters, controls, countries }, jobOrder) => {
 const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
   const isEdit = mode === 'edit';
   const [parts, setParts] = useState(null);
+  // On edit: valueId -> the people the job order gave its work to (they may stay).
+  const [earlierPeople, setEarlierPeople] = useState(() => new Map());
   const [form, setForm] = useState(null);
   const [savedSnapshot, setSavedSnapshot] = useState('');
   const [loadError, setLoadError] = useState('');
@@ -120,6 +128,7 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
       .then(([data, saved]) => {
         const initial = saved ? savedForm(data, saved.jobOrder) : freshForm(data);
         setParts(data);
+        setEarlierPeople(earlierPeopleOf(saved?.jobOrder));
         setForm(initial);
         setSavedSnapshot(JSON.stringify(initial));
       })
@@ -135,10 +144,17 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
   const askAddress = settings?.askCustomerAddress === true;
   const countries = useMemo(() => parts?.countries || [], [parts]);
 
+  // userId -> name, of everyone who can be (or was) given work.
+  const personNames = useMemo(() => {
+    const names = new Map((parts?.workers || []).map((worker) => [worker._id, worker.name]));
+    for (const people of earlierPeople.values()) for (const person of people) if (!names.has(idOf(person.userId))) names.set(idOf(person.userId), person.name);
+    return names;
+  }, [parts, earlierPeople]);
+
   // Everything worked out from the form, the way the backend does it.
   const preview = useMemo(() => {
     if (!parts || !form) return null;
-    const { customer, picks, answers } = form;
+    const { customer, picks, answers, assign } = form;
     const country = countries.find((c) => c._id === customer.countryId) || null;
     const state = country?.states.find((s) => s._id === customer.stateId) || null;
     const city = state ? country.cities.find((c) => c._id === customer.cityId) || null : null;
@@ -185,7 +201,9 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
       masterId: master._id,
       name: master.name,
       shortName: master.shortName,
-      values: master.values.filter((value) => picks[master._id].includes(value._id)),
+      values: master.values
+        .filter((value) => picks[master._id].includes(value._id))
+        .map((value) => ({ ...value, assignedTo: (assign[value._id] || []).map((userId) => ({ userId, name: personNames.get(userId) })) })),
     }));
 
     return {
@@ -203,7 +221,7 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
       tax: { isApplied: !!rate, reason, name: rate?.name, components: totals.components, taxableAmount: totals.taxableAmount, amount: totals.taxAmount },
       total: totals.total,
     };
-  }, [parts, form, countries, askAddress, settings]);
+  }, [parts, form, countries, askAddress, settings, personNames]);
 
   const clearError = (...fields) => {
     if (fields.some((field) => fieldErrors[field])) {
@@ -220,6 +238,27 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
   const setPick = (masterId, valueIds) => {
     setForm((prev) => ({ ...prev, picks: { ...prev.picks, [masterId]: valueIds } }));
     clearError(`masters.${masterId}`);
+  };
+
+  const setAssign = (masterId, valueId, userIds) => {
+    setForm((prev) => {
+      const assign = { ...prev.assign, [valueId]: userIds };
+      if (userIds.length === 0) delete assign[valueId];
+      return { ...prev, assign };
+    });
+    clearError(`masters.${masterId}`);
+  };
+
+  // Who can be given a value's work: those who have it now, and on edit
+  // those it was given to before (marked when they no longer have it).
+  const peopleOptionsOf = (value) => {
+    const eligible = new Set(value.workerIds || []);
+    const options = (parts.workers || []).filter((worker) => eligible.has(worker._id)).map((worker) => ({ value: worker._id, label: `${worker.name} (@${worker.username})` }));
+    for (const person of earlierPeople.get(value._id) || []) {
+      const userId = idOf(person.userId);
+      if (!eligible.has(userId)) options.push({ value: userId, label: `${person.name} (no longer has ${value.name})` });
+    }
+    return options;
   };
 
   const addImages = (files) => {
@@ -289,7 +328,13 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
 
     const { customer } = form;
     const payload = {
-      masters: parts.masters.map((master) => ({ masterId: master._id, valueIds: form.picks[master._id] })),
+      masters: parts.masters.map((master) => {
+        const valueIds = form.picks[master._id];
+        const assignments = master.isRoleProvided
+          ? valueIds.filter((valueId) => form.assign[valueId]?.length > 0).map((valueId) => ({ valueId, userIds: form.assign[valueId] }))
+          : [];
+        return { masterId: master._id, valueIds, assignments };
+      }),
       controls: parts.controls.map((control) => {
         const answer = form.answers[control._id];
         if (control.type === 'checkbox') return { controlId: control._id, checked: answer.checked };
@@ -468,23 +513,50 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
                   const label = masterLabelOf(master, settings.useShortNames);
                   const options = master.values.map((value) => ({ value: value._id, label: value.name }));
                   const picked = form.picks[master._id];
+                  const pickedValues = master.isRoleProvided ? master.values.filter((value) => picked.includes(value._id)) : [];
                   return (
-                    <Dropdown
-                      key={master._id}
-                      label={label}
-                      name={`master-${master._id}`}
-                      options={options}
-                      multiple={master.isMultiselectAllowed}
-                      value={master.isMultiselectAllowed ? picked : picked[0] || ''}
-                      onChange={(value) => setPick(master._id, master.isMultiselectAllowed ? value : (value ? [value] : []))}
-                      placeholder={master.isMultiselectAllowed ? 'Choose one or more' : `Choose ${label}`}
-                      searchable
-                      clearable={!master.isRequired}
-                      required={master.isRequired}
-                      error={fieldErrors[`masters.${master._id}`]}
-                      disabled={isSaving}
-                      aria-label={label}
-                    />
+                    <div key={master._id} className="space-y-3">
+                      <Dropdown
+                        label={label}
+                        name={`master-${master._id}`}
+                        options={options}
+                        multiple={master.isMultiselectAllowed}
+                        value={master.isMultiselectAllowed ? picked : picked[0] || ''}
+                        onChange={(value) => setPick(master._id, master.isMultiselectAllowed ? value : (value ? [value] : []))}
+                        placeholder={master.isMultiselectAllowed ? 'Choose one or more' : `Choose ${label}`}
+                        searchable
+                        clearable={!master.isRequired}
+                        required={master.isRequired}
+                        error={fieldErrors[`masters.${master._id}`]}
+                        disabled={isSaving}
+                        aria-label={label}
+                      />
+                      {pickedValues.map((value) => {
+                        const people = peopleOptionsOf(value);
+                        if (!parts.canAssignWork && people.length === 0) return null;
+                        return (
+                          <div key={value._id} className="border-l-2 border-indigo-100 pl-3">
+                            {people.length > 0 ? (
+                              <Dropdown
+                                label={`Who does ${value.name}?`}
+                                name={`assign-${value._id}`}
+                                options={people}
+                                multiple
+                                searchable
+                                value={form.assign[value._id] || []}
+                                onChange={(userIds) => setAssign(master._id, value._id, userIds)}
+                                placeholder="Nobody yet (optional)"
+                                size="sm"
+                                disabled={isSaving}
+                                aria-label={`Assign ${value.name} to`}
+                              />
+                            ) : (
+                              <p className="text-xs text-gray-500">Nobody has {value.name} in their role yet, so its work can't be given to anyone.</p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   );
                 })}
               </div>

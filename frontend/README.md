@@ -58,7 +58,9 @@ images stored on the server itself, such as logos) to it.
   typed by hand), the customer address (only when asked; the country is
   locked when the vendor has one), every master as a searchable dropdown
   (multi-select where allowed, default picked, short name when chosen in
-  Company Settings, required ones starred), every control, the tax rate, and a
+  Company Settings, required ones starred) - under a role master, "Who does
+  <value>?" for each picked value lists only the people who have that value
+  (several can be picked, optional) - every control, the tax rate, and a
   summary beside it that updates as you type - every answer, the prices,
   subtotal, tax split (CGST + SGST, or IGST for another Indian state) and
   total in the country's currency, or why no tax is charged. Images (only

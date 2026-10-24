@@ -3,6 +3,7 @@ const User = require('../models/User');
 const Role = require('../models/Role');
 const RefreshToken = require('../models/RefreshToken');
 const common = require('../utils/common');
+const { todayString } = require('../utils/days');
 const roleService = require('./roleService');
 const { ROLES } = require('../constants/roleConstants');
 const { LIVE_STATUSES } = require('../constants/masterConstants');
@@ -29,16 +30,6 @@ const LIST_FIELDS = '_id name username email phone_no assignedRoles extraModules
 const idOf = (value) => String(value);
 const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// Today on the server, as 'YYYY-MM-DD' (the form sends the browser's today
-// itself; this is only for a request without one).
-const todayString = () => {
-    try {
-        const now = new Date();
-        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    } catch (err) {
-        throw err;
-    }
-};
 
 const settingsOf = (companyMasterData) => ({
     canGiveExtraAccess: companyMasterData?.isRoleAssignmentOnUserModuleAllowed === true,
