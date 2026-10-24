@@ -10,7 +10,10 @@ import { todayString } from '../../../components/common/DateRangeFields';
 import { useUnsavedChanges } from '../../../components/common/UnsavedChanges';
 import { BackIcon } from '../../../components/common/ActionIcons';
 import RoleAssignments from '../components/RoleAssignments';
-import ExtraAccess from '../components/ExtraAccess';
+import AccessTable from '../components/AccessTable';
+import RoleMasterAccess from '../components/RoleMasterAccess';
+import ExtraMasters from '../components/ExtraMasters';
+import { givenRolesOf, roleModulesOf, roleMastersOf } from '../userAccess';
 import * as usersApi from '../api/usersApi';
 import { useAccess } from '../../access/hooks/useAccess';
 
@@ -29,6 +32,8 @@ const EMPTY_FORM = {
   roles: [],
   extraModules: [],
   extraMasters: [],
+  revokedModules: [],
+  revokedMasters: [],
 };
 
 // What gets saved, as one string - compared with the loaded one to know
@@ -65,8 +70,9 @@ const isBackwards = ({ startDate, endDate }, today) => !!endDate && endDate < (s
 
 /**
  * Add a user or edit one: details, roles from Role Master (one, or several
- * when allowed) and, when allowed, extra access of their own - every role and
- * every extra option with its own dates. Leaving with unsaved changes asks first.
+ * when allowed) and their access - what the roles give comes ticked and can be
+ * taken away for this user; when allowed, extra access of their own. Every
+ * role and every extra option has its own dates. Leaving with unsaved changes asks first.
  *
  * @param {Object} props
  * @param {'create'|'edit'} props.mode
@@ -106,6 +112,8 @@ const UserFormPage = ({ mode, userId, onDone, onBack, readOnly = false, onEdit =
           roles: user.assignedRoles.map(({ roleId, startDate, endDate }) => ({ roleId, startDate, endDate: endDate || '' })),
           extraModules: groupExtraModules(user.extraModules),
           extraMasters: user.extraMasters.map(({ masterId, isWholeMaster, valueIds, startDate, endDate }) => ({ masterId, isWholeMaster, valueIds, startDate, endDate: endDate || '' })),
+          revokedModules: (user.revokedModules || []).map(({ module, permission }) => ({ module, permission })),
+          revokedMasters: (user.revokedMasters || []).map(({ masterId, isWholeMaster, valueIds }) => ({ masterId, isWholeMaster, valueIds })),
         };
         setForm(loadedForm);
         setSavedSnapshot(toSnapshot(loadedForm));
@@ -131,8 +139,13 @@ const UserFormPage = ({ mode, userId, onDone, onBack, readOnly = false, onEdit =
     clearError(errorKey);
     clearError('roles');
   };
-  const setExtras = ({ modules, masters }, errorKey) => {
-    setForm((prev) => ({ ...prev, ...(modules && { extraModules: modules }), ...(masters && { extraMasters: masters }) }));
+  const setModuleAccess = (changes, errorKey) => {
+    setForm((prev) => ({ ...prev, ...changes }));
+    clearError(errorKey);
+  };
+  const setRevokedMasters = (revokedMasters) => setForm((prev) => ({ ...prev, revokedMasters }));
+  const setExtraMasters = (extraMasters, errorKey) => {
+    setForm((prev) => ({ ...prev, extraMasters }));
     clearError(errorKey);
   };
 
@@ -140,6 +153,8 @@ const UserFormPage = ({ mode, userId, onDone, onBack, readOnly = false, onEdit =
   // and never on your own account - the backend keeps them as they are.
   const canChangeRoles = options?.canAssignRole === true && userId !== access.userId;
   const canGiveExtraAccess = canChangeRoles && options?.settings.canGiveExtraAccess === true;
+  // The user's active roles - what they give shows ticked in Access.
+  const givenRoles = useMemo(() => (options ? givenRolesOf(form.roles, options.roles) : []), [options, form.roles]);
 
   const validate = (today) => {
     const errors = {};
@@ -180,6 +195,9 @@ const UserFormPage = ({ mode, userId, onDone, onBack, readOnly = false, onEdit =
     if (isSaving || !validate(today)) return;
     const { details } = form;
     const dates = ({ startDate, endDate }) => ({ startDate: startDate || today, endDate: endDate || null });
+    // Only what the roles still give can be taken away.
+    const roleModules = roleModulesOf(givenRoles);
+    const roleMasters = roleMastersOf(givenRoles);
     const payload = {
       name: details.name.trim(),
       username: details.username.trim().toLowerCase(),
@@ -195,6 +213,8 @@ const UserFormPage = ({ mode, userId, onDone, onBack, readOnly = false, onEdit =
         valueIds: entry.isWholeMaster ? [] : entry.valueIds,
         ...dates(entry),
       })),
+      revokedModules: form.revokedModules.filter(({ module, permission }) => roleModules.get(module)?.has(permission)),
+      revokedMasters: form.revokedMasters.filter(({ masterId }) => roleMasters.has(masterId)),
     };
     if (details.password) payload.password = details.password;
     setIsSaving(true);
@@ -342,17 +362,36 @@ const UserFormPage = ({ mode, userId, onDone, onBack, readOnly = false, onEdit =
           </Card>
           )}
 
-          {canGiveExtraAccess && (
-            <Card variant="outlined" title="Extra access" subtitle="Only for this user, on top of the roles.">
-              <ExtraAccess
-                modules={form.extraModules}
-                masters={form.extraMasters}
-                onChange={setExtras}
-                availableModules={options.modules}
-                availableMasters={options.masters}
-                errors={fieldErrors}
-                disabled={isLocked}
-              />
+          {canChangeRoles && (
+            <Card variant="outlined" title="Access" subtitle={canGiveExtraAccess ? 'What this user can use: from the roles, less what is taken away, plus extra access of their own.' : 'What this user can use: from the roles, less what is taken away.'}>
+              <div className="space-y-6">
+                <AccessTable
+                  roles={givenRoles}
+                  extraModules={form.extraModules}
+                  revokedModules={form.revokedModules}
+                  onChange={setModuleAccess}
+                  availableModules={options.modules}
+                  canGiveExtra={canGiveExtraAccess}
+                  errors={fieldErrors}
+                  disabled={isLocked}
+                />
+                <RoleMasterAccess
+                  roles={givenRoles}
+                  revokedMasters={form.revokedMasters}
+                  onChange={setRevokedMasters}
+                  availableMasters={options.masters}
+                  disabled={isLocked}
+                />
+                {canGiveExtraAccess && (
+                  <ExtraMasters
+                    masters={form.extraMasters}
+                    onChange={setExtraMasters}
+                    availableMasters={options.masters}
+                    errors={fieldErrors}
+                    disabled={isLocked}
+                  />
+                )}
+              </div>
             </Card>
           )}
 

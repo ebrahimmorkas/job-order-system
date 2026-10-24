@@ -4,19 +4,46 @@ const common = require('../utils/common');
 const roleService = require('./roleService');
 const { todayString, coversDay } = require('../utils/days');
 const { ROLES } = require('../constants/roleConstants');
-const { ROLE_TYPES, withImpliedPermissions } = require('../constants/rbacConstants');
+const { ROLE_TYPES, withImpliedPermissions, withoutPermission } = require('../constants/rbacConstants');
 const { FEATURE_FLAGS } = require('../constants/featureConstants');
 
 // What a logged-in person may do. The owner may do everything. A user gets
 // the modules and permissions of their active roles that cover today, plus
 // their own extra access (only while CompanyMaster.isRoleAssignmentOnUserModuleAllowed
-// is on) - and nothing at all while RBAC is off. Any permission of a module
-// also gives View, and Edit gives Details. Modules whose feature is off are
-// left out.
+// is on) - and nothing at all while RBAC is off. What the owner took away
+// from this user (revokedModules / revokedMasters) is taken out of what the
+// roles give; extras are added after. Any permission of a module also gives
+// View, and Edit gives Details. Modules whose feature is off are left out.
 //
 // hasWork: a master role or extra master access today - the "My work" page.
 
 const NO_ACCESS = { isOwner: false, modules: {}, hasWork: false };
+
+/**
+ * A user's role masters less what was taken away from them: a whole master
+ * goes; taken values go from a role's values, or are kept as exceptValueIds
+ * of a whole master.
+ * @returns {Array<{ masterId, isWholeMaster, valueIds, exceptValueIds }>}
+ */
+const withoutRevokedMasters = (entries, revokedMasters = []) => {
+    try {
+        if (revokedMasters.length === 0) return entries;
+        const revokedById = new Map(revokedMasters.map((entry) => [String(entry.masterId), entry]));
+        const left = [];
+        for (const entry of entries) {
+            const revoked = revokedById.get(String(entry.masterId));
+            if (!revoked) { left.push(entry); continue; }
+            if (revoked.isWholeMaster) continue;
+            const taken = new Set(revoked.valueIds.map(String));
+            if (entry.isWholeMaster) { left.push({ ...entry, exceptValueIds: [...taken] }); continue; }
+            const valueIds = entry.valueIds.filter((valueId) => !taken.has(String(valueId)));
+            if (valueIds.length > 0) left.push({ ...entry, valueIds });
+        }
+        return left;
+    } catch (err) {
+        throw err;
+    }
+};
 
 /** RBAC is on only when it is on in WebsiteMaster AND in CompanyMaster. */
 const isRbacOn = (websiteMasterData, companyMasterData) =>
@@ -31,7 +58,7 @@ const accessOf = async ({ vendorId, user, websiteMasterData, companyMasterData }
         if (user.role === ROLES.OWNER) return { isOwner: true, modules: {}, hasWork: false };
         if (!isRbacOn(websiteMasterData, companyMasterData)) return NO_ACCESS;
 
-        const own = await User.findOne({ _id: user._id, vendorId }).select('assignedRoles extraModules extraMasters').lean();
+        const own = await User.findOne({ _id: user._id, vendorId }).select('assignedRoles extraModules extraMasters revokedModules revokedMasters').lean();
         if (!own) return NO_ACCESS;
         const today = todayString();
         const roleIds = own.assignedRoles.filter((entry) => coversDay(entry, today)).map((entry) => entry.roleId);
@@ -47,9 +74,17 @@ const accessOf = async ({ vendorId, user, websiteMasterData, companyMasterData }
         for (const role of roles) {
             if (role.type === ROLE_TYPES.MODULE) {
                 for (const entry of role.modules) for (const permission of entry.permissions) grant(entry.module, permission);
-            } else if (role.masters.length > 0) {
+            } else if (withoutRevokedMasters(role.masters, own.revokedMasters).length > 0) {
                 hasWork = true;
             }
+        }
+        for (const revoked of own.revokedModules || []) {
+            const permissions = granted.get(revoked.module);
+            if (!permissions) continue;
+            const left = withoutPermission(permissions, revoked.permission);
+            // No View left = no module at all.
+            if (left.length === 0) granted.delete(revoked.module);
+            else granted.set(revoked.module, new Set(left));
         }
         if (canUseExtras) {
             for (const extra of own.extraModules) if (coversDay(extra, today)) grant(extra.module, extra.permission);
@@ -90,6 +125,7 @@ const getMyAccess = async (params) => {
 
 module.exports = {
     isRbacOn,
+    withoutRevokedMasters,
     accessOf,
     can,
     getMyAccess

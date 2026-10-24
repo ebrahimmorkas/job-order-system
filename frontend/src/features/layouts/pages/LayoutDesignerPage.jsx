@@ -23,6 +23,24 @@ import {
 import * as layoutsApi from '../api/layoutsApi';
 
 const NAME_MIN_LENGTH = 2;
+
+// Which side panels are open (items on the left, settings on the right),
+// kept in this browser. A closed panel gives its room to the page.
+const PANELS_KEY = 'layoutPanels';
+const readPanels = () => {
+  try {
+    return { items: true, settings: true, ...JSON.parse(localStorage.getItem(PANELS_KEY) || '{}') };
+  } catch {
+    return { items: true, settings: true };
+  }
+};
+// Written out in full so Tailwind keeps every one.
+const GRID_COLUMNS = {
+  'items-settings': 'lg:grid-cols-[220px_minmax(0,1fr)_300px]',
+  items: 'lg:grid-cols-[220px_minmax(0,1fr)]',
+  settings: 'lg:grid-cols-[minmax(0,1fr)_300px]',
+  '': 'lg:grid-cols-[minmax(0,1fr)]',
+};
 const COPY_SUFFIX = ' (copy)';
 const NEW_LAYOUT = { name: '', paper: { size: 'A4', orientation: 'portrait' }, labelDefault: 'none', elements: [] };
 const ZOOM_OPTIONS = [
@@ -70,6 +88,7 @@ const Designer = ({ mode, initial, formData, onBack }) => {
   const [nameError, setNameError] = useState('');
   // Server errors per element id.
   const [elementErrors, setElementErrors] = useState({});
+  const [panels, setPanels] = useState(readPanels);
   const areaRef = useRef(null);
   const exportRef = useRef(null);
 
@@ -96,6 +115,17 @@ const Designer = ({ mode, initial, formData, onBack }) => {
   const zoomOptions = ZOOM_OPTIONS.some((option) => option.value === zoomChoice)
     ? ZOOM_OPTIONS
     : [...ZOOM_OPTIONS, { value: zoomChoice, label: `${Math.round(Number(zoomChoice) * 100)}%` }];
+
+  const togglePanel = (panel) => {
+    const next = { ...panels, [panel]: !panels[panel] };
+    setPanels(next);
+    try {
+      localStorage.setItem(PANELS_KEY, JSON.stringify(next));
+    } catch {
+      // Not kept (private window); the panel still opens and closes.
+    }
+  };
+  const gridColumns = GRID_COLUMNS[['items', 'settings'].filter((panel) => panels[panel]).join('-')];
 
   const checkName = () => {
     const trimmed = name.trim();
@@ -317,6 +347,8 @@ const Designer = ({ mode, initial, formData, onBack }) => {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => togglePanel('items')} aria-pressed={panels.items}>{panels.items ? 'Close items' : 'Open items'}</Button>
+          <Button variant="outline" size="sm" onClick={() => togglePanel('settings')} aria-pressed={panels.settings}>{panels.settings ? 'Close settings' : 'Open settings'}</Button>
           <Button variant="ghost" size="sm" onClick={history.undo} disabled={!history.canUndo} title="Undo (Ctrl+Z)">Undo</Button>
           <Button variant="ghost" size="sm" onClick={history.redo} disabled={!history.canRedo} title="Redo (Ctrl+Y)">Redo</Button>
           <div className="w-24">
@@ -337,10 +369,12 @@ const Designer = ({ mode, initial, formData, onBack }) => {
         </Alert>
       )}
 
-      <div className="grid gap-4 lg:h-[calc(100vh-12rem)] lg:min-h-[520px] lg:grid-cols-[220px_minmax(0,1fr)_300px]">
+      <div className={`grid gap-4 lg:h-[calc(100vh-12rem)] lg:min-h-[520px] ${gridColumns}`}>
+        {panels.items && (
         <aside className="rounded-xl border border-gray-200 bg-white p-3 lg:overflow-hidden max-lg:max-h-80 max-lg:overflow-y-auto" aria-label="Items">
           <ElementPalette sources={formData} onAdd={(item) => addItem(item)} />
         </aside>
+        )}
 
         <div
           ref={areaRef}
@@ -370,6 +404,7 @@ const Designer = ({ mode, initial, formData, onBack }) => {
           </div>
         </div>
 
+        {panels.settings && (
         <aside className="rounded-xl border border-gray-200 bg-white p-4 lg:overflow-y-auto" aria-label={selected ? 'Item settings' : 'Page settings'}>
           {selected ? (
             <div className="space-y-3">
@@ -419,6 +454,7 @@ const Designer = ({ mode, initial, formData, onBack }) => {
             </div>
           )}
         </aside>
+        )}
       </div>
 
       <div aria-hidden="true" style={{ position: 'fixed', left: -100000, top: 0, pointerEvents: 'none' }}>

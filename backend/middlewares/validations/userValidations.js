@@ -54,7 +54,17 @@ const access = {
         valueIds: Joi.array().items(objectId('Value').optional()).unique().default([]).label('Values'),
         ...dates
     })).unique('masterId').default([]).label('Extra masters')
-        .messages({ 'array.unique': 'Each master can be added only once' })
+        .messages({ 'array.unique': 'Each master can be added only once' }),
+    // Taken away from what the user's roles give.
+    revokedModules: Joi.array().items(Joi.object({
+        module: Joi.string().valid(...MODULE_KEYS).required().label('Module'),
+        permission: Joi.string().valid(...PERMISSION_VALUES).required().label('Permission')
+    })).unique((a, b) => a.module === b.module && a.permission === b.permission).default([]).label('Access taken away'),
+    revokedMasters: Joi.array().items(Joi.object({
+        masterId: objectId('Master'),
+        isWholeMaster: Joi.boolean().default(false).label('Whole master'),
+        valueIds: Joi.array().items(objectId('Value').optional()).unique().default([]).label('Values')
+    })).unique('masterId').default([]).label('Master values taken away')
 };
 
 const password = Joi.string().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH).label('Password');

@@ -219,6 +219,18 @@ account. A user can't deactivate or delete themselves.
     role). Deleted values leave it; a master used here can't be deleted or
     unticked.
   While the bit is off, saving a user leaves their extras untouched.
+- Taken away from what the roles give, for this user only (saved with or
+  without extra access allowed; extras still count on top):
+  - `revokedModules: [{ module, permission }]` - one option each; what needs
+    it goes too (no View = the whole module, no Details = no Edit;
+    `rbacConstants.withoutPermission`);
+  - `revokedMasters: [{ masterId, isWholeMaster, valueIds }]` - a whole role
+    master or some of its values (`accessService.withoutRevokedMasters`, used
+    by `/api/access` and by who is offered work). Options no longer offered
+    and masters not set for roles are dropped on save.
+- The form data returns the roles with their `modules` / `masters` (shown
+  ticked in the form), and the modules and role masters, whenever roles can
+  be given.
 - Dates are calendar days `'YYYY-MM-DD'`, both included; start empty = today,
   end empty = no end.
 - `numberOfUsersAllowed` counts active + inactive users (null = no limit).
@@ -323,7 +335,8 @@ whose roles give Job Orders permissions, creates, edits and cancels them.
   `workerIds`, `canAssignWork`) are active users who have that value today:
   through an active master role naming the value or "Whole master", or
   through their own extra access (only while
-  `isRoleAssignmentOnUserModuleAllowed` is on). Users with module roles only
+  `isRoleAssignmentOnUserModuleAllowed` is on) - less what was taken away
+  from them (`revokedMasters`). Users with module roles only
   are never offered. Only while RBAC is on. Saved on each value as
   `assignedTo: [{ userId, name }]`; on edit, people already given a value may
   stay even after losing it, but nobody new without it can be added.
@@ -566,7 +579,8 @@ Field errors are named `name`, `modules`, `masters`, `modules.<key>` and
 `POST` / `PUT /api/users` take `{ name, username, password, email, phone,
 address, roles: [{ roleId, startDate, endDate }], extraModules: [{ module,
 permission, startDate, endDate }], extraMasters: [{ masterId, isWholeMaster,
-valueIds, startDate, endDate }] }`. Field errors are named after the details,
+valueIds, startDate, endDate }], revokedModules: [{ module, permission }],
+revokedMasters: [{ masterId, isWholeMaster, valueIds }] }`. Field errors are named after the details,
 `roles`, `roles.<roleId>`, `extraModules.<module>.<permission>` and
 `extraMasters.<masterId>`.
 

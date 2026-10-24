@@ -19,13 +19,16 @@ const { MODULES } = require('../constants/rbacConstants');
 // own: single module options (e.g. Masters: create) and role-provided masters
 // (whole or some values, view only - like a master role). Every role and
 // every extra has its own dates: start empty = today, end empty = no end.
+// Whatever the roles give can be taken away from one user (revokedModules:
+// single options; revokedMasters: a whole master or some values) - with or
+// without extra access allowed.
 //
 // Limit: CompanyMaster.numberOfUsersAllowed (active + inactive users; null =
 // no limit).
 
 const LIVE = { $in: LIVE_STATUSES };
 const USERS = { role: ROLES.USER };
-const USER_FIELDS = '_id name username email phone_no address assignedRoles extraModules extraMasters status createdAt updatedAt';
+const USER_FIELDS = '_id name username email phone_no address assignedRoles extraModules extraMasters revokedModules revokedMasters status createdAt updatedAt';
 const LIST_FIELDS = '_id name username email phone_no assignedRoles extraModules extraMasters status createdAt';
 
 const idOf = (value) => String(value);
@@ -67,7 +70,7 @@ const checkAccess = async ({ vendorId, data, current, websiteMasterData, company
         }
         const [roles, roleMasters] = await Promise.all([
             data.roles.length === 0 ? [] : Role.find({ vendorId, status: LIVE, _id: { $in: data.roles.map((entry) => entry.roleId) } }).select('_id name status').lean(),
-            settings.canGiveExtraAccess && data.extraMasters.length > 0 ? roleService.roleMastersOf(vendorId) : []
+            (settings.canGiveExtraAccess && data.extraMasters.length > 0) || data.revokedMasters.length > 0 ? roleService.roleMastersOf(vendorId) : []
         ]);
         const roleById = new Map(roles.map((role) => [idOf(role._id), role]));
         const hadRole = new Set((current?.assignedRoles || []).map((entry) => idOf(entry.roleId)));
@@ -88,9 +91,23 @@ const checkAccess = async ({ vendorId, data, current, websiteMasterData, company
             if (range) doc.assignedRoles.push({ roleId: role._id, ...range });
         }
 
+        // Taken away from what the roles give; options no longer offered are dropped.
+        const available = new Map(roleService.availableModulesOf(websiteMasterData, companyMasterData).map((module) => [module.key, module]));
+        const known = new Map(roleMasters.map((master) => [idOf(master._id), master]));
+        doc.revokedModules = data.revokedModules
+            .filter((entry) => available.get(entry.module)?.permissions.includes(entry.permission))
+            .map(({ module, permission }) => ({ module, permission }));
+        doc.revokedMasters = [];
+        for (const entry of data.revokedMasters) {
+            const master = known.get(entry.masterId);
+            if (!master) continue;
+            const valueById = new Map(master.values.map((value) => [idOf(value._id), value]));
+            const valueIds = entry.isWholeMaster ? [] : entry.valueIds.filter((valueId) => valueById.has(valueId)).map((valueId) => valueById.get(valueId)._id);
+            if (entry.isWholeMaster || valueIds.length > 0) doc.revokedMasters.push({ masterId: master._id, isWholeMaster: entry.isWholeMaster, valueIds });
+        }
+
         if (!settings.canGiveExtraAccess) return { errors, doc };
 
-        const available = new Map(roleService.availableModulesOf(websiteMasterData, companyMasterData).map((module) => [module.key, module]));
         doc.extraModules = [];
         for (const entry of data.extraModules) {
             const field = `extraModules.${entry.module}.${entry.permission}`;
@@ -107,7 +124,6 @@ const checkAccess = async ({ vendorId, data, current, websiteMasterData, company
             if (range) doc.extraModules.push({ module: entry.module, permission: entry.permission, ...range });
         }
 
-        const known = new Map(roleMasters.map((master) => [idOf(master._id), master]));
         doc.extraMasters = [];
         for (const entry of data.extraMasters) {
             const field = `extraMasters.${entry.masterId}`;
@@ -172,20 +188,20 @@ const detailsOf = (data) => ({
 
 // ---- the form -------------------------------------------------------------------
 
-// GET /api/users/form-data - what a user can be given. Without
+// GET /api/users/form-data - what a user can be given: the roles (with what
+// each gives, to show it ticked), the modules and the role masters. Without
 // canAssignRole (the owner, or Users > Assign role) there is nothing to give.
 const getFormData = async ({ vendorId, canAssignRole, websiteMasterData, companyMasterData }) => {
     try {
         const settings = settingsOf(companyMasterData);
-        const canGiveExtras = canAssignRole && settings.canGiveExtraAccess;
         const [roles, masters] = await Promise.all([
             // Inactive ones too, to name a role a user already has.
-            canAssignRole ? Role.find({ vendorId, status: LIVE }).select('_id name type status').sort({ name: 1 }).collation({ locale: 'en', strength: 2 }).lean() : [],
-            canGiveExtras ? roleService.roleMastersOf(vendorId) : []
+            canAssignRole ? Role.find({ vendorId, status: LIVE }).select('_id name type status modules masters').sort({ name: 1 }).collation({ locale: 'en', strength: 2 }).lean() : [],
+            canAssignRole ? roleService.roleMastersOf(vendorId) : []
         ]);
         return common.returnResult(true, 200, 'User form fetched successfully.', {
             roles,
-            modules: canGiveExtras ? roleService.availableModulesOf(websiteMasterData, companyMasterData) : [],
+            modules: canAssignRole ? roleService.availableModulesOf(websiteMasterData, companyMasterData) : [],
             masters,
             settings,
             canAssignRole,
@@ -254,7 +270,7 @@ const getUser = async ({ vendorId, id }) => {
 
 // Roles and extra access are saved only with canAssignRole, and never by a
 // user on their own account (they could give themselves more).
-const NO_ROLES = { assignedRoles: [], extraModules: [], extraMasters: [] };
+const NO_ROLES = { assignedRoles: [], extraModules: [], extraMasters: [], revokedModules: [], revokedMasters: [] };
 
 // POST /api/users - without canAssignRole the new user gets no roles.
 const createUser = async ({ vendorId, canAssignRole, data, websiteMasterData, companyMasterData }) => {

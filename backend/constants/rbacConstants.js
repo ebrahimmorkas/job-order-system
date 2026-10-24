@@ -42,6 +42,12 @@ const IMPLIED_PERMISSIONS = {
 /** permission plus what comes with it (View always). */
 const withImpliedPermissions = (permission) => [PERMISSIONS.VIEW, permission, ...(IMPLIED_PERMISSIONS[permission] || [])];
 
+/** permissions without permission - and without what needs it (no View = nothing; no Details = no Edit). */
+const withoutPermission = (permissions, permission) => {
+    const left = new Set([...permissions].filter((given) => given !== permission));
+    return [...left].filter((given) => withImpliedPermissions(given).every((needed) => left.has(needed)));
+};
+
 // The modules a module role can cover, in the order the form lists them,
 // with the permissions each one has. featureFlag: offered only while that
 // feature is on for the vendor (see roleService.availableModulesOf).
@@ -85,6 +91,7 @@ module.exports = {
     PERMISSION_VALUES,
     IMPLIED_PERMISSIONS,
     withImpliedPermissions,
+    withoutPermission,
     MODULES,
     MODULE_KEYS,
     USER_NAME_MIN_LENGTH,

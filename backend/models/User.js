@@ -34,6 +34,21 @@ const extraMasterSchema = new mongoose.Schema({
     ...dateRange
 }, { _id: false });
 
+// Taken away from this user only: one permission of a module their roles
+// give (and what needs it - see rbacConstants.withoutPermission).
+const revokedModuleSchema = new mongoose.Schema({
+    module: { type: String, enum: MODULE_KEYS, required: true },
+    permission: { type: String, enum: PERMISSION_VALUES, required: true }
+}, { _id: false });
+
+// Taken away from this user only: a whole master their roles give, or some
+// of its values.
+const revokedMasterSchema = new mongoose.Schema({
+    masterId: { type: mongoose.Types.ObjectId, required: true },
+    isWholeMaster: { type: Boolean, default: false },
+    valueIds: { type: [mongoose.Types.ObjectId], default: [] }
+}, { _id: false });
+
 const userSchema = mongoose.Schema({
     // Indexed through the { vendorId, username / email / phone_no } indexes below.
     vendorId: {
@@ -111,7 +126,9 @@ const userSchema = mongoose.Schema({
     // Users only (RBAC).
     assignedRoles: { type: [assignedRoleSchema], default: [] },
     extraModules: { type: [extraModuleSchema], default: [] },
-    extraMasters: { type: [extraMasterSchema], default: [] }
+    extraMasters: { type: [extraMasterSchema], default: [] },
+    revokedModules: { type: [revokedModuleSchema], default: [] },
+    revokedMasters: { type: [revokedMasterSchema], default: [] }
 }, {
     timestamps: true
 });

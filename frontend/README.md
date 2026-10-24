@@ -97,16 +97,22 @@ Each section's code is downloaded the first time it is opened
   ended - and "+N extra", status switch, bulk actions, users usage pill) and
   the form: name, login username, password (empty on edit = unchanged),
   email, phone, address; roles from a searchable dropdown, each with start /
-  end dates (one role unless several are allowed); and, when allowed, extra
-  access: module options ticked one by one and master values, each with its
-  own dates. Users log in while RBAC is on.
+  end dates (one role unless several are allowed); and Access: a table like
+  Role Master (with an All column) where what the roles give comes ticked -
+  untick an option to take it away from this user only (unticking View takes
+  the module, Details takes Edit) - and, when allowed, more can be ticked or
+  modules added as extra access, each extra option with its own dates under
+  the row; the role masters' values come ticked too (untick a value, or All
+  values); and, when allowed, extra master values with their own dates.
+  Users log in while RBAC is on.
 - **Role Master** (with Users, only while RBAC is on) - the same list as
   Masters plus a type filter, an access column and the roles usage pill.
   Create (pick Module role or Master role - it can't change later), copy and
   edit: a module role adds modules from a searchable dropdown and ticks View /
   Details / Create / Edit / Delete (Role assignment for Users; only View and
   Edit for Company Settings - ticking anything ticks View, ticking Edit ticks
-  Details, unticking Details unticks Edit); a master role adds role
+  Details, unticking Details unticks Edit; All ticks every option of a
+  module, the All in the header every option of every module); a master role adds role
   masters, each "Whole master" or some of its values.
 - **Controls** - fields the vendor adds to the job order (text field, text
   area, checkbox, radio buttons), only the types assigned to the vendor: the
@@ -151,8 +157,9 @@ Each section's code is downloaded the first time it is opened
   sits in), and the selected item's settings on the
   right (place and size, label on / off and its text, table cells, line and
   fill, and - when allowed - font, size, bold, italic, underline, alignment,
-  colour). Export downloads the template as PDF, PNG or JPEG. Leaving with
-  unsaved changes asks first.
+  colour). Close items / Close settings hide either side panel and the page
+  gets the room (kept in the browser). Export downloads the template as PDF,
+  PNG or JPEG. Leaving with unsaved changes asks first.
 - **Company Settings** - tabs: General (company name, login tagline, logo -
   the menu and browser tab update at once), Job Orders (automatic numbers,
   ask the customer address, where to use master short names, when the work

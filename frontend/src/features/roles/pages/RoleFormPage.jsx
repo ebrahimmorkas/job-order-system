@@ -10,7 +10,7 @@ import Dropdown from '../../../components/common/DropDown';
 import IconButton from '../../../components/common/IconButton';
 import { useUnsavedChanges } from '../../../components/common/UnsavedChanges';
 import { BackIcon, TrashIcon } from '../../../components/common/ActionIcons';
-import { ROLE_TYPES, PERMISSIONS, MODULE_LABELS } from '../roleTypes';
+import { ROLE_TYPES, PERMISSIONS, MODULE_LABELS, togglePermission } from '../roleTypes';
 import * as rolesApi from '../api/rolesApi';
 
 // Same limits as the backend (constants/rbacConstants.js).
@@ -34,23 +34,6 @@ const toFieldErrors = (errors) => {
     if (!fieldErrors[key]) fieldErrors[key] = message;
   }
   return fieldErrors;
-};
-
-// What comes with a permission (same as the backend's IMPLIED_PERMISSIONS):
-// Edit gives Details - you can't edit what you can't open.
-const IMPLIED = { edit: ['details'] };
-
-// Giving anything also gives view (and Edit gives Details); taking view away
-// takes everything away, and taking Details away takes Edit with it.
-// allowed: the module's own permissions (Company Settings has no Details).
-const togglePermission = (permissions, permission, isOn, allowed) => {
-  if (!isOn) {
-    if (permission === 'view') return [];
-    const needing = Object.keys(IMPLIED).filter((key) => IMPLIED[key].includes(permission));
-    return permissions.filter((p) => p !== permission && !needing.includes(p));
-  }
-  const next = new Set([...permissions, permission, 'view', ...(IMPLIED[permission] || [])]);
-  return PERMISSIONS.map((p) => p.key).filter((p) => next.has(p) && allowed.includes(p));
 };
 
 /**
@@ -130,6 +113,12 @@ const RoleFormPage = ({ mode, roleId, onDone, onBack, readOnly = false, onEdit =
   const removeModule = (key) => update({ modules: role.modules.filter((m) => m.module !== key) }, `modules.${key}`);
   const setPermission = (key, permission, isOn) =>
     update({ modules: role.modules.map((m) => (m.module === key ? { ...m, permissions: togglePermission(m.permissions, permission, isOn, moduleByKey.get(key)?.permissions || []) } : m)) }, `modules.${key}`);
+  // "All": every option of the module (key), or of every module (no key) - or none.
+  const allowedOf = (key) => PERMISSIONS.map((p) => p.key).filter((p) => moduleByKey.get(key)?.permissions.includes(p));
+  const hasAll = (m) => allowedOf(m.module).length > 0 && allowedOf(m.module).every((p) => m.permissions.includes(p));
+  const setAll = (key, isOn) =>
+    update({ modules: role.modules.map((m) => (!key || m.module === key ? { ...m, permissions: isOn ? allowedOf(m.module) : [] } : m)) }, ...(key ? [`modules.${key}`] : role.modules.map((m) => `modules.${m.module}`)));
+  const isEverythingTicked = role.modules.length > 0 && role.modules.every(hasAll);
 
   // ---- master role ----
   const addMaster = (id) => id && update({ masters: [...role.masters, { masterId: id, isWholeMaster: false, valueIds: [] }] }, 'masters');
@@ -260,7 +249,7 @@ const RoleFormPage = ({ mode, roleId, onDone, onBack, readOnly = false, onEdit =
           </Card>
 
           {role.type === 'module' ? (
-            <Card variant="outlined" title="Modules" subtitle="Add the modules this role can use and tick what it can do in each. Ticking anything also ticks View.">
+            <Card variant="outlined" title="Modules" subtitle="Add the modules this role can use and tick what it can do in each. Ticking anything also ticks View; All ticks every option.">
               <div className="space-y-4">
                 <div className="sm:w-80">
                   <Dropdown
@@ -281,6 +270,18 @@ const RoleFormPage = ({ mode, roleId, onDone, onBack, readOnly = false, onEdit =
                       <thead className="bg-gray-50 text-xs font-medium uppercase tracking-wide text-gray-500">
                         <tr>
                           <th scope="col" className="px-4 py-2.5 text-left">Module</th>
+                          <th scope="col" className="px-3 py-2.5 text-center whitespace-nowrap">
+                            <span className="inline-flex flex-col items-center gap-1">
+                              All
+                              <Checkbox
+                                name="all-modules"
+                                checked={isEverythingTicked}
+                                onChange={(e) => setAll(null, e.target.checked)}
+                                disabled={isLocked}
+                                aria-label="Every option of every module"
+                              />
+                            </span>
+                          </th>
                           {PERMISSIONS.map((p) => <th key={p.key} scope="col" className="px-3 py-2.5 text-center whitespace-nowrap">{p.label}</th>)}
                           <th scope="col" className="px-2 py-2.5"><span className="sr-only">Remove</span></th>
                         </tr>
@@ -296,6 +297,21 @@ const RoleFormPage = ({ mode, roleId, onDone, onBack, readOnly = false, onEdit =
                                 <span className="font-medium text-gray-900">{label}</span>
                                 {!available && <span className="block text-xs text-amber-700">No longer available - remove it</span>}
                                 {error && <span className="block text-xs text-red-600" role="alert">{error}</span>}
+                              </td>
+                              <td className="px-3 py-2.5 text-center align-top border-r border-gray-100">
+                                {available ? (
+                                  <span className="inline-flex justify-center">
+                                    <Checkbox
+                                      name={`${module}-all`}
+                                      checked={hasAll({ module, permissions })}
+                                      onChange={(e) => setAll(module, e.target.checked)}
+                                      disabled={isLocked}
+                                      aria-label={`${label}: All`}
+                                    />
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-300" aria-hidden="true">—</span>
+                                )}
                               </td>
                               {PERMISSIONS.map((p) => (
                                 <td key={p.key} className="px-3 py-2.5 text-center align-top">

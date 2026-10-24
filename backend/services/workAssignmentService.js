@@ -3,11 +3,12 @@ const Role = require('../models/Role');
 const { todayString, coversDay } = require('../utils/days');
 const { ROLES } = require('../constants/roleConstants');
 const { ROLE_TYPES } = require('../constants/rbacConstants');
-const { isRbacOn } = require('./accessService');
+const { isRbacOn, withoutRevokedMasters } = require('./accessService');
 
 // Who can be given the work of a master value on a job order: active users
 // who have that value today - through an active master role (the value
-// itself, or "Whole master"), or through extra access of their own (only
+// itself, or "Whole master") less what the owner took away from them, or
+// through extra access of their own (only
 // while CompanyMaster.isRoleAssignmentOnUserModuleAllowed is on). Only
 // masters with "Role will be provided" ticked, and only while RBAC is on.
 // Users with module roles only (e.g. Company Settings) never show.
@@ -36,25 +37,27 @@ const workersOf = async ({ vendorId, masters, websiteMasterData, companyMasterDa
         if (or.length === 0) return { workers: [], byValue };
 
         const users = await User.find({ vendorId, role: ROLES.USER, status: 'A', $or: or })
-            .select('_id name username assignedRoles extraMasters').sort({ name: 1 }).lean();
+            .select('_id name username assignedRoles extraMasters revokedMasters').sort({ name: 1 }).lean();
 
         const roleById = new Map(roles.map((role) => [String(role._id), role]));
         const today = todayString();
         const workers = [];
         for (const user of users) {
             const userId = String(user._id);
-            const entries = [];
+            const fromRoles = [];
             for (const assigned of user.assignedRoles) {
                 const role = roleById.get(String(assigned.roleId));
-                if (role && coversDay(assigned, today)) entries.push(...role.masters);
+                if (role && coversDay(assigned, today)) fromRoles.push(...role.masters);
             }
+            const entries = withoutRevokedMasters(fromRoles, user.revokedMasters);
             if (canUseExtras) entries.push(...user.extraMasters.filter((extra) => coversDay(extra, today)));
 
             let hasAny = false;
             for (const entry of entries) {
                 const values = valuesOfMaster.get(String(entry.masterId));
                 if (!values) continue;
-                const own = entry.isWholeMaster ? values : entry.valueIds.map(String).filter((valueId) => values.includes(valueId));
+                const except = new Set(entry.exceptValueIds || []);
+                const own = entry.isWholeMaster ? values.filter((valueId) => !except.has(valueId)) : entry.valueIds.map(String).filter((valueId) => values.includes(valueId));
                 for (const valueId of own) {
                     if (!byValue.has(valueId)) byValue.set(valueId, new Set());
                     byValue.get(valueId).add(userId);
