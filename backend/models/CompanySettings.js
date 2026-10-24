@@ -3,7 +3,7 @@ const auditPlugin = require('./plugins/auditPlugin');
 const cacheInvalidationPlugin = require('./plugins/cacheInvalidationPlugin');
 const redisKeys = require('../utils/redisKeys');
 const { ADDRESS_LINE_MAX_LENGTH, POSTAL_CODE_MAX_LENGTH, TAX_FIELD_VALUE_MAX_LENGTH } = require('../constants/taxConstants');
-const { SHORT_NAME_PLACES, SHORT_NAME_PLACE_VALUES } = require('../constants/jobOrderConstants');
+const { SHORT_NAME_PLACES, SHORT_NAME_PLACE_VALUES, PRINT_WORK_OPTIONS } = require('../constants/jobOrderConstants');
 const { WORK_TIME_STARTS, WORK_TIME_START_VALUES, WORK_TIME_CHANGE_FROM, WORK_TIME_CHANGE_FROM_VALUES } = require('../constants/stepConstants');
 const { SERVICE_MESSAGE_MAX_LENGTH } = require('../constants/serviceStatusConstants');
 
@@ -113,6 +113,9 @@ const companySettingsSchema = new mongoose.Schema({
         enum: WORK_TIME_CHANGE_FROM_VALUES,
         default: WORK_TIME_CHANGE_FROM.PERSON_START
     },
+    // What the "Work given" field of a printed job order shows for each
+    // person: their name, start date, due time, step (with %) and hold reason.
+    printWork: Object.fromEntries(PRINT_WORK_OPTIONS.map((option) => [option, { type: Boolean, default: true }])),
     // Company Settings > Shop (the owner only): while closed, users see the
     // shop closed page with shopClosedMessage and estimatedResumeTime. With
     // a time, the shop opens by itself then; without one it stays closed

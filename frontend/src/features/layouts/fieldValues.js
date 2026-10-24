@@ -1,5 +1,6 @@
 import { formatMoney } from '../jobOrders/jobOrderTotals';
 import { customerLineOf, masterLabelOf } from '../jobOrders/summaryRows';
+import { formatDueAt } from '../jobOrders/workTime';
 
 // What a field on a layout shows: { label, value }. In the designer the value
 // is a placeholder ("[Cutting]"); printing a job order fills in its values.
@@ -14,6 +15,7 @@ const SYSTEM_LABELS = {
   companyName: 'Company name',
   companyAddress: 'Company address',
   companyTaxIds: 'Company tax numbers',
+  workDetails: 'Work given',
 };
 
 const byId = (docs) => new Map((docs || []).map((doc) => [doc._id, doc]));
@@ -44,6 +46,36 @@ export const placeholderResolver = ({ masters, controls, systemFields }) => {
 
 const formatDate = (value) => new Date(value).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 
+// One person's line: what Company Settings > Job orders says to print
+// (printWork), e.g. "Ravi · In progress 40% · started 24 Oct 2026 · due 26 Oct 2026, 05:30 pm".
+const personLineOf = (person, value, printWork) => {
+  const step = person.step;
+  const parts = [];
+  if (printWork.showWorkers) parts.push(person.name);
+  if (printWork.showStep) parts.push(step ? `${step.name}${step.percent !== null && step.percent !== undefined ? ` ${step.percent}%` : ''}` : 'Not started');
+  if (printWork.showHoldReason && step?.fixedStep === 'hold' && step.holdReason) parts.push(`On hold: ${step.holdReason}`);
+  if (printWork.showStartDate && person.startedAt) parts.push(`started ${formatDate(person.startedAt)}`);
+  const dueAt = person.dueAt ?? value.dueAt;
+  if (printWork.showDueTime && dueAt) parts.push(`due ${formatDueAt(dueAt)}`);
+  return parts.join(' · ');
+};
+
+// The "Work given" field: each value with work, then a line per person.
+const workDetailsOf = (jobOrder, printWork, useShortNames) => {
+  const lines = [];
+  for (const master of jobOrder.masters) {
+    for (const value of master.values) {
+      if (!value.assignedTo?.length) continue;
+      lines.push(`${value.name} (${masterLabelOf(master, useShortNames)})`);
+      for (const person of value.assignedTo) {
+        const line = personLineOf(person, value, printWork);
+        if (line) lines.push(`  ${line}`);
+      }
+    }
+  }
+  return lines.join('\n');
+};
+
 /**
  * A job order's real values.
  * @param {Object} jobOrder - As saved (models/JobOrder.js)
@@ -68,6 +100,7 @@ export const jobOrderResolver = (jobOrder, { masters, controls, company, setting
     companyName: () => company.name,
     companyAddress: () => companyHere.address,
     companyTaxIds: () => companyHere.taxIds.map((t) => `${t.label}: ${t.value}`).join('\n'),
+    workDetails: () => workDetailsOf(jobOrder, settings.printWork || {}, settings.useShortNames),
   };
 
   return (field) => {

@@ -145,7 +145,9 @@ Each section's code is downloaded the first time it is opened
   unsaved changes asks first.
 - **Company Settings** - tabs: General (company name, login tagline, logo -
   the menu and browser tab update at once - and Job orders: automatic
-  numbers, ask the customer address, where to use master short names) and Tax (only with the tax feature
+  numbers, ask the customer address, where to use master short names and -
+  with Layout Master and RBAC on - what the printed "Work given" field shows:
+  who does it, start date, due time, step and %, hold reason) and Tax (only with the tax feature
   on): one form per assigned country - business address with state / city
   dropdowns, "I am registered for GST / VAT" with that country's own fields,
   and the default tax rate. Tabs keep what was typed; leaving with unsaved

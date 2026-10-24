@@ -24,8 +24,9 @@ const LOGO_TYPES = 'image/jpeg,image/png,image/webp,image/gif';
  * @param {Object} props
  * @param {(key: string, isDirty: boolean) => void} props.onDirtyChange
  * @param {boolean} [props.showWorkTime] - Ask when the work time starts (steps on)
+ * @param {boolean} [props.showPrintWork] - Ask what printed work shows (layouts and RBAC on)
  */
-const GeneralSettingsTab = ({ onDirtyChange, showWorkTime = false }) => {
+const GeneralSettingsTab = ({ onDirtyChange, showWorkTime = false, showPrintWork = false }) => {
   const toast = useToast();
   const { updateBranding } = useBranding();
   // Closing the shop: the owner only (a user would lock themselves out).
@@ -167,7 +168,7 @@ const GeneralSettingsTab = ({ onDirtyChange, showWorkTime = false }) => {
         {logoError && <p className="mt-3 text-sm text-red-600" role="alert">{logoError}</p>}
       </Card>
 
-      {jobOrderSettings && <JobOrderSettingsCard initial={jobOrderSettings} onDirtyChange={onDirtyChange} showWorkTime={showWorkTime} />}
+      {jobOrderSettings && <JobOrderSettingsCard initial={jobOrderSettings} onDirtyChange={onDirtyChange} showWorkTime={showWorkTime} showPrintWork={showPrintWork} />}
       {isOwner && <ShopSettingsCard onDirtyChange={onDirtyChange} />}
     </div>
   );

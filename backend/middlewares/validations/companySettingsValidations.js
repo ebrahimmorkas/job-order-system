@@ -1,6 +1,6 @@
 const Joi = require('joi');
 const { TAX_FIELD_KEY_PATTERN, TAX_FIELD_VALUE_MAX_LENGTH, ADDRESS_LINE_MAX_LENGTH, POSTAL_CODE_MAX_LENGTH } = require('../../constants/taxConstants');
-const { SHORT_NAME_PLACE_VALUES } = require('../../constants/jobOrderConstants');
+const { SHORT_NAME_PLACE_VALUES, PRINT_WORK_OPTIONS } = require('../../constants/jobOrderConstants');
 const { WORK_TIME_STARTS, WORK_TIME_START_VALUES, WORK_TIME_CHANGE_FROM, WORK_TIME_CHANGE_FROM_VALUES } = require('../../constants/stepConstants');
 
 // The rules of each country (its tax fields, postal code, states, cities,
@@ -31,7 +31,9 @@ const jobOrderSettingsSchema = Joi.object({
     askCustomerAddress: Joi.boolean().required().label('Ask for the customer address'),
     useShortNamesOn: Joi.string().valid(...SHORT_NAME_PLACE_VALUES).required().label('Use short names on'),
     workTimeStartsOn: Joi.string().valid(...WORK_TIME_START_VALUES).default(WORK_TIME_STARTS.ON_ASSIGN).label('Work time starts'),
-    workTimeChangeCountsFrom: Joi.string().valid(...WORK_TIME_CHANGE_FROM_VALUES).default(WORK_TIME_CHANGE_FROM.PERSON_START).label('Changed time counts from')
+    workTimeChangeCountsFrom: Joi.string().valid(...WORK_TIME_CHANGE_FROM_VALUES).default(WORK_TIME_CHANGE_FROM.PERSON_START).label('Changed time counts from'),
+    // Left out: unchanged.
+    printWork: Joi.object(Object.fromEntries(PRINT_WORK_OPTIONS.map((option) => [option, Joi.boolean().required()]))).label('Printed work')
 });
 
 // PUT /api/company-settings/tax/:countryId

@@ -64,7 +64,11 @@ const CompanySettingsPage = ({ featureAccess, basePath, segments }) => {
       <fieldset disabled={!canEdit} className="m-0 min-w-0 border-0 p-0">
 
       <div role="tabpanel" id="tabpanel-general" aria-labelledby="tab-general" hidden={current !== 'general'}>
-        <GeneralSettingsTab onDirtyChange={handleDirtyChange} showWorkTime={featureAccess?.isStepFeatureOn === true} />
+        <GeneralSettingsTab
+          onDirtyChange={handleDirtyChange}
+          showWorkTime={featureAccess?.isStepFeatureOn === true}
+          showPrintWork={featureAccess?.isLayoutMasterFeatureOn === true && featureAccess?.isRBACFeatureOn === true}
+        />
       </div>
       {showTax && (
         <div role="tabpanel" id="tabpanel-tax" aria-labelledby="tab-tax" hidden={current !== 'tax'}>

@@ -48,7 +48,9 @@ const SYSTEM_FIELDS = {
     total: 'Total',
     companyName: 'Company name',
     companyAddress: 'Company address',
-    companyTaxIds: 'Company tax numbers'
+    companyTaxIds: 'Company tax numbers',
+    // Every value's work: who, step, start and due (Company Settings says which).
+    workDetails: 'Work given'
 };
 const SYSTEM_FIELD_KEYS = Object.keys(SYSTEM_FIELDS);
 

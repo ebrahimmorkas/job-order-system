@@ -17,6 +17,10 @@ const AUTO_NUMBER_DIGITS = 4;
 // A number typed by the owner (when it isn't made by the app).
 const JOB_ORDER_NUMBER_MAX_LENGTH = 30;
 
+// What the "Work given" field of a print layout shows for each person
+// (CompanySettings.printWork); all on until the owner turns them off.
+const PRINT_WORK_OPTIONS = ['showWorkers', 'showStartDate', 'showDueTime', 'showStep', 'showHoldReason'];
+
 // The customer's address on a job order.
 const CUSTOMER_ADDRESS_MAX_LENGTH = 500;
 // A text field / text area answer when the vendor set no limit.
@@ -38,6 +42,7 @@ module.exports = {
     AUTO_NUMBER_PREFIX,
     AUTO_NUMBER_DIGITS,
     JOB_ORDER_NUMBER_MAX_LENGTH,
+    PRINT_WORK_OPTIONS,
     CUSTOMER_ADDRESS_MAX_LENGTH,
     ANSWER_MAX_LENGTH,
     ASSIGNEES_PER_VALUE_MAX,

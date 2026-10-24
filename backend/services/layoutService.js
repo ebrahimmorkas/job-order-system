@@ -7,6 +7,7 @@ const CityMaster = require('../models/CityMaster');
 const common = require('../utils/common');
 const { LIVE_STATUSES } = require('../constants/masterConstants');
 const { SHORT_NAME_PLACES } = require('../constants/jobOrderConstants');
+const { jobOrderSettingsOf } = require('./companySettingsService');
 const {
     PAPER_SIZES, CUSTOM_PAPER, ELEMENT_TYPES, FIELD_SOURCES, SYSTEM_FIELDS, SYSTEM_FIELD_KEYS
 } = require('../constants/layoutConstants');
@@ -349,7 +350,8 @@ const getLayoutForPrint = async ({ vendorId, id, companyMasterData, companySetti
             },
             settings: {
                 ...settingsOf(companyMasterData),
-                useShortNames: useShortNamesOn === SHORT_NAME_PLACES.PRINT || useShortNamesOn === SHORT_NAME_PLACES.BOTH
+                useShortNames: useShortNamesOn === SHORT_NAME_PLACES.PRINT || useShortNamesOn === SHORT_NAME_PLACES.BOTH,
+                printWork: jobOrderSettingsOf(companySettingsData).printWork
             }
         });
     } catch (err) {
