@@ -1,41 +1,41 @@
 import Card from '../../../components/common/Card';
-import Button from '../../../components/common/Buttons';
 import { useAuth } from '../../auth/hooks/useAuth';
 import { useBranding } from '../../branding/hooks/useBranding';
 import { useAccess } from '../../access/hooks/useAccess';
-import { useRouter } from '../../../router';
+import OwnerDashboard from '../components/OwnerDashboard';
+import WorkerDashboard from '../components/WorkerDashboard';
 
 /**
- * The first screen after login. A welcome only for now - job order
- * summaries are added here as those modules are built. A user who is given
- * work is pointed to "My work".
+ * The first screen after login. The owner - and a user whose roles give
+ * Dashboard - sees the whole vendor's work; a user given work sees their
+ * own; anyone else a welcome.
  */
 const DashboardPage = () => {
-  const { navigate } = useRouter();
   const { user } = useAuth();
   const { branding } = useBranding();
-  const { access } = useAccess();
+  const { access, can } = useAccess();
   const displayName = user?.name || user?.username;
-  const hasWork = !access.isOwner && access.hasWork;
-  const hasNothing = !access.isOwner && !access.hasWork && Object.keys(access.modules).length === 0;
+  const seesAll = access.isOwner || can('dashboard', 'view');
+  const hasWork = !seesAll && access.hasWork;
+  const hasNothing = !seesAll && !access.hasWork && Object.keys(access.modules).length === 0;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        {branding.companyName && <p className="mt-1 text-sm text-gray-500">{branding.companyName}</p>}
+        <p className="mt-1 text-sm text-gray-500">
+          Welcome back{displayName ? `, ${displayName}` : ''}{branding.companyName ? ` · ${branding.companyName}` : ''}
+        </p>
       </div>
-      <Card variant="outlined">
-        <p className="text-lg font-semibold text-gray-900">Welcome back{displayName ? `, ${displayName}` : ''}</p>
-        {hasWork && (
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <p className="text-sm text-gray-500">The job orders you are given work on are in My work.</p>
-            <Button size="sm" onClick={() => navigate('/my-work')}>Open My work</Button>
-          </div>
-        )}
-        {hasNothing && <p className="mt-1 text-sm text-gray-500">You have no access yet. Please ask the owner to give you a role.</p>}
-        {!hasWork && !hasNothing && <p className="mt-1 text-sm text-gray-500">Your job order summary will appear here.</p>}
-      </Card>
+      {seesAll && <OwnerDashboard />}
+      {hasWork && <WorkerDashboard />}
+      {!seesAll && !hasWork && (
+        <Card variant="outlined">
+          <p className="text-sm text-gray-500">
+            {hasNothing ? 'You have no access yet. Please ask the owner to give you a role.' : 'Use the menu to open what your role gives you.'}
+          </p>
+        </Card>
+      )}
     </div>
   );
 };

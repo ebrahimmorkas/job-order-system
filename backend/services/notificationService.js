@@ -148,14 +148,15 @@ const stepMessageOf = (workerName, step) => {
 
 /**
  * Someone moved their work to a step: tells the owner, and the vendor's
- * open pages to load again.
+ * open pages (and the person's own other pages) to load again.
  */
-const announceStep = async ({ vendorId, jobOrderId, jobOrderNumber, valueName, workerName, step }) => {
+const announceStep = async ({ vendorId, jobOrderId, jobOrderNumber, valueName, workerId, workerName, step }) => {
     try {
         const ownerIds = await ownerIdsOf(vendorId);
         const { type, message } = stepMessageOf(workerName, step);
         await send({ vendorId, jobOrderId, items: ownerIds.map((userId) => ({ userId, type, title: `${jobOrderNumber} - ${valueName}`, message })) });
         realtimeService.toVendor(vendorId, REALTIME_EVENTS.JOB_ORDERS_CHANGED, { jobOrderId });
+        realtimeService.toUsers([workerId], REALTIME_EVENTS.MY_WORK_CHANGED, { jobOrderId });
     } catch (err) {
         throw err;
     }

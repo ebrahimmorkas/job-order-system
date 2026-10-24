@@ -262,6 +262,23 @@ progress...). Set by the platform owner in CompanyMaster (no screens):
 - The job order list returns `work: { people, completed, onHold, started }`
   (null when no work was given); the job order view has everyone's steps.
 
+## Dashboard
+
+`GET /api/dashboard` (the owner, or Dashboard - a module role can give it,
+View only) reads the vendor's job orders that still have open work or a step
+change in the last 14 days (`services/dashboardService.js`), in one query:
+
+- `totals` - job orders (and new this week), open work: not started, in
+  progress, on hold, overdue; completed this week
+- `working` - open work, overdue first then the soonest due (50 most
+  urgent; `workingTotal` all): person, job order, value, step, start, due
+- `workload` - per person: not started / in progress / on hold / overdue
+  (the 10 busiest; `workloadTotal` all)
+- `activity` - the 15 latest step changes of the last 14 days
+
+`GET /api/my-work/summary` (users) - the same for a user's own work:
+`totals` and the 5 due next.
+
 ## Users logging in (access)
 
 What a logged-in person may do (`services/accessService.js`,
@@ -476,6 +493,8 @@ too (see Users logging in) - except Layout Master, which stays owner only.
 | GET | `/api/feature-access` | logged in - which features are on |
 | GET | `/api/access` | logged in - `{ isOwner, modules: { key: [permissions] }, hasWork, userId }` |
 | GET | `/api/my-work` | user, RBAC on - the job orders given to them, newest first (search, page, limit), each with their work |
+| GET | `/api/my-work/summary` | user, RBAC on - their own dashboard: totals and what is due next |
+| GET | `/api/dashboard` | owner (users: Dashboard) - the company dashboard (see Dashboard) |
 | GET | `/api/my-work/:id` | user, RBAC on - one of them, read only, without money, with their work, history and the vendor's `steps` |
 | PATCH | `/api/my-work/:id/step` | user, RBAC and steps on - `{ valueId, stepKey, percent (In progress), holdReason (Hold) }` |
 | GET | `/api/masters/for-job-order` | logged in - active masters with their active values and default, for the job order form |

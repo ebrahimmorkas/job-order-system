@@ -150,7 +150,7 @@ const setMyStep = async ({ vendorId, userId, id, data, websiteMasterData, compan
         );
         if (result.matchedCount === 0) return common.returnResult(false, 404, 'This work is no longer given to you.');
         notificationService.inBackground('Announcing a step change failed', () => notificationService.announceStep({
-            vendorId, jobOrderId: jobOrder._id, jobOrderNumber: jobOrder.jobOrderNumber, valueName: found.value.name, workerName: found.person.name, step: entry
+            vendorId, jobOrderId: jobOrder._id, jobOrderNumber: jobOrder.jobOrderNumber, valueName: found.value.name, workerId: me, workerName: found.person.name, step: entry
         }));
         return common.returnResult(true, 200, `Moved to ${step.name}.`, { step: entry });
     } catch (err) {

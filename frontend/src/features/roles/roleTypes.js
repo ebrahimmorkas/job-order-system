@@ -23,6 +23,7 @@ export const PERMISSIONS = [
 
 // Module names for the list (the form gets them from the server).
 export const MODULE_LABELS = {
+  dashboard: 'Dashboard',
   jobOrders: 'Job Orders',
   masters: 'Masters',
   controls: 'Controls',

@@ -59,6 +59,15 @@ Each section's code is downloaded the first time it is opened
   form read only at `/<section>/:id`; with View only, nothing opens;
   Company Settings read only without Edit; roles on the user form only with
   Assign role, never on your own account). Layout Master is owner only.
+- **Dashboard** (`features/dashboard`) - the owner, and a user whose roles
+  give Dashboard, see the whole company: open job orders, work in progress,
+  overdue (and on hold), completed this week; "Who is working on what" (the
+  most urgent first - person, job order, work, step, start date and the time
+  left counting down); a workload chart (each person's open work split into
+  in progress / not started / on hold / overdue, with a legend and a hover
+  tooltip); and the latest step changes. A user given work sees their own
+  numbers and what is due next. Both load again by themselves when work
+  changes. Job order numbers open the job order only with Job Orders Details.
 - **My work** (users given master values' work) - the job orders given to
   them, newest first, with what they do on each, their step, when it is due
   and the time left ("Overdue", "Completed on time", "Completed late by 2

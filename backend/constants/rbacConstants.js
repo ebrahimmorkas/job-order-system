@@ -46,6 +46,9 @@ const withImpliedPermissions = (permission) => [PERMISSIONS.VIEW, permission, ..
 // with the permissions each one has. featureFlag: offered only while that
 // feature is on for the vendor (see roleService.availableModulesOf).
 const MODULES = {
+    // The owner's dashboard (the whole vendor's work); without it a user given
+    // work sees their own.
+    dashboard: { label: 'Dashboard', permissions: [PERMISSIONS.VIEW] },
     jobOrders: { label: 'Job Orders', permissions: CRUD },
     masters: { label: 'Masters', permissions: CRUD, featureFlag: FEATURE_FLAGS.MASTER_MODULE },
     controls: { label: 'Controls', permissions: CRUD, featureFlag: FEATURE_FLAGS.CONTROLS },

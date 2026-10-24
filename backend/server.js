@@ -33,6 +33,7 @@ const serviceStatusRoutes = require('./routes/serviceStatusRoutes');
 const requireServiceOpen = require('./middlewares/requireServiceOpen');
 const serviceStatusWatcher = require('./services/serviceStatusWatcher');
 const notificationRoutes = require('./routes/notificationRoutes');
+const dashboardRoutes = require('./routes/dashboardRoutes');
 const realtimeService = require('./services/realtimeService');
 const overdueWatcher = require('./services/overdueWatcher');
 const { REALTIME_EVENTS } = require('./constants/notificationConstants');
@@ -114,6 +115,7 @@ app.use('/api/layouts', layoutRoutes);
 app.use('/api/access', accessRoutes);
 app.use('/api/my-work', myWorkRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 // No route matched: the same JSON shape as every other error, instead of
 // Express's default HTML page.
