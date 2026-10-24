@@ -21,7 +21,7 @@ router.get('/', can('view'), validate(v.listJobOrdersQuerySchema, 'query'), jobO
 const withImages = [imageUpload.multiple.array('images'), parseMultipartData];
 
 router.post('/', can('create'), ...withImages, validate(v.jobOrderSchema), jobOrderController.createJobOrder);
-router.get('/:id', can('view'), byId, jobOrderController.getJobOrder);
+router.get('/:id', can('details'), byId, jobOrderController.getJobOrder);
 router.put('/:id', can('edit'), byId, ...withImages, validate(v.jobOrderSchema), jobOrderController.updateJobOrder);
 router.delete('/:id', can('delete'), byId, jobOrderController.cancelJobOrder);
 

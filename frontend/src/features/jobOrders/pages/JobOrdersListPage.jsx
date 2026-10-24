@@ -33,6 +33,7 @@ const JobOrdersListPage = ({ onCreate, onView, onEdit }) => {
   const { can } = useAccess();
   const canCreate = can('jobOrders', 'create');
   const canEdit = can('jobOrders', 'edit');
+  const canOpen = can('jobOrders', 'details');
   const canCancel = can('jobOrders', 'delete');
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search.trim());
@@ -95,11 +96,13 @@ const JobOrdersListPage = ({ onCreate, onView, onEdit }) => {
       key: 'jobOrderNumber',
       label: 'Job order no.',
       width: '160px',
-      render: (jobOrder) => (
+      render: (jobOrder) => (canOpen ? (
         <button type="button" onClick={() => onView(jobOrder._id)} className="font-medium text-gray-900 hover:text-indigo-600 text-left break-all cursor-pointer">
           {jobOrder.jobOrderNumber}
         </button>
-      ),
+      ) : (
+        <span className="font-medium text-gray-900 break-all">{jobOrder.jobOrderNumber}</span>
+      )),
     },
     {
       key: 'customer',
@@ -146,7 +149,7 @@ const JobOrdersListPage = ({ onCreate, onView, onEdit }) => {
       width: '130px',
       render: (jobOrder) => (
         <div className="flex justify-end gap-0.5">
-          <IconButton label={`View ${jobOrder.jobOrderNumber}`} icon={ViewIcon} onClick={() => onView(jobOrder._id)} />
+          {canOpen && <IconButton label={`View ${jobOrder.jobOrderNumber}`} icon={ViewIcon} onClick={() => onView(jobOrder._id)} />}
           {canEdit && <IconButton label={`Edit ${jobOrder.jobOrderNumber}`} icon={EditIcon} onClick={() => onEdit(jobOrder._id)} />}
           {canCancel && <IconButton label={`Cancel ${jobOrder.jobOrderNumber}`} icon={TrashIcon} variant="danger" onClick={() => setToCancel(jobOrder)} />}
         </div>

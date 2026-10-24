@@ -38,6 +38,17 @@ const WORK_TIME_STARTS = {
 };
 const WORK_TIME_START_VALUES = Object.values(WORK_TIME_STARTS);
 
+// When the time starts at each person's first step and the owner changes the
+// completion time of work someone already started, the new time counts from
+// (CompanySettings.workTimeChangeCountsFrom):
+const WORK_TIME_CHANGE_FROM = {
+    // The day that person started (started Monday, 3 days -> 5 days: due Saturday).
+    PERSON_START: 'personStart',
+    // The moment of the change (changed Tuesday to 5 days: due Sunday).
+    CHANGE: 'change'
+};
+const WORK_TIME_CHANGE_FROM_VALUES = Object.values(WORK_TIME_CHANGE_FROM);
+
 module.exports = {
     FIXED_STEPS,
     FIXED_STEP_VALUES,
@@ -46,5 +57,7 @@ module.exports = {
     HOLD_REASON_MAX_LENGTH,
     STEP_HISTORY_MAX,
     WORK_TIME_STARTS,
-    WORK_TIME_START_VALUES
+    WORK_TIME_START_VALUES,
+    WORK_TIME_CHANGE_FROM,
+    WORK_TIME_CHANGE_FROM_VALUES
 };

@@ -142,6 +142,8 @@ const setMyStep = async ({ vendorId, userId, id, data, websiteMasterData, compan
                     { 'v.valueId': new mongoose.Types.ObjectId(data.valueId) },
                     { 'p.userId': new mongoose.Types.ObjectId(me) }
                 ],
+                // A step change isn't an edit of the job order: its "last updated" stays.
+                timestamps: false,
                 auditUserId: userId
             }
         );

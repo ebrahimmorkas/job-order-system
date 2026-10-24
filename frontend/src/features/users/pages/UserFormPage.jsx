@@ -73,8 +73,10 @@ const isBackwards = ({ startDate, endDate }, today) => !!endDate && endDate < (s
  * @param {string} [props.userId] - The user to edit
  * @param {(message: string) => void} props.onDone - Back to the list after saving
  * @param {() => void} props.onBack
+ * @param {boolean} [props.readOnly] - Details only (mode 'edit', nothing can be changed)
+ * @param {(() => void)|null} [props.onEdit] - Details: opens the edit screen (with Edit permission)
  */
-const UserFormPage = ({ mode, userId, onDone, onBack }) => {
+const UserFormPage = ({ mode, userId, onDone, onBack, readOnly = false, onEdit = null }) => {
   const { access } = useAccess();
   const isEdit = mode === 'edit';
 
@@ -87,6 +89,8 @@ const UserFormPage = ({ mode, userId, onDone, onBack }) => {
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  // Saving, or details only: every field is off.
+  const isLocked = isSaving || readOnly;
 
   useEffect(() => {
     let cancelled = false;
@@ -225,15 +229,18 @@ const UserFormPage = ({ mode, userId, onDone, onBack }) => {
           <BackIcon className="w-4 h-4" /> Back to users
         </button>
         <div className="mt-2 flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-bold text-gray-900">{isEdit ? 'Edit user' : 'New user'}</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{readOnly ? 'User details' : isEdit ? 'Edit user' : 'New user'}</h1>
           {isEdit && <Badge variant={status === 'A' ? 'green' : 'gray'} dot>{status === 'A' ? 'Active' : 'Inactive'}</Badge>}
+          {readOnly && onEdit && <Button size="sm" variant="outline" className="ml-auto" onClick={onEdit}>Edit</Button>}
         </div>
       </div>
 
       {loadError ? (
         <Alert variant="error">{loadError}</Alert>
       ) : (
-        <form onSubmit={handleSubmit} noValidate className="space-y-6">
+        <form onSubmit={handleSubmit} noValidate>
+          {/* Details only: a disabled fieldset turns off every field and button inside it. */}
+          <fieldset disabled={readOnly} className="m-0 min-w-0 border-0 p-0 space-y-6">
           {formError && <Alert variant="error">{formError}</Alert>}
 
           <Card variant="outlined" title="Details">
@@ -247,7 +254,7 @@ const UserFormPage = ({ mode, userId, onDone, onBack }) => {
                 error={fieldErrors.name}
                 maxLength={NAME_MAX_LENGTH}
                 required
-                disabled={isSaving}
+                disabled={isLocked}
                 autoFocus={!isEdit}
               />
               <InputField
@@ -259,9 +266,10 @@ const UserFormPage = ({ mode, userId, onDone, onBack }) => {
                 error={fieldErrors.username}
                 maxLength={USERNAME_MAX_LENGTH}
                 required
-                disabled={isSaving}
+                disabled={isLocked}
                 autoComplete="off"
               />
+              {!readOnly && (
               <div>
                 <InputField
                   label={isEdit ? 'New password' : 'Password'}
@@ -273,11 +281,12 @@ const UserFormPage = ({ mode, userId, onDone, onBack }) => {
                   error={fieldErrors.password}
                   maxLength={PASSWORD_MAX_LENGTH}
                   required={!isEdit}
-                  disabled={isSaving}
+                  disabled={isLocked}
                   autoComplete="new-password"
                 />
                 {isEdit && !fieldErrors.password && <p className="mt-1 text-xs text-gray-500">A new password logs the user out everywhere.</p>}
               </div>
+              )}
               <InputField
                 label="Email"
                 name="email"
@@ -287,7 +296,7 @@ const UserFormPage = ({ mode, userId, onDone, onBack }) => {
                 onChange={(e) => setDetail('email', e.target.value)}
                 error={fieldErrors.email}
                 maxLength={EMAIL_MAX_LENGTH}
-                disabled={isSaving}
+                disabled={isLocked}
               />
               <InputField
                 label="Phone"
@@ -298,7 +307,7 @@ const UserFormPage = ({ mode, userId, onDone, onBack }) => {
                 onChange={(e) => setDetail('phone', e.target.value)}
                 error={fieldErrors.phone}
                 maxLength={14}
-                disabled={isSaving}
+                disabled={isLocked}
               />
               <div className="sm:col-span-2">
                 <TextArea
@@ -309,7 +318,7 @@ const UserFormPage = ({ mode, userId, onDone, onBack }) => {
                   onChange={(e) => setDetail('address', e.target.value)}
                   maxLength={ADDRESS_MAX_LENGTH}
                   rows={2}
-                  disabled={isSaving}
+                  disabled={isLocked}
                 />
                 {fieldErrors.address && <p className="mt-1 text-sm text-red-600" role="alert">{fieldErrors.address}</p>}
               </div>
@@ -328,7 +337,7 @@ const UserFormPage = ({ mode, userId, onDone, onBack }) => {
               allRoles={options.roles}
               canGiveSeveral={options.settings.canGiveSeveralRoles}
               errors={fieldErrors}
-              disabled={isSaving}
+              disabled={isLocked}
             />
           </Card>
           )}
@@ -342,15 +351,18 @@ const UserFormPage = ({ mode, userId, onDone, onBack }) => {
                 availableModules={options.modules}
                 availableMasters={options.masters}
                 errors={fieldErrors}
-                disabled={isSaving}
+                disabled={isLocked}
               />
             </Card>
           )}
 
+          {!readOnly && (
           <div className="flex justify-end gap-3">
             <Button variant="ghost" onClick={goBack} disabled={isSaving}>Cancel</Button>
             <Button type="submit" loading={isSaving} loadingText={isEdit ? 'Saving...' : 'Creating...'}>{isEdit ? 'Save changes' : 'Create user'}</Button>
           </div>
+          )}
+          </fieldset>
         </form>
       )}
     </div>

@@ -39,7 +39,7 @@ const WorkProgress = ({ masters }) => {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm font-medium text-gray-800 break-words">{person.name}</span>
                     <StepBadge step={person.step} />
-                    {status.text !== 'Completed' && <Badge variant={status.variant} size="sm">{status.text}</Badge>}
+                    {(!status.isCompleted || status.hasDeadline) && <Badge variant={status.variant} size="sm">{status.text}</Badge>}
                   </div>
                   {person.step?.holdReason && <p className="text-xs text-gray-600 break-words">On hold: {person.step.holdReason}</p>}
                   <p className="text-xs text-gray-500">

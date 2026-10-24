@@ -36,16 +36,27 @@ const toFieldErrors = (errors) => {
   return fieldErrors;
 };
 
-// Giving anything also gives view; taking view away takes everything away.
-const togglePermission = (permissions, permission, isOn) => {
-  if (!isOn) return permission === 'view' ? [] : permissions.filter((p) => p !== permission);
-  const next = new Set([...permissions, permission, 'view']);
-  return PERMISSIONS.map((p) => p.key).filter((p) => next.has(p));
+// What comes with a permission (same as the backend's IMPLIED_PERMISSIONS):
+// Edit gives Details - you can't edit what you can't open.
+const IMPLIED = { edit: ['details'] };
+
+// Giving anything also gives view (and Edit gives Details); taking view away
+// takes everything away, and taking Details away takes Edit with it.
+// allowed: the module's own permissions (Company Settings has no Details).
+const togglePermission = (permissions, permission, isOn, allowed) => {
+  if (!isOn) {
+    if (permission === 'view') return [];
+    const needing = Object.keys(IMPLIED).filter((key) => IMPLIED[key].includes(permission));
+    return permissions.filter((p) => p !== permission && !needing.includes(p));
+  }
+  const next = new Set([...permissions, permission, 'view', ...(IMPLIED[permission] || [])]);
+  return PERMISSIONS.map((p) => p.key).filter((p) => next.has(p) && allowed.includes(p));
 };
 
 /**
  * Create a role, save a copy of one, or edit one. A module role gives
- * view / create / edit / delete per module; a master role gives view of
+ * view (the list) / details (open one, read only) / create / edit / delete
+ * per module; a master role gives view of
  * whole masters or some of their values. The type is picked when the role
  * is created and can't change.
  *
@@ -54,8 +65,10 @@ const togglePermission = (permissions, permission, isOn) => {
  * @param {string} [props.roleId] - The role to edit, or to copy (clone)
  * @param {(message: string) => void} props.onDone - Back to the list after saving
  * @param {() => void} props.onBack
+ * @param {boolean} [props.readOnly] - Details only (mode 'edit', nothing can be changed)
+ * @param {(() => void)|null} [props.onEdit] - Details: opens the edit screen (with Edit permission)
  */
-const RoleFormPage = ({ mode, roleId, onDone, onBack }) => {
+const RoleFormPage = ({ mode, roleId, onDone, onBack, readOnly = false, onEdit = null }) => {
   const isEdit = mode === 'edit';
 
   const [isLoading, setIsLoading] = useState(true);
@@ -68,6 +81,8 @@ const RoleFormPage = ({ mode, roleId, onDone, onBack }) => {
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  // Saving, or details only: every field is off.
+  const isLocked = isSaving || readOnly;
 
   useEffect(() => {
     let cancelled = false;
@@ -114,7 +129,7 @@ const RoleFormPage = ({ mode, roleId, onDone, onBack }) => {
   const addModule = (key) => key && update({ modules: [...role.modules, { module: key, permissions: ['view'] }] }, 'modules');
   const removeModule = (key) => update({ modules: role.modules.filter((m) => m.module !== key) }, `modules.${key}`);
   const setPermission = (key, permission, isOn) =>
-    update({ modules: role.modules.map((m) => (m.module === key ? { ...m, permissions: togglePermission(m.permissions, permission, isOn) } : m)) }, `modules.${key}`);
+    update({ modules: role.modules.map((m) => (m.module === key ? { ...m, permissions: togglePermission(m.permissions, permission, isOn, moduleByKey.get(key)?.permissions || []) } : m)) }, `modules.${key}`);
 
   // ---- master role ----
   const addMaster = (id) => id && update({ masters: [...role.masters, { masterId: id, isWholeMaster: false, valueIds: [] }] }, 'masters');
@@ -186,9 +201,10 @@ const RoleFormPage = ({ mode, roleId, onDone, onBack }) => {
           <BackIcon className="w-4 h-4" /> Back to roles
         </button>
         <div className="mt-2 flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{readOnly ? 'Role details' : title}</h1>
           {isEdit && <Badge variant={role.type === 'module' ? 'blue' : 'purple'}>{ROLE_TYPES[role.type].label}</Badge>}
           {isEdit && <Badge variant={status === 'A' ? 'green' : 'gray'} dot>{status === 'A' ? 'Active' : 'Inactive'}</Badge>}
+          {readOnly && onEdit && <Button size="sm" variant="outline" className="ml-auto" onClick={onEdit}>Edit</Button>}
         </div>
         {mode === 'clone' && <p className="mt-1 text-sm text-gray-500">Change anything you need, then create the copy.</p>}
       </div>
@@ -196,7 +212,9 @@ const RoleFormPage = ({ mode, roleId, onDone, onBack }) => {
       {loadError ? (
         <Alert variant="error">{loadError}</Alert>
       ) : (
-        <form onSubmit={handleSubmit} noValidate className="space-y-6">
+        <form onSubmit={handleSubmit} noValidate>
+          {/* Details only: a disabled fieldset turns off every field and button inside it. */}
+          <fieldset disabled={readOnly} className="m-0 min-w-0 border-0 p-0 space-y-6">
           {formError && <Alert variant="error">{formError}</Alert>}
 
           <Card variant="outlined" title="Details">
@@ -210,7 +228,7 @@ const RoleFormPage = ({ mode, roleId, onDone, onBack }) => {
                 error={fieldErrors.name}
                 maxLength={NAME_MAX_LENGTH}
                 required
-                disabled={isSaving}
+                disabled={isLocked}
                 autoFocus={!isEdit}
               />
               {!isEdit && (
@@ -226,7 +244,7 @@ const RoleFormPage = ({ mode, roleId, onDone, onBack }) => {
                           type="button"
                           role="radio"
                           aria-checked={isChosen}
-                          disabled={isSaving}
+                          disabled={isLocked}
                           onClick={() => update({ type: key }, 'modules', 'masters')}
                           className={`text-left rounded-lg border p-3 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${isChosen ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500' : 'border-gray-200 bg-white hover:border-gray-300'}`}
                         >
@@ -252,7 +270,7 @@ const RoleFormPage = ({ mode, roleId, onDone, onBack }) => {
                     onChange={addModule}
                     placeholder={moduleOptions.length ? 'Add a module' : 'Every module is added'}
                     searchable
-                    disabled={isSaving || moduleOptions.length === 0}
+                    disabled={isLocked || moduleOptions.length === 0}
                     aria-label="Add a module"
                   />
                 </div>
@@ -287,7 +305,7 @@ const RoleFormPage = ({ mode, roleId, onDone, onBack }) => {
                                         name={`${module}-${p.key}`}
                                         checked={permissions.includes(p.key)}
                                         onChange={(e) => setPermission(module, p.key, e.target.checked)}
-                                        disabled={isSaving}
+                                        disabled={isLocked}
                                         aria-label={`${label}: ${p.label}`}
                                       />
                                     </span>
@@ -297,7 +315,7 @@ const RoleFormPage = ({ mode, roleId, onDone, onBack }) => {
                                 </td>
                               ))}
                               <td className="px-2 py-1.5 text-right align-top">
-                                <IconButton label={`Remove ${label}`} icon={TrashIcon} variant="danger" size="sm" onClick={() => removeModule(module)} disabled={isSaving} />
+                                <IconButton label={`Remove ${label}`} icon={TrashIcon} variant="danger" size="sm" onClick={() => removeModule(module)} disabled={isLocked} />
                               </td>
                             </tr>
                           );
@@ -325,7 +343,7 @@ const RoleFormPage = ({ mode, roleId, onDone, onBack }) => {
                       onChange={addMaster}
                       placeholder={masterOptions.length ? 'Add a master' : 'Every master is added'}
                       searchable
-                      disabled={isSaving || masterOptions.length === 0}
+                      disabled={isLocked || masterOptions.length === 0}
                       aria-label="Add a master"
                     />
                   </div>
@@ -343,7 +361,7 @@ const RoleFormPage = ({ mode, roleId, onDone, onBack }) => {
                           <p className="font-medium text-gray-900">{name}</p>
                           {!master && <p className="text-xs text-amber-700">No longer set for roles - remove it</p>}
                         </div>
-                        <IconButton label={`Remove ${name}`} icon={TrashIcon} variant="danger" size="sm" onClick={() => removeMaster(masterId)} disabled={isSaving} />
+                        <IconButton label={`Remove ${name}`} icon={TrashIcon} variant="danger" size="sm" onClick={() => removeMaster(masterId)} disabled={isLocked} />
                       </div>
                       {master && (
                         <div className="mt-3 space-y-3">
@@ -353,7 +371,7 @@ const RoleFormPage = ({ mode, roleId, onDone, onBack }) => {
                             description="Every value, including ones added later."
                             checked={isWholeMaster}
                             onChange={(e) => setMaster(masterId, { isWholeMaster: e.target.checked })}
-                            disabled={isSaving}
+                            disabled={isLocked}
                           />
                           {!isWholeMaster && (
                             <Dropdown
@@ -365,7 +383,7 @@ const RoleFormPage = ({ mode, roleId, onDone, onBack }) => {
                               onChange={(value) => setMaster(masterId, { valueIds: value })}
                               placeholder="Choose one or more"
                               searchable
-                              disabled={isSaving}
+                              disabled={isLocked}
                               aria-label={`Values of ${name}`}
                             />
                           )}
@@ -380,10 +398,13 @@ const RoleFormPage = ({ mode, roleId, onDone, onBack }) => {
             </Card>
           )}
 
+          {!readOnly && (
           <div className="flex justify-end gap-3">
             <Button variant="ghost" onClick={goBack} disabled={isSaving}>Cancel</Button>
             <Button type="submit" loading={isSaving} loadingText={isEdit ? 'Saving...' : 'Creating...'}>{submitLabel}</Button>
           </div>
+          )}
+          </fieldset>
         </form>
       )}
     </div>

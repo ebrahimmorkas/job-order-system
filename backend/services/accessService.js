@@ -4,14 +4,15 @@ const common = require('../utils/common');
 const roleService = require('./roleService');
 const { todayString, coversDay } = require('../utils/days');
 const { ROLES } = require('../constants/roleConstants');
-const { ROLE_TYPES, PERMISSIONS } = require('../constants/rbacConstants');
+const { ROLE_TYPES, withImpliedPermissions } = require('../constants/rbacConstants');
 const { FEATURE_FLAGS } = require('../constants/featureConstants');
 
 // What a logged-in person may do. The owner may do everything. A user gets
 // the modules and permissions of their active roles that cover today, plus
 // their own extra access (only while CompanyMaster.isRoleAssignmentOnUserModuleAllowed
 // is on) - and nothing at all while RBAC is off. Any permission of a module
-// also gives View. Modules whose feature is off are left out.
+// also gives View, and Edit gives Details. Modules whose feature is off are
+// left out.
 //
 // hasWork: a master role or extra master access today - the "My work" page.
 
@@ -39,8 +40,8 @@ const accessOf = async ({ vendorId, user, websiteMasterData, companyMasterData }
 
         const granted = new Map();
         const grant = (module, permission) => {
-            if (!granted.has(module)) granted.set(module, new Set([PERMISSIONS.VIEW]));
-            granted.get(module).add(permission);
+            if (!granted.has(module)) granted.set(module, new Set());
+            for (const given of withImpliedPermissions(permission)) granted.get(module).add(given);
         };
         let hasWork = false;
         for (const role of roles) {

@@ -15,7 +15,7 @@ const { LIVE_STATUSES, CASE_INSENSITIVE_COLLATION } = require('../constants/mast
 const { CONTROL_TYPES, PRICE_PATTERN } = require('../constants/controlConstants');
 const { SHORT_NAME_PLACES, AUTO_NUMBER_PREFIX, AUTO_NUMBER_DIGITS, ANSWER_MAX_LENGTH } = require('../constants/jobOrderConstants');
 const { addDuration } = require('../utils/days');
-const { WORK_TIME_STARTS, FIXED_STEPS } = require('../constants/stepConstants');
+const { WORK_TIME_STARTS, WORK_TIME_CHANGE_FROM, FIXED_STEPS } = require('../constants/stepConstants');
 const { FEATURE_FLAGS } = require('../constants/featureConstants');
 const { IMAGE_FORMATS, IMAGE_FORMAT_VALUES, IMAGE_MODULES, MAX_IMAGES_PER_REQUEST } = require('../constants/storageConstants');
 
@@ -202,6 +202,7 @@ const assigneesOf = ({ master, value, userIds, workerById, previous }) => {
             assignees.push({
                 ...(worker ? { userId: worker._id, name: worker.name } : { userId: kept.userId, name: kept.name }),
                 startedAt: progress?.startedAt ?? null,
+                dueAt: progress?.dueAt ?? null,
                 step: progress?.step ?? null,
                 history: progress?.history ?? []
             });
@@ -217,9 +218,21 @@ const sameDuration = (a, b) => (a?.amount ?? null) === (b?.amount ?? null) && (a
 // When a value's work was given and is due. The clock starts when people are
 // first given it and restarts only when completeIn changes - then on what
 // timeStartsOn says today. onAssign: one dueAt for everyone; onFirstStep:
-// each person's own, from their first step (none before it).
+// each person's own, from their first step (none before it). A changed time
+// of someone who already started counts from their start or from now
+// (changeCountsFrom); an unchanged one keeps their due time.
 // before: the value as saved before (on edit), or undefined.
-const timingOf = ({ assignees, completeIn, before, now, timeStartsOn }) => {
+const personDueAt = ({ person, completeIn, isSameClock, changeCountsFrom, now }) => {
+    try {
+        if (!person.startedAt) return null;
+        if (isSameClock && person.dueAt) return person.dueAt;
+        return addDuration(!isSameClock && changeCountsFrom === WORK_TIME_CHANGE_FROM.CHANGE ? now : person.startedAt, completeIn);
+    } catch (err) {
+        throw err;
+    }
+};
+
+const timingOf = ({ assignees, completeIn, before, now, timeStartsOn, changeCountsFrom }) => {
     try {
         if (assignees.length === 0) return { assignedTo: assignees, assignedAt: null, completeIn: null, dueAt: null, timeStartsOn: WORK_TIME_STARTS.ON_ASSIGN };
         const isSameClock = before?.assignedAt && before.assignedTo?.length > 0 && sameDuration(before.completeIn, completeIn);
@@ -227,7 +240,7 @@ const timingOf = ({ assignees, completeIn, before, now, timeStartsOn }) => {
         const startsOn = isSameClock ? (before.timeStartsOn || WORK_TIME_STARTS.ON_ASSIGN) : timeStartsOn;
         const perPerson = startsOn === WORK_TIME_STARTS.ON_FIRST_STEP && !!completeIn;
         return {
-            assignedTo: assignees.map((person) => ({ ...person, dueAt: perPerson && person.startedAt ? addDuration(person.startedAt, completeIn) : null })),
+            assignedTo: assignees.map((person) => ({ ...person, dueAt: perPerson ? personDueAt({ person, completeIn, isSameClock, changeCountsFrom, now }) : null })),
             assignedAt,
             completeIn: completeIn || null,
             dueAt: completeIn && !perPerson ? addDuration(assignedAt, completeIn) : null,
@@ -240,7 +253,7 @@ const timingOf = ({ assignees, completeIn, before, now, timeStartsOn }) => {
 
 // The masters picked: field errors by master, and what to store.
 // previous: valueId -> the value as saved before (on edit).
-const pickMasters = (masters, input, workers, previous, timeStartsOn) => {
+const pickMasters = (masters, input, workers, previous, { workTimeStartsOn: timeStartsOn, workTimeChangeCountsFrom: changeCountsFrom }) => {
     try {
         const errors = [];
         const now = new Date();
@@ -286,7 +299,7 @@ const pickMasters = (masters, input, workers, previous, timeStartsOn) => {
                     message = result.message;
                     break;
                 }
-                const timing = timingOf({ assignees: result.assignees, completeIn: assignment?.completeIn, before: previous.get(valueId), now, timeStartsOn });
+                const timing = timingOf({ assignees: result.assignees, completeIn: assignment?.completeIn, before: previous.get(valueId), now, timeStartsOn, changeCountsFrom });
                 values.push({ valueId: value._id, name: value.name, ...timing });
             }
             if (message) {
@@ -460,7 +473,7 @@ const buildJobOrder = (parts, data, current = null) => {
         for (const master of current?.masters || []) {
             for (const value of master.values) previous.set(String(value.valueId), value);
         }
-        const masters = pickMasters(parts.masters, data.masters, parts.workers, previous, parts.settings.workTimeStartsOn);
+        const masters = pickMasters(parts.masters, data.masters, parts.workers, previous, parts.settings);
         const controls = answerControls(parts.controls, data.controls);
         const customer = parts.settings.askCustomerAddress ? customerAddress(parts.countries, data.customer) : { errors: [], stored: {} };
 

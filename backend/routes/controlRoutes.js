@@ -31,7 +31,7 @@ router.post('/', can('create'), validate(v.controlSchema), controlController.cre
 // Above '/:id', so "bulk" is never read as an id.
 router.post('/bulk', can(bulkPermission), validate(v.bulkControlsSchema), controlController.bulkUpdateControls);
 
-router.get('/:id', can('view'), byId, controlController.getControl);
+router.get('/:id', can('details'), byId, controlController.getControl);
 router.put('/:id', can('edit'), byId, validate(v.controlSchema), controlController.updateControl);
 router.patch('/:id/status', can('edit'), byId, validate(v.statusSchema), controlController.setControlStatus);
 router.patch('/:id/move', can('edit'), byId, validate(v.moveSchema), controlController.moveControl);

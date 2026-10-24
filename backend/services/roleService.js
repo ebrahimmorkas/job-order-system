@@ -5,14 +5,15 @@ const MasterValue = require('../models/MasterValue');
 const common = require('../utils/common');
 const featureAccessService = require('./featureAccessService');
 const { LIVE_STATUSES } = require('../constants/masterConstants');
-const { ROLE_TYPES, PERMISSIONS, MODULES, MODULE_KEYS } = require('../constants/rbacConstants');
+const { ROLE_TYPES, MODULES, MODULE_KEYS, withImpliedPermissions } = require('../constants/rbacConstants');
 const { ROLES } = require('../constants/roleConstants');
 
 // The vendor's roles (Role Master). Every function is scoped by vendorId.
 //
-// Module role: per module, the permissions given (view / create / edit /
-// delete, and "role assignment" for Users). Only modules switched on for the
-// vendor can be given; giving anything also gives view.
+// Module role: per module, the permissions given (view / details / create /
+// edit / delete, and "role assignment" for Users). Only modules switched on
+// for the vendor can be given; giving anything also gives view, and edit
+// also gives details.
 // Master role: masters marked "Role will be provided for this master", each
 // as the whole master or some of its values.
 //
@@ -80,8 +81,8 @@ const checkRole = ({ type, data, availableModules, roleMasters }) => {
                     errors.push({ field, message: 'Tick at least one option' });
                     continue;
                 }
-                // Anything given includes seeing it; kept in the module's own order.
-                const given = new Set([PERMISSIONS.VIEW, ...entry.permissions]);
+                // With what comes with each (View, Details for Edit); kept in the module's own order.
+                const given = new Set(entry.permissions.flatMap(withImpliedPermissions));
                 modules.push({ module: entry.module, permissions: module.permissions.filter((permission) => given.has(permission)) });
             }
             return { errors, doc: { modules, masters: [] } };

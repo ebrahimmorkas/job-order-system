@@ -16,7 +16,7 @@ router.use(requireFeature(FEATURE_FLAGS.LAYOUT_MASTER));
 const byId = validate(v.layoutIdParamSchema, 'params');
 
 // Printing a job order: anyone who may view job orders.
-const canPrint = requirePermission('jobOrders', 'view');
+const canPrint = requirePermission('jobOrders', 'details');
 router.get('/for-print', canPrint, layoutController.listLayoutsForPrint);
 router.get('/for-print/:id', canPrint, byId, layoutController.getLayoutForPrint);
 

@@ -1,11 +1,12 @@
 import { useToast } from '../../../components/common/Toast';
 import { NotFoundPage } from '../../../components/errors';
 import { useRouter, screenOf } from '../../../router';
+import { useAccess } from '../../access/hooks/useAccess';
 import RolesListPage from './RolesListPage';
 import RoleFormPage from './RoleFormPage';
 
 /**
- * The Role Master section: the list (/roles), or the create (/roles/new),
+ * The Role Master section: the list (/roles), details (/roles/:id, read only), or the create (/roles/new),
  * copy (/roles/:id/copy) or edit (/roles/:id/edit) screen.
  *
  * @param {Object} props
@@ -15,7 +16,8 @@ import RoleFormPage from './RoleFormPage';
 const RolesPage = ({ basePath, segments }) => {
   const toast = useToast();
   const { navigate } = useRouter();
-  const screen = screenOf(segments, { actions: { edit: 'edit', copy: 'clone' } });
+  const { can } = useAccess();
+  const screen = screenOf(segments, { view: true, actions: { edit: 'edit', copy: 'clone' } });
 
   const backToList = () => navigate(basePath);
 
@@ -25,6 +27,7 @@ const RolesPage = ({ basePath, segments }) => {
     return (
       <RolesListPage
         onCreate={() => navigate(`${basePath}/new`)}
+        onView={(id) => navigate(`${basePath}/${id}`)}
         onEdit={(id) => navigate(`${basePath}/${id}/edit`)}
         onClone={(id) => navigate(`${basePath}/${id}/copy`)}
       />
@@ -35,7 +38,10 @@ const RolesPage = ({ basePath, segments }) => {
     <RoleFormPage
       // A fresh form for every role / mode.
       key={`${screen.mode}-${screen.id || ''}`}
-      mode={screen.mode}
+      // Details: the edit form, read only.
+      mode={screen.mode === 'view' ? 'edit' : screen.mode}
+      readOnly={screen.mode === 'view'}
+      onEdit={can('roles', 'edit') ? () => navigate(`${basePath}/${screen.id}/edit`) : null}
       roleId={screen.id}
       onBack={backToList}
       onDone={(message) => {

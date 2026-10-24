@@ -18,12 +18,13 @@ const can = (permission) => requirePermission('roles', permission);
 const byId = validate(v.roleIdParamSchema, 'params');
 
 // Above '/:id', so "form-data" and "bulk" are never read as an id.
-router.get('/form-data', can(['create', 'edit']), roleController.getFormData);
+// Details too: the role is shown in its form, read only.
+router.get('/form-data', can(['create', 'edit', 'details']), roleController.getFormData);
 router.post('/bulk', can(bulkPermission), validate(v.bulkRolesSchema), roleController.bulkUpdateRoles);
 
 router.get('/', can('view'), validate(v.listRolesQuerySchema, 'query'), roleController.listRoles);
 router.post('/', can('create'), validate(v.createRoleSchema), roleController.createRole);
-router.get('/:id', can('view'), byId, roleController.getRole);
+router.get('/:id', can('details'), byId, roleController.getRole);
 router.put('/:id', can('edit'), byId, validate(v.updateRoleSchema), roleController.updateRole);
 router.patch('/:id/status', can('edit'), byId, validate(v.statusSchema), roleController.setRoleStatus);
 router.delete('/:id', can('delete'), byId, roleController.deleteRole);

@@ -56,8 +56,10 @@ const toFieldErrors = (errors) => {
  *   here when the form is opened straight from its address)
  * @param {(message: string) => void} props.onDone - Back to the list after saving
  * @param {() => void} props.onBack
+ * @param {boolean} [props.readOnly] - Details only (mode 'edit', nothing can be changed)
+ * @param {(() => void)|null} [props.onEdit] - Details: opens the edit screen (with Edit permission)
  */
-const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, onBack }) => {
+const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, onBack, readOnly = false, onEdit = null }) => {
   const isEdit = mode === 'edit';
   const nextKey = useRef(0);
   const createKey = () => `new-${nextKey.current++}`;
@@ -76,6 +78,8 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  // Saving, or details only: every field is off.
+  const isLocked = isSaving || readOnly;
 
   // Create opened straight from its address: the limits the list shows.
   useEffect(() => {
@@ -238,9 +242,10 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
           <BackIcon className="w-4 h-4" /> Back to controls
         </button>
         <div className="mt-2 flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{readOnly ? 'Control details' : title}</h1>
           {mode !== 'create' && type && <Badge variant="blue">{CONTROL_TYPES[type].label}</Badge>}
           {isEdit && <Badge variant={status === 'A' ? 'green' : 'gray'} dot>{status === 'A' ? 'Active' : 'Inactive'}</Badge>}
+          {readOnly && onEdit && <Button size="sm" variant="outline" className="ml-auto" onClick={onEdit}>Edit</Button>}
         </div>
         {mode === 'clone' && <p className="mt-1 text-sm text-gray-500">Change anything you need, then create the copy.</p>}
       </div>
@@ -248,7 +253,9 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
       {loadError ? (
         <Alert variant="error">{loadError}</Alert>
       ) : (
-        <form onSubmit={handleSubmit} noValidate className="space-y-6">
+        <form onSubmit={handleSubmit} noValidate>
+          {/* Details only: a disabled fieldset turns off every field and button inside it. */}
+          <fieldset disabled={readOnly} className="m-0 min-w-0 border-0 p-0 space-y-6">
           {formError && <Alert variant="error">{formError}</Alert>}
 
           {mode === 'create' && (
@@ -263,7 +270,7 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
                       type="button"
                       role="radio"
                       aria-checked={isChosen}
-                      disabled={isFull || isSaving}
+                      disabled={isFull || isLocked}
                       onClick={() => { setType(t); clearError('type'); }}
                       className={`text-left rounded-lg border p-3 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${isChosen ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500' : 'border-gray-200 bg-white hover:border-gray-300'}`}
                     >
@@ -290,7 +297,7 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
                     error={fieldErrors.label}
                     maxLength={labelMax ?? undefined}
                     required
-                    disabled={isSaving}
+                    disabled={isLocked}
                     autoFocus={mode === 'create'}
                   />
 
@@ -303,7 +310,7 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
                       onChange={(e) => setField('placeholder', e.target.value)}
                       error={fieldErrors.placeholder}
                       maxLength={placeholderMax ?? undefined}
-                      disabled={isSaving}
+                      disabled={isLocked}
                     />
                   )}
 
@@ -317,7 +324,7 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
                       onChange={(e) => setField('defaultText', e.target.value)}
                       error={fieldErrors.defaultText}
                       maxLength={textMax ?? undefined}
-                      disabled={isSaving}
+                      disabled={isLocked}
                     />
                   )}
                   {type === 'textarea' && (
@@ -331,7 +338,7 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
                         maxLength={textMax}
                         showCharCount={textMax !== null}
                         rows={3}
-                        disabled={isSaving}
+                        disabled={isLocked}
                       />
                       {fieldErrors.defaultText && <p className="mt-1 text-sm text-red-600" role="alert">{fieldErrors.defaultText}</p>}
                     </div>
@@ -351,7 +358,7 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
                           setFields((prev) => ({ ...prev, isPrice: e.target.checked, isPriceIncludedInTax: e.target.checked && prev.isPriceIncludedInTax }));
                           clearError('defaultText');
                         }}
-                        disabled={isSaving}
+                        disabled={isLocked}
                       />
                       {isPrice && isTaxAvailable && (
                         <div className="pl-7">
@@ -361,7 +368,7 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
                             description="Tax is charged on this amount when the job order is created."
                             checked={fields.isPriceIncludedInTax}
                             onChange={(e) => setField('isPriceIncludedInTax', e.target.checked)}
-                            disabled={isSaving}
+                            disabled={isLocked}
                           />
                         </div>
                       )}
@@ -375,7 +382,7 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
                       description="Already ticked on a new job order."
                       checked={fields.defaultChecked}
                       onChange={(e) => setField('defaultChecked', e.target.checked)}
-                      disabled={isSaving}
+                      disabled={isLocked}
                     />
                   )}
 
@@ -385,7 +392,7 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
                     description={isCheckbox ? 'The job order can\'t be saved unless this is ticked.' : 'The job order can\'t be saved without an answer here.'}
                     checked={fields.isRequired}
                     onChange={(e) => setField('isRequired', e.target.checked)}
-                    disabled={isSaving}
+                    disabled={isLocked}
                   />
                 </div>
               </Card>
@@ -406,7 +413,7 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
                     addError={addError}
                     onAddError={setAddError}
                     error={fieldErrors.options}
-                    disabled={isSaving}
+                    disabled={isLocked}
                   />
                 </Card>
               )}
@@ -417,10 +424,13 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
             </>
           )}
 
+          {!readOnly && (
           <div className="flex justify-end gap-3">
             <Button variant="ghost" onClick={goBack} disabled={isSaving}>Cancel</Button>
             <Button type="submit" loading={isSaving} loadingText={isEdit ? 'Saving...' : 'Creating...'} disabled={!type}>{submitLabel}</Button>
           </div>
+          )}
+          </fieldset>
         </form>
       )}
     </div>

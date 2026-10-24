@@ -12,7 +12,7 @@ import EmptyState from '../../../components/common/EmptyState';
 import ConfirmDialog from '../../../components/common/ConfirmDialog';
 import IconButton from '../../../components/common/IconButton';
 import UsagePill from '../../../components/common/UsagePill';
-import { EditIcon, CopyIcon, TrashIcon, PlusIcon } from '../../../components/common/ActionIcons';
+import { ViewIcon, EditIcon, CopyIcon, TrashIcon, PlusIcon } from '../../../components/common/ActionIcons';
 import { useToast } from '../../../components/common/Toast';
 import { useDebouncedValue } from '../../../utils/useDebouncedValue';
 import { ROLE_TYPES, MODULE_LABELS } from '../roleTypes';
@@ -52,15 +52,19 @@ const accessOf = (role) =>
  *
  * @param {Object} props
  * @param {() => void} props.onCreate
+ * @param {(id: string) => void} props.onView - Details (read only)
  * @param {(id: string) => void} props.onEdit
  * @param {(id: string) => void} props.onClone
  */
-const RolesListPage = ({ onCreate, onEdit, onClone }) => {
+const RolesListPage = ({ onCreate, onView, onEdit, onClone }) => {
   const toast = useToast();
   // What the person may do here (the owner: everything).
   const { can } = useAccess();
   const mayCreate = can('roles', 'create');
   const mayEdit = can('roles', 'edit');
+  const mayDetails = can('roles', 'details');
+  // The name opens the edit screen, or the details (read only).
+  const openRow = mayEdit ? onEdit : mayDetails ? onView : null;
   const mayDelete = can('roles', 'delete');
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search.trim());
@@ -188,8 +192,8 @@ const RolesListPage = ({ onCreate, onEdit, onClone }) => {
       key: 'name',
       label: 'Name',
       render: (role) => (
-        mayEdit ? (
-          <button type="button" onClick={() => onEdit(role._id)} className="font-medium text-gray-900 hover:text-indigo-600 text-left break-words cursor-pointer">
+        openRow ? (
+          <button type="button" onClick={() => openRow(role._id)} className="font-medium text-gray-900 hover:text-indigo-600 text-left break-words cursor-pointer">
             {role.name}
           </button>
         ) : (
@@ -245,6 +249,7 @@ const RolesListPage = ({ onCreate, onEdit, onClone }) => {
         const isBusy = busyId === role._id;
         return (
           <div className="flex justify-end gap-0.5">
+            {!mayEdit && mayDetails && <IconButton label={`View "${role.name}"`} icon={ViewIcon} onClick={() => onView(role._id)} />}
             {mayEdit && <IconButton label={`Edit "${role.name}"`} icon={EditIcon} onClick={() => onEdit(role._id)} disabled={isBusy} />}
             {mayCreate && (
               <IconButton

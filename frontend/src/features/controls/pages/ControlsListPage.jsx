@@ -12,7 +12,7 @@ import EmptyState from '../../../components/common/EmptyState';
 import ConfirmDialog from '../../../components/common/ConfirmDialog';
 import IconButton from '../../../components/common/IconButton';
 import UsagePill from '../../../components/common/UsagePill';
-import { EditIcon, CopyIcon, TrashIcon, PlusIcon, MoveUpIcon, MoveDownIcon } from '../../../components/common/ActionIcons';
+import { ViewIcon, EditIcon, CopyIcon, TrashIcon, PlusIcon, MoveUpIcon, MoveDownIcon } from '../../../components/common/ActionIcons';
 import { useToast } from '../../../components/common/Toast';
 import { useDebouncedValue } from '../../../utils/useDebouncedValue';
 import { CONTROL_TYPES, isTypeFull } from '../controlTypes';
@@ -40,15 +40,19 @@ const BULK_LABELS = {
  *
  * @param {Object} props
  * @param {(limits: Object) => void} props.onCreate
+ * @param {(id: string) => void} props.onView - Details (read only)
  * @param {(id: string) => void} props.onEdit
  * @param {(id: string) => void} props.onClone
  */
-const ControlsListPage = ({ onCreate, onEdit, onClone }) => {
+const ControlsListPage = ({ onCreate, onView, onEdit, onClone }) => {
   const toast = useToast();
   // What the person may do here (the owner: everything).
   const { can } = useAccess();
   const mayCreate = can('controls', 'create');
   const mayEdit = can('controls', 'edit');
+  const mayDetails = can('controls', 'details');
+  // The name opens the edit screen, or the details (read only).
+  const openRow = mayEdit ? onEdit : mayDetails ? onView : null;
   const mayDelete = can('controls', 'delete');
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search.trim());
@@ -211,8 +215,8 @@ const ControlsListPage = ({ onCreate, onEdit, onClone }) => {
       label: 'Label',
       render: (control) => (
         <div className="min-w-0">
-          {mayEdit ? (
-            <button type="button" onClick={() => onEdit(control._id)} className="font-medium text-gray-900 hover:text-indigo-600 text-left break-words cursor-pointer">
+          {openRow ? (
+            <button type="button" onClick={() => openRow(control._id)} className="font-medium text-gray-900 hover:text-indigo-600 text-left break-words cursor-pointer">
               {control.label}
             </button>
           ) : (
@@ -267,6 +271,7 @@ const ControlsListPage = ({ onCreate, onEdit, onClone }) => {
         const isFull = isTypeFull(limits, control.type);
         return (
           <div className="flex justify-end gap-0.5">
+            {!mayEdit && mayDetails && <IconButton label={`View "${control.label}"`} icon={ViewIcon} onClick={() => onView(control._id)} />}
             {mayEdit && <IconButton label={`Edit "${control.label}"`} icon={EditIcon} onClick={() => onEdit(control._id)} disabled={isBusy} />}
             {mayCreate && (
               <IconButton

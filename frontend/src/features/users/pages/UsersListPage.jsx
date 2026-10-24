@@ -12,7 +12,7 @@ import EmptyState from '../../../components/common/EmptyState';
 import ConfirmDialog from '../../../components/common/ConfirmDialog';
 import IconButton from '../../../components/common/IconButton';
 import UsagePill from '../../../components/common/UsagePill';
-import { EditIcon, TrashIcon, PlusIcon } from '../../../components/common/ActionIcons';
+import { ViewIcon, EditIcon, TrashIcon, PlusIcon } from '../../../components/common/ActionIcons';
 import { useToast } from '../../../components/common/Toast';
 import { useDebouncedValue } from '../../../utils/useDebouncedValue';
 import { rangeStateOf, describeRange } from '../accessDates';
@@ -54,14 +54,18 @@ const RoleChip = ({ entry, today }) => {
  *
  * @param {Object} props
  * @param {() => void} props.onCreate
+ * @param {(id: string) => void} props.onView - Details (read only)
  * @param {(id: string) => void} props.onEdit
  */
-const UsersListPage = ({ onCreate, onEdit }) => {
+const UsersListPage = ({ onCreate, onView, onEdit }) => {
   const toast = useToast();
   // What the person may do here (the owner: everything).
   const { can } = useAccess();
   const mayCreate = can('users', 'create');
   const mayEdit = can('users', 'edit');
+  const mayDetails = can('users', 'details');
+  // The name opens the edit screen, or the details (read only).
+  const openRow = mayEdit ? onEdit : mayDetails ? onView : null;
   const mayDelete = can('users', 'delete');
   const { access } = useAccess();
   // A user can't deactivate or delete their own account.
@@ -204,8 +208,8 @@ const UsersListPage = ({ onCreate, onEdit }) => {
       label: 'Name',
       render: (user) => (
         <div className="min-w-0">
-          {mayEdit ? (
-            <button type="button" onClick={() => onEdit(user._id)} className="font-medium text-gray-900 hover:text-indigo-600 text-left break-words cursor-pointer">
+          {openRow ? (
+            <button type="button" onClick={() => openRow(user._id)} className="font-medium text-gray-900 hover:text-indigo-600 text-left break-words cursor-pointer">
               {user.name}
             </button>
           ) : (
@@ -264,6 +268,7 @@ const UsersListPage = ({ onCreate, onEdit }) => {
         const isBusy = busyId === user._id;
         return (
           <div className="flex justify-end gap-0.5">
+            {!mayEdit && mayDetails && <IconButton label={`View "${user.name}"`} icon={ViewIcon} onClick={() => onView(user._id)} />}
             {mayEdit && <IconButton label={`Edit "${user.name}"`} icon={EditIcon} onClick={() => onEdit(user._id)} disabled={isBusy} />}
             {mayDelete && !isMe(user) && <IconButton label={`Delete "${user.name}"`} icon={TrashIcon} variant="danger" onClick={() => setToDelete({ ids: [user._id], label: user.name })} disabled={isBusy} />}
           </div>

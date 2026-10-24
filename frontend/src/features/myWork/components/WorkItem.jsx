@@ -22,7 +22,7 @@ const WorkItem = ({ work, now }) => {
         <span className="font-medium text-gray-900 break-words">{work.valueName}</span>
         <span className="text-xs text-gray-500 break-words">{work.masterName}</span>
         {work.step !== undefined && <StepBadge step={work.step} />}
-        {status.text !== 'Completed' && <Badge variant={status.variant} size="sm">{status.text}</Badge>}
+        {(!status.isCompleted || status.hasDeadline) && <Badge variant={status.variant} size="sm">{status.text}</Badge>}
       </div>
       {work.dueAt && (
         <p className="text-xs text-gray-600">

@@ -1,11 +1,12 @@
 import { useToast } from '../../../components/common/Toast';
 import { NotFoundPage } from '../../../components/errors';
 import { useRouter, screenOf } from '../../../router';
+import { useAccess } from '../../access/hooks/useAccess';
 import UsersListPage from './UsersListPage';
 import UserFormPage from './UserFormPage';
 
 /**
- * The Users section: the list (/users), or the create (/users/new) / edit
+ * The Users section: the list (/users), details (/users/:id, read only), or the create (/users/new) / edit
  * (/users/:id/edit) screen.
  *
  * @param {Object} props
@@ -15,7 +16,8 @@ import UserFormPage from './UserFormPage';
 const UsersPage = ({ basePath, segments }) => {
   const toast = useToast();
   const { navigate } = useRouter();
-  const screen = screenOf(segments, { actions: { edit: 'edit' } });
+  const { can } = useAccess();
+  const screen = screenOf(segments, { view: true, actions: { edit: 'edit' } });
 
   const backToList = () => navigate(basePath);
 
@@ -25,6 +27,7 @@ const UsersPage = ({ basePath, segments }) => {
     return (
       <UsersListPage
         onCreate={() => navigate(`${basePath}/new`)}
+        onView={(id) => navigate(`${basePath}/${id}`)}
         onEdit={(id) => navigate(`${basePath}/${id}/edit`)}
       />
     );
@@ -34,7 +37,10 @@ const UsersPage = ({ basePath, segments }) => {
     <UserFormPage
       // A fresh form for every user / mode.
       key={`${screen.mode}-${screen.id || ''}`}
-      mode={screen.mode}
+      // Details: the edit form, read only.
+      mode={screen.mode === 'view' ? 'edit' : screen.mode}
+      readOnly={screen.mode === 'view'}
+      onEdit={can('users', 'edit') ? () => navigate(`${basePath}/${screen.id}/edit`) : null}
       userId={screen.id}
       onBack={backToList}
       onDone={(message) => {

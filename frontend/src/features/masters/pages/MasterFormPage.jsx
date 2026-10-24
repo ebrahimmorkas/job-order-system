@@ -57,8 +57,10 @@ const toFieldErrors = (errors) => {
  * @param {Object|null} [props.featureAccess] - Which features are on; the role checkbox needs RBAC
  * @param {(message: string) => void} props.onDone - Back to the list after saving
  * @param {() => void} props.onBack
+ * @param {boolean} [props.readOnly] - Details only (mode 'edit', nothing can be changed)
+ * @param {(() => void)|null} [props.onEdit] - Details: opens the edit screen (with Edit permission)
  */
-const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed, featureAccess = null, onDone, onBack }) => {
+const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed, featureAccess = null, onDone, onBack, readOnly = false, onEdit = null }) => {
   const isEdit = mode === 'edit';
   const nextKey = useRef(0);
   const createKey = () => `new-${nextKey.current++}`;
@@ -75,6 +77,8 @@ const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed, fea
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  // Saving, or details only: every field is off.
+  const isLocked = isSaving || readOnly;
 
   // Create opened straight from its address: the limits the list shows.
   useEffect(() => {
@@ -217,8 +221,9 @@ const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed, fea
           <BackIcon className="w-4 h-4" /> Back to masters
         </button>
         <div className="mt-2 flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{readOnly ? 'Master details' : title}</h1>
           {isEdit && <Badge variant={status === 'A' ? 'green' : 'gray'} dot>{status === 'A' ? 'Active' : 'Inactive'}</Badge>}
+          {readOnly && onEdit && <Button size="sm" variant="outline" className="ml-auto" onClick={onEdit}>Edit</Button>}
         </div>
         {mode === 'clone' && <p className="mt-1 text-sm text-gray-500">Change anything you need, then create the copy.</p>}
       </div>
@@ -226,7 +231,9 @@ const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed, fea
       {loadError ? (
         <Alert variant="error">{loadError}</Alert>
       ) : (
-        <form onSubmit={handleSubmit} noValidate className="space-y-6">
+        <form onSubmit={handleSubmit} noValidate>
+          {/* Details only: a disabled fieldset turns off every field and button inside it. */}
+          <fieldset disabled={readOnly} className="m-0 min-w-0 border-0 p-0 space-y-6">
           {formError && <Alert variant="error">{formError}</Alert>}
 
           <Card variant="outlined" title="Details">
@@ -242,7 +249,7 @@ const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed, fea
                     error={fieldErrors.name}
                     maxLength={NAME_MAX_LENGTH}
                     required
-                    disabled={isSaving}
+                    disabled={isLocked}
                     autoFocus={!isEdit}
                   />
                 </div>
@@ -254,7 +261,7 @@ const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed, fea
                   onChange={(e) => setDetail('shortName', e.target.value)}
                   error={fieldErrors.shortName}
                   maxLength={SHORT_NAME_MAX_LENGTH}
-                  disabled={isSaving}
+                  disabled={isLocked}
                 />
               </div>
               <Checkbox
@@ -263,7 +270,7 @@ const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed, fea
                 description="The job order can't be saved without a value picked here."
                 checked={details.isRequired}
                 onChange={(e) => setDetail('isRequired', e.target.checked)}
-                disabled={isSaving}
+                disabled={isLocked}
               />
               <Checkbox
                 name="isMultiselectAllowed"
@@ -271,7 +278,7 @@ const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed, fea
                 description="On the job order, more than one value can be picked from this list."
                 checked={details.isMultiselectAllowed}
                 onChange={(e) => setDetail('isMultiselectAllowed', e.target.checked)}
-                disabled={isSaving}
+                disabled={isLocked}
               />
               {featureAccess?.isRBACFeatureOn && (
                 <Checkbox
@@ -281,7 +288,7 @@ const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed, fea
                   checked={details.isRoleProvided}
                   onChange={(e) => setDetail('isRoleProvided', e.target.checked)}
                   error={fieldErrors.isRoleProvided}
-                  disabled={isSaving}
+                  disabled={isLocked}
                 />
               )}
             </div>
@@ -301,14 +308,17 @@ const MasterFormPage = ({ mode, masterId, valuesAllowed: knownValuesAllowed, fea
               addError={addError}
               onAddError={setAddError}
               error={fieldErrors.values}
-              disabled={isSaving}
+              disabled={isLocked}
             />
           </Card>
 
+          {!readOnly && (
           <div className="flex justify-end gap-3">
             <Button variant="ghost" onClick={goBack} disabled={isSaving}>Cancel</Button>
             <Button type="submit" loading={isSaving} loadingText={isEdit ? 'Saving...' : 'Creating...'}>{submitLabel}</Button>
           </div>
+          )}
+          </fieldset>
         </form>
       )}
     </div>

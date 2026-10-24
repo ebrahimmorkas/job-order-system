@@ -13,7 +13,7 @@ import { useToast } from '../../../components/common/Toast';
 import { useDebouncedValue } from '../../../utils/useDebouncedValue';
 import IconButton from '../../../components/common/IconButton';
 import UsagePill from '../../../components/common/UsagePill';
-import { EditIcon, CopyIcon, TrashIcon, PlusIcon, MoveUpIcon, MoveDownIcon } from '../../../components/common/ActionIcons';
+import { ViewIcon, EditIcon, CopyIcon, TrashIcon, PlusIcon, MoveUpIcon, MoveDownIcon } from '../../../components/common/ActionIcons';
 import MasterValuesModal from '../components/MasterValuesModal';
 import { useAccess } from '../../access/hooks/useAccess';
 import * as mastersApi from '../api/mastersApi';
@@ -39,15 +39,19 @@ const BULK_LABELS = {
  *
  * @param {Object} props
  * @param {(limits: Object) => void} props.onCreate
+ * @param {(id: string) => void} props.onView - Details (read only)
  * @param {(id: string) => void} props.onEdit
  * @param {(id: string) => void} props.onClone
  */
-const MastersListPage = ({ onCreate, onEdit, onClone }) => {
+const MastersListPage = ({ onCreate, onView, onEdit, onClone }) => {
   const toast = useToast();
   // What the person may do here (the owner: everything).
   const { can } = useAccess();
   const mayCreate = can('masters', 'create');
   const mayEdit = can('masters', 'edit');
+  const mayDetails = can('masters', 'details');
+  // The name opens the edit screen, or the details (read only).
+  const openRow = mayEdit ? onEdit : mayDetails ? onView : null;
   const mayDelete = can('masters', 'delete');
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search.trim());
@@ -202,8 +206,8 @@ const MastersListPage = ({ onCreate, onEdit, onClone }) => {
       label: 'Name',
       render: (master) => (
         <div className="min-w-0">
-          {mayEdit ? (
-            <button type="button" onClick={() => onEdit(master._id)} className="font-medium text-gray-900 hover:text-indigo-600 text-left break-words cursor-pointer">
+          {openRow ? (
+            <button type="button" onClick={() => openRow(master._id)} className="font-medium text-gray-900 hover:text-indigo-600 text-left break-words cursor-pointer">
               {master.name}
             </button>
           ) : (
@@ -269,6 +273,7 @@ const MastersListPage = ({ onCreate, onEdit, onClone }) => {
         const isBusy = busyId === master._id;
         return (
           <div className="flex justify-end gap-0.5">
+            {!mayEdit && mayDetails && <IconButton label={`View "${master.name}"`} icon={ViewIcon} onClick={() => onView(master._id)} />}
             {mayEdit && <IconButton label={`Edit "${master.name}"`} icon={EditIcon} onClick={() => onEdit(master._id)} disabled={isBusy} />}
             {mayCreate && (
               <IconButton

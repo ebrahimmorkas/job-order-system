@@ -3,7 +3,7 @@
 export const ROLE_TYPES = {
   module: {
     label: 'Module role',
-    description: 'Gives access to modules - view, create, edit, delete - picked per module.',
+    description: 'Gives access to modules - view, details, create, edit, delete - picked per module.',
   },
   master: {
     label: 'Master role',
@@ -14,6 +14,7 @@ export const ROLE_TYPES = {
 // The columns of the permissions table, in order.
 export const PERMISSIONS = [
   { key: 'view', label: 'View' },
+  { key: 'details', label: 'Details' },
   { key: 'create', label: 'Create' },
   { key: 'edit', label: 'Edit' },
   { key: 'delete', label: 'Delete' },

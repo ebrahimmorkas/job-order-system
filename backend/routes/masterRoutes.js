@@ -30,7 +30,7 @@ router.post('/', can('create'), validate(v.createMasterSchema), masterController
 // Above '/:id', so "bulk" is never read as an id.
 router.post('/bulk', can(bulkPermission), validate(v.bulkMastersSchema), masterController.bulkUpdateMasters);
 
-router.get('/:id', can('view'), byId, masterController.getMaster);
+router.get('/:id', can('details'), byId, masterController.getMaster);
 router.put('/:id', can('edit'), byId, validate(v.updateMasterSchema), masterController.updateMaster);
 router.patch('/:id/status', can('edit'), byId, validate(v.statusSchema), masterController.setMasterStatus);
 router.patch('/:id/move', can('edit'), byId, validate(v.moveSchema), masterController.moveMaster);

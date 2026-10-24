@@ -53,18 +53,23 @@ Each section's code is downloaded the first time it is opened
   `useAccess().can(module, permission)`): a user sees only the modules their
   roles give, and buttons they can't use are hidden (New / Copy without
   Create, Edit and status switches without Edit, Delete without Delete;
+  with Details but not Edit, the name and a View button open the record's
+  form read only at `/<section>/:id`; with View only, nothing opens;
   Company Settings read only without Edit; roles on the user form only with
   Assign role, never on your own account). Layout Master is owner only.
 - **My work** (users given master values' work) - the job orders given to
   them, newest first, with what they do on each, their step, when it is due
-  and the time left ("Overdue", "Completed", "No deadline", or not counting
+  and the time left ("Overdue", "Completed on time", "Completed late by 2
+  hours", "No deadline", or not counting
   until their first step), who else does it, and a read-only view of the job
   order without any money. With steps on, the view moves the work to a step
   (In progress asks the %, Hold asks why) and shows its history. The
   dashboard links to it. The owner's job order list shows how the work is
   going (done / on hold / working) and the view has a Work progress card
   with everyone's step, start, due time and history. Company Settings asks
-  when the work time starts (when given, or at each person's first step).
+  when the work time starts (when given, or at each person's first step) and,
+  for the first step, what a changed time of started work counts from (the
+  day they started, or the moment of the change).
 - **Masters** - the vendor's own dropdown lists for the job order: list with
   Sr. No. (with up / down arrows to change the order), search, status filter,
   pages, a status switch and bulk actions; clicking the values count opens the
@@ -85,8 +90,9 @@ Each section's code is downloaded the first time it is opened
   Masters plus a type filter, an access column and the roles usage pill.
   Create (pick Module role or Master role - it can't change later), copy and
   edit: a module role adds modules from a searchable dropdown and ticks View /
-  Create / Edit / Delete (Role assignment for Users; only View and Edit for
-  Company Settings - ticking anything ticks View); a master role adds role
+  Details / Create / Edit / Delete (Role assignment for Users; only View and
+  Edit for Company Settings - ticking anything ticks View, ticking Edit ticks
+  Details, unticking Details unticks Edit); a master role adds role
   masters, each "Whole master" or some of its values.
 - **Controls** - fields the vendor adds to the job order (text field, text
   area, checkbox, radio buttons), only the types assigned to the vendor: the
