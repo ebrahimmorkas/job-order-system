@@ -122,6 +122,18 @@ const JobOrdersListPage = ({ onCreate, onView, onEdit }) => {
       ),
     },
     {
+      key: 'work',
+      label: 'Work',
+      width: '150px',
+      render: ({ work }) => (work ? (
+        <span className="inline-flex flex-col gap-0.5 text-xs">
+          <span className={work.completed === work.people ? 'font-medium text-green-700' : 'text-gray-700'}>{work.completed} of {work.people} done</span>
+          {work.onHold > 0 && <span className="text-amber-700">{work.onHold} on hold</span>}
+          {work.started > 0 && <span className="text-gray-500">{work.started} working</span>}
+        </span>
+      ) : <span className="text-gray-400">-</span>),
+    },
+    {
       key: 'createdAt',
       label: 'Created',
       width: '130px',

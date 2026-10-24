@@ -599,7 +599,9 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
                                     />
                                   </div>
                                 </div>
-                                <p className="mt-1 text-xs text-gray-400">From when the work is first given. Leave empty for no deadline.</p>
+                                <p className="mt-1 text-xs text-gray-400">
+                                  {parts.settings.workTimeStartsOn === 'onFirstStep' ? "From each person's first step." : 'From when the work is first given.'} Leave empty for no deadline.
+                                </p>
                               </div>
                             )}
                           </div>

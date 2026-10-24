@@ -45,3 +45,21 @@ export const timeLeftOf = (dueAt, now = Date.now()) => {
   }
   return { text: parts.length > 0 ? `${parts.join(' ')} left` : 'Less than a minute left', isOverdue: false };
 };
+
+/**
+ * Where someone's work stands against its time, for a badge: Completed, the
+ * time left / Overdue, not counting yet (the time starts on their first step)
+ * or no deadline.
+ *
+ * @param {{ dueAt, timeStartsOn, completeIn, startedAt, step }} work - step: their current step or null
+ * @returns {{ text: string, variant: 'green'|'red'|'blue'|'gray' }}
+ */
+export const timeStatusOf = ({ dueAt, timeStartsOn, completeIn, startedAt, step }, now = Date.now()) => {
+  if (step?.fixedStep === 'completed') return { text: 'Completed', variant: 'green' };
+  if (dueAt) {
+    const left = timeLeftOf(dueAt, now);
+    return { text: left.text, variant: left.isOverdue ? 'red' : 'blue' };
+  }
+  if (timeStartsOn === 'onFirstStep' && completeIn && !startedAt) return { text: `${durationTextOf(completeIn)} from the first step`, variant: 'gray' };
+  return { text: 'No deadline', variant: 'gray' };
+};

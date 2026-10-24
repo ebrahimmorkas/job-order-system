@@ -17,12 +17,23 @@ export const listMyWork = ({ search, page, limit } = {}, { signal } = {}) => {
 };
 
 /**
- * One of those job orders, read only and without any money.
- * @returns {Promise<{ jobOrder: Object, work: Array }>}
+ * One of those job orders, read only and without any money, with the
+ * vendor's steps (none while steps are off).
+ * @returns {Promise<{ jobOrder: Object, work: Array, steps: Array<{ key, fixedStep, name }> }>}
  */
 export const getMyWorkJobOrder = (id, { signal } = {}) => apiRequest(`${BASE}/${id}`, { signal });
+
+/**
+ * Moves the user's work on one value to a step (In progress may take a %,
+ * Hold a reason).
+ * @param {string} id - The job order
+ * @param {{ valueId: string, stepKey: string, percent?: number|null, holdReason?: string|null }} data
+ * @returns {Promise<{ step: Object }>}
+ */
+export const setMyStep = (id, data) => apiRequest(`${BASE}/${id}/step`, { method: 'PATCH', body: data });
 
 export default {
   listMyWork,
   getMyWorkJobOrder,
+  setMyStep,
 };

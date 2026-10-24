@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const auditPlugin = require('./plugins/auditPlugin');
 const { CASE_INSENSITIVE_COLLATION, LIVE_STATUSES } = require('../constants/masterConstants');
 const { JOB_ORDER_NUMBER_MAX_LENGTH, DURATION_UNITS } = require('../constants/jobOrderConstants');
+const { FIXED_STEP_VALUES, WORK_TIME_START_VALUES, WORK_TIME_STARTS } = require('../constants/stepConstants');
 const { CONTROL_TYPE_VALUES } = require('../constants/controlConstants');
 
 // Names are copied in (not only ids), so a job order keeps showing what was
@@ -12,6 +13,30 @@ const { CONTROL_TYPE_VALUES } = require('../constants/controlConstants');
 const durationSchema = new mongoose.Schema({
     amount: { type: Number, required: true },
     unit: { type: String, enum: DURATION_UNITS, required: true }
+}, { _id: false });
+
+// A step a person moved their work to (names copied in, like everything
+// else here). percent: In progress only; holdReason: Hold only.
+const stepEntrySchema = new mongoose.Schema({
+    key: { type: String, required: true },
+    name: { type: String, required: true },
+    fixedStep: { type: String, enum: [...FIXED_STEP_VALUES, null], default: null },
+    percent: { type: Number, default: null },
+    holdReason: { type: String, default: null },
+    at: { type: Date, required: true }
+}, { _id: false });
+
+// Someone given a value's work, and how far they are.
+const assigneeSchema = new mongoose.Schema({
+    userId: { type: mongoose.Types.ObjectId, required: true },
+    name: { type: String, required: true },
+    // Their first step change (null = not started).
+    startedAt: { type: Date, default: null },
+    // When the time starts on the first step: their own due time.
+    dueAt: { type: Date, default: null },
+    // Their current step (null = none yet) and every step so far, oldest first.
+    step: { type: stepEntrySchema, default: null },
+    history: { type: [stepEntrySchema], default: [] }
 }, { _id: false });
 
 const pickedMasterSchema = new mongoose.Schema({
@@ -25,7 +50,7 @@ const pickedMasterSchema = new mongoose.Schema({
             name: { type: String, required: true },
             // The users given this value's work (a role master only); names copied in.
             assignedTo: {
-                type: [{ _id: false, userId: { type: mongoose.Types.ObjectId, required: true }, name: { type: String, required: true } }],
+                type: [assigneeSchema],
                 default: []
             },
             // When the work was first given (kept on edit unless completeIn
@@ -33,7 +58,11 @@ const pickedMasterSchema = new mongoose.Schema({
             // without people; completeIn / dueAt null = no deadline.
             assignedAt: { type: Date, default: null },
             completeIn: { type: durationSchema, default: null },
-            dueAt: { type: Date, default: null }
+            dueAt: { type: Date, default: null },
+            // When the completion time starts (CompanySettings.workTimeStartsOn when
+            // the clock started): onAssign - dueAt above, for everyone;
+            // onFirstStep - each person's own dueAt, from their first step.
+            timeStartsOn: { type: String, enum: WORK_TIME_START_VALUES, default: WORK_TIME_STARTS.ON_ASSIGN }
         }],
         default: []
     }

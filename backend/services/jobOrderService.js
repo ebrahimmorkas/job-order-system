@@ -8,12 +8,14 @@ const controlService = require('./controlService');
 const featureAccessService = require('./featureAccessService');
 const imageUploadService = require('./imageUploadService');
 const workAssignmentService = require('./workAssignmentService');
+const stepService = require('./stepService');
 const { jobOrderSettingsOf } = require('./companySettingsService');
 const { assignedCountryIdsOf, isTaxOn, taxReadyCountryIds, loadCountries, detailsByCountry } = require('./taxSettingsService');
 const { LIVE_STATUSES, CASE_INSENSITIVE_COLLATION } = require('../constants/masterConstants');
 const { CONTROL_TYPES, PRICE_PATTERN } = require('../constants/controlConstants');
 const { SHORT_NAME_PLACES, AUTO_NUMBER_PREFIX, AUTO_NUMBER_DIGITS, ANSWER_MAX_LENGTH } = require('../constants/jobOrderConstants');
 const { addDuration } = require('../utils/days');
+const { WORK_TIME_STARTS, FIXED_STEPS } = require('../constants/stepConstants');
 const { FEATURE_FLAGS } = require('../constants/featureConstants');
 const { IMAGE_FORMATS, IMAGE_FORMAT_VALUES, IMAGE_MODULES, MAX_IMAGES_PER_REQUEST } = require('../constants/storageConstants');
 
@@ -36,7 +38,7 @@ const { IMAGE_FORMATS, IMAGE_FORMAT_VALUES, IMAGE_MODULES, MAX_IMAGES_PER_REQUES
 // value may stay even if they no longer have it.
 
 const LIVE = { $in: LIVE_STATUSES };
-const LIST_FIELDS = '_id jobOrderNumber customer.countryName customer.stateName customer.cityName currency subtotal tax.isApplied tax.amount total createdAt updatedAt';
+const LIST_FIELDS = '_id jobOrderNumber customer.countryName customer.stateName customer.cityName currency subtotal tax.isApplied tax.amount total createdAt updatedAt masters.values.assignedTo.step.fixedStep';
 const COUNTER_KEY = 'jobOrder';
 
 const idOf = (value) => (value ? String(value) : null);
@@ -143,7 +145,9 @@ const loadFormParts = async ({ vendorId, websiteMasterData, companyMasterData, c
             images: { isOn: imageRules.isOn, maxCount: imageRules.maxCount, maxSizeMB: imageRules.maxSizeMB, formats: imageRules.formats },
             settings: {
                 ...settings,
-                useShortNames: [SHORT_NAME_PLACES.JOB_ORDER, SHORT_NAME_PLACES.BOTH].includes(settings.useShortNamesOn)
+                useShortNames: [SHORT_NAME_PLACES.JOB_ORDER, SHORT_NAME_PLACES.BOTH].includes(settings.useShortNamesOn),
+                // What newly given work's time starts on (steps off = when given).
+                workTimeStartsOn: stepService.workTimeStartsOnOf(websiteMasterData, companyMasterData, companySettingsData)
             },
             // Each value of a role master lists who can be given its work.
             masters: masters.map((master) => (master.isRoleProvided
@@ -182,8 +186,9 @@ const getFormData = async (vendorData) => {
 
 // ---- building a job order ---------------------------------------------------
 
-// Who a picked value's work goes to: [{ userId, name }], or a message.
-// previous: the people it was given to before (on edit), who may stay.
+// Who a picked value's work goes to: [{ userId, name, startedAt, step, history }],
+// or a message. previous: the values as saved before (on edit) - their people
+// may stay, and everyone keeps how far they got.
 const assigneesOf = ({ master, value, userIds, workerById, previous }) => {
     try {
         if (userIds.length > 0 && !master.isRoleProvided) return { message: `Work can't be given for ${master.name}.` };
@@ -193,7 +198,13 @@ const assigneesOf = ({ master, value, userIds, workerById, previous }) => {
             const worker = (value.workerIds || []).includes(userId) && workerById.get(userId);
             const kept = !worker && before.get(userId);
             if (!worker && !kept) return { message: `Someone picked for ${value.name} doesn't have it any more. Please pick again.` };
-            assignees.push(worker ? { userId: worker._id, name: worker.name } : { userId: kept.userId, name: kept.name });
+            const progress = before.get(userId);
+            assignees.push({
+                ...(worker ? { userId: worker._id, name: worker.name } : { userId: kept.userId, name: kept.name }),
+                startedAt: progress?.startedAt ?? null,
+                step: progress?.step ?? null,
+                history: progress?.history ?? []
+            });
         }
         return { assignees };
     } catch (err) {
@@ -204,14 +215,24 @@ const assigneesOf = ({ master, value, userIds, workerById, previous }) => {
 const sameDuration = (a, b) => (a?.amount ?? null) === (b?.amount ?? null) && (a?.unit ?? null) === (b?.unit ?? null);
 
 // When a value's work was given and is due. The clock starts when people are
-// first given it and restarts only when completeIn changes.
+// first given it and restarts only when completeIn changes - then on what
+// timeStartsOn says today. onAssign: one dueAt for everyone; onFirstStep:
+// each person's own, from their first step (none before it).
 // before: the value as saved before (on edit), or undefined.
-const timingOf = ({ assignees, completeIn, before, now }) => {
+const timingOf = ({ assignees, completeIn, before, now, timeStartsOn }) => {
     try {
-        if (assignees.length === 0) return { assignedAt: null, completeIn: null, dueAt: null };
+        if (assignees.length === 0) return { assignedTo: assignees, assignedAt: null, completeIn: null, dueAt: null, timeStartsOn: WORK_TIME_STARTS.ON_ASSIGN };
         const isSameClock = before?.assignedAt && before.assignedTo?.length > 0 && sameDuration(before.completeIn, completeIn);
         const assignedAt = isSameClock ? before.assignedAt : now;
-        return { assignedAt, completeIn: completeIn || null, dueAt: completeIn ? addDuration(assignedAt, completeIn) : null };
+        const startsOn = isSameClock ? (before.timeStartsOn || WORK_TIME_STARTS.ON_ASSIGN) : timeStartsOn;
+        const perPerson = startsOn === WORK_TIME_STARTS.ON_FIRST_STEP && !!completeIn;
+        return {
+            assignedTo: assignees.map((person) => ({ ...person, dueAt: perPerson && person.startedAt ? addDuration(person.startedAt, completeIn) : null })),
+            assignedAt,
+            completeIn: completeIn || null,
+            dueAt: completeIn && !perPerson ? addDuration(assignedAt, completeIn) : null,
+            timeStartsOn: startsOn
+        };
     } catch (err) {
         throw err;
     }
@@ -219,7 +240,7 @@ const timingOf = ({ assignees, completeIn, before, now }) => {
 
 // The masters picked: field errors by master, and what to store.
 // previous: valueId -> the value as saved before (on edit).
-const pickMasters = (masters, input, workers, previous) => {
+const pickMasters = (masters, input, workers, previous, timeStartsOn) => {
     try {
         const errors = [];
         const now = new Date();
@@ -265,8 +286,8 @@ const pickMasters = (masters, input, workers, previous) => {
                     message = result.message;
                     break;
                 }
-                const timing = timingOf({ assignees: result.assignees, completeIn: assignment?.completeIn, before: previous.get(valueId), now });
-                values.push({ valueId: value._id, name: value.name, assignedTo: result.assignees, ...timing });
+                const timing = timingOf({ assignees: result.assignees, completeIn: assignment?.completeIn, before: previous.get(valueId), now, timeStartsOn });
+                values.push({ valueId: value._id, name: value.name, ...timing });
             }
             if (message) {
                 errors.push({ field, message });
@@ -439,7 +460,7 @@ const buildJobOrder = (parts, data, current = null) => {
         for (const master of current?.masters || []) {
             for (const value of master.values) previous.set(String(value.valueId), value);
         }
-        const masters = pickMasters(parts.masters, data.masters, parts.workers, previous);
+        const masters = pickMasters(parts.masters, data.masters, parts.workers, previous, parts.settings.workTimeStartsOn);
         const controls = answerControls(parts.controls, data.controls);
         const customer = parts.settings.askCustomerAddress ? customerAddress(parts.countries, data.customer) : { errors: [], stored: {} };
 
@@ -572,7 +593,31 @@ const updateJobOrder = async ({ userId, id, data, files = [], ...vendorData }) =
     }
 };
 
-// GET /api/job-orders - newest first; search by number or customer place.
+// How the work given on a job order is going, for the list: how many people
+// were given work, how many completed it, are on hold or have started
+// (null when nobody was given any).
+const workSummaryOf = (masters = []) => {
+    try {
+        const summary = { people: 0, completed: 0, onHold: 0, started: 0 };
+        for (const master of masters) {
+            for (const value of master.values || []) {
+                for (const person of value.assignedTo || []) {
+                    summary.people++;
+                    const fixedStep = person.step?.fixedStep;
+                    if (fixedStep === FIXED_STEPS.COMPLETED) summary.completed++;
+                    else if (fixedStep === FIXED_STEPS.HOLD) summary.onHold++;
+                    else if (person.step) summary.started++;
+                }
+            }
+        }
+        return summary.people > 0 ? summary : null;
+    } catch (err) {
+        throw err;
+    }
+};
+
+// GET /api/job-orders - newest first; search by number or customer place;
+// each with how its work is going (workSummaryOf).
 const listJobOrders = async ({ vendorId, search, page, limit }) => {
     try {
         const filter = { vendorId, status: 'A' };
@@ -585,7 +630,7 @@ const listJobOrders = async ({ vendorId, search, page, limit }) => {
             JobOrder.find(filter).select(LIST_FIELDS).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean()
         ]);
         return common.returnResult(true, 200, 'Job orders fetched successfully.', {
-            jobOrders,
+            jobOrders: jobOrders.map(({ masters, ...jobOrder }) => ({ ...jobOrder, work: workSummaryOf(masters) })),
             pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
         });
     } catch (err) {

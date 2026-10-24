@@ -6,6 +6,7 @@ import Badge from '../../../components/common/Badge';
 import Spinner from '../../../components/common/Spinner';
 import { BackIcon, EditIcon, PrintIcon } from '../../../components/common/ActionIcons';
 import JobOrderSummary from '../components/JobOrderSummary';
+import WorkProgress from '../components/WorkProgress';
 import { summaryRowsOf } from '../summaryRows';
 import * as jobOrdersApi from '../api/jobOrdersApi';
 
@@ -74,6 +75,12 @@ const JobOrderViewPage = ({ jobOrderId, onBack, onEdit, onPrint }) => {
               </li>
             ))}
           </ul>
+        </Card>
+      )}
+
+      {jobOrder.masters.some((master) => master.values.some((value) => value.assignedTo?.length > 0)) && (
+        <Card variant="outlined" title="Work progress">
+          <WorkProgress masters={jobOrder.masters} />
         </Card>
       )}
 

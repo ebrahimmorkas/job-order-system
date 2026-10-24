@@ -21,8 +21,9 @@ const LOGO_TYPES = 'image/jpeg,image/png,image/webp,image/gif';
  *
  * @param {Object} props
  * @param {(key: string, isDirty: boolean) => void} props.onDirtyChange
+ * @param {boolean} [props.showWorkTime] - Ask when the work time starts (steps on)
  */
-const GeneralSettingsTab = ({ onDirtyChange }) => {
+const GeneralSettingsTab = ({ onDirtyChange, showWorkTime = false }) => {
   const toast = useToast();
   const { updateBranding } = useBranding();
   const fileInputRef = useRef(null);
@@ -162,7 +163,7 @@ const GeneralSettingsTab = ({ onDirtyChange }) => {
         {logoError && <p className="mt-3 text-sm text-red-600" role="alert">{logoError}</p>}
       </Card>
 
-      {jobOrderSettings && <JobOrderSettingsCard initial={jobOrderSettings} onDirtyChange={onDirtyChange} />}
+      {jobOrderSettings && <JobOrderSettingsCard initial={jobOrderSettings} onDirtyChange={onDirtyChange} showWorkTime={showWorkTime} />}
     </div>
   );
 };

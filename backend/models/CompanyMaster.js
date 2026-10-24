@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { CONTROL_TYPE_VALUES } = require('../constants/controlConstants');
+const { FIXED_STEP_VALUES, STEP_NAME_MAX_LENGTH } = require('../constants/stepConstants');
 
 // A whole number of at least `min`, or null (= no limit).
 const wholeNumberOrNull = (field, min = 0) => ({
@@ -62,6 +63,16 @@ const storageAreaAccountsSchema = new mongoose.Schema({
 // for a feature, so it is switched on for them here. A feature works only
 // when it is on here AND in WebsiteMaster (see checkFeatureOnOrOff in
 // utils/common.js). A new feature flag must be added to both schemas.
+// One step of assigned work (see constants/stepConstants.js): a fixed step
+// of the app (fixedStep) or one of the vendor's own (fixedStep null, name
+// required). A fixed step without a name shows its usual name.
+const stepSchema = new mongoose.Schema({
+    fixedStep: { type: String, enum: [...FIXED_STEP_VALUES, null], default: null },
+    name: { type: String, trim: true, maxlength: STEP_NAME_MAX_LENGTH, default: null },
+    // 1 = first; the order the steps are offered in.
+    precedence: { type: Number, required: true }
+}, { _id: false });
+
 const companyMasterSchema = new mongoose.Schema({
     vendorId: {
         type: mongoose.Types.ObjectId,
@@ -207,6 +218,25 @@ const companyMasterSchema = new mongoose.Schema({
     isControlFeatureInLayoutOn: {
         type: Boolean,
         default: false
+    },
+
+    // ---- Steps of assigned work ----------------------------------------------
+    // A user given work moves it through steps (Start, In progress...). Off
+    // until the platform owner switches it on for this vendor (also needs
+    // WebsiteMaster.isStepFeatureOn).
+    isStepFeatureOn: {
+        type: Boolean,
+        default: false
+    },
+    // Most steps the vendor gets, fixed ones included - the first ones by
+    // precedence. null = no limit.
+    numberOfStepsAllowed: wholeNumberOrNull('numberOfStepsAllowed', 1),
+    // The vendor's steps, set by the platform owner, e.g.
+    // [{ fixedStep: 'completed', precedence: 1 }, { name: 'Packing', precedence: 2 },
+    //  { fixedStep: 'start', precedence: 3 }]
+    steps: {
+        type: [stepSchema],
+        default: []
     },
 
     // ---- Images on job orders --------------------------------------------

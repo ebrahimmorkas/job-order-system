@@ -14,5 +14,7 @@ router.use(authorize(ROLES.USER), requireFeature(FEATURE_FLAGS.RBAC));
 
 router.get('/', validate(v.listMyWorkQuerySchema, 'query'), myWorkController.listMyWork);
 router.get('/:id', validate(v.jobOrderIdParamSchema, 'params'), myWorkController.getMyWorkJobOrder);
+// Moving your work to a step: only while the steps feature is on.
+router.patch('/:id/step', requireFeature(FEATURE_FLAGS.STEPS), validate(v.jobOrderIdParamSchema, 'params'), validate(v.stepSchema), myWorkController.setMyStep);
 
 module.exports = router;

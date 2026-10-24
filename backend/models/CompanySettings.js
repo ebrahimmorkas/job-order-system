@@ -4,6 +4,7 @@ const cacheInvalidationPlugin = require('./plugins/cacheInvalidationPlugin');
 const redisKeys = require('../utils/redisKeys');
 const { ADDRESS_LINE_MAX_LENGTH, POSTAL_CODE_MAX_LENGTH, TAX_FIELD_VALUE_MAX_LENGTH } = require('../constants/taxConstants');
 const { SHORT_NAME_PLACES, SHORT_NAME_PLACE_VALUES } = require('../constants/jobOrderConstants');
+const { WORK_TIME_STARTS, WORK_TIME_START_VALUES } = require('../constants/stepConstants');
 
 // The business in one of the vendor's countries (CompanyMaster.assignedCountries):
 // its address there and its tax registration. Company Settings > Tax.
@@ -94,6 +95,14 @@ const companySettingsSchema = new mongoose.Schema({
         type: String,
         enum: SHORT_NAME_PLACE_VALUES,
         default: SHORT_NAME_PLACES.NOWHERE
+    },
+    // When the completion time of assigned work starts: when the work is
+    // given, or when each person changes their first step (only while the
+    // steps feature is on; otherwise always when given).
+    workTimeStartsOn: {
+        type: String,
+        enum: WORK_TIME_START_VALUES,
+        default: WORK_TIME_STARTS.ON_ASSIGN
     },
     // One per country the vendor has filled in (Company Settings > Tax).
     // Entries of a country no longer assigned are kept, and used again if it

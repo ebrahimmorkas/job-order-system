@@ -31,9 +31,15 @@ images stored on the server itself, such as logos) to it.
   Company Settings read only without Edit; roles on the user form only with
   Assign role, never on your own account). Layout Master is owner only.
 - **My work** (users given master values' work) - the job orders given to
-  them, newest first, with what they do on each, when it is due and the time
-  left ("Overdue", or "No deadline"), who else does it, and a read-only view
-  of the job order without any money. The dashboard links to it.
+  them, newest first, with what they do on each, their step, when it is due
+  and the time left ("Overdue", "Completed", "No deadline", or not counting
+  until their first step), who else does it, and a read-only view of the job
+  order without any money. With steps on, the view moves the work to a step
+  (In progress asks the %, Hold asks why) and shows its history. The
+  dashboard links to it. The owner's job order list shows how the work is
+  going (done / on hold / working) and the view has a Work progress card
+  with everyone's step, start, due time and history. Company Settings asks
+  when the work time starts (when given, or at each person's first step).
 - **Masters** - the vendor's own dropdown lists for the job order: list with
   Sr. No. (with up / down arrows to change the order), search, status filter,
   pages, a status switch and bulk actions; clicking the values count opens the
