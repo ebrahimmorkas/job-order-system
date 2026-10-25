@@ -1,7 +1,7 @@
 const Joi = require('joi');
 const {
     CONTROL_TYPES, CONTROL_TYPE_VALUES, TEXT_CONTROL_TYPES,
-    CONTROL_SEARCH_MAX_LENGTH, PRICE_PATTERN, MIN_RADIO_OPTIONS, CONTROL_LIST_MAX_PAGE_SIZE
+    CONTROL_SEARCH_MAX_LENGTH, PRICE_PATTERN, QUANTITY_PATTERN, MIN_RADIO_OPTIONS, CONTROL_LIST_MAX_PAGE_SIZE
 } = require('../../constants/controlConstants');
 
 // Limits that differ per vendor (CompanyMaster: lengths of the label,
@@ -34,6 +34,10 @@ const defaultText = Joi.string().allow('', null).empty(['', null]).default(null)
 const defaultAmount = Joi.string().trim().pattern(PRICE_PATTERN).allow('', null).empty(['', null]).default(null).label('Default amount')
     .messages({ 'string.pattern.base': 'The default amount must be a number with at most 2 decimals, e.g. 150 or 150.50' });
 
+// A quantity text field's default: a whole number.
+const defaultQuantity = Joi.string().trim().pattern(QUANTITY_PATTERN).allow('', null).empty(['', null]).default(null).label('Default quantity')
+    .messages({ 'string.pattern.base': 'The default quantity must be a whole number from 1 to 999999' });
+
 // A radio group's choices, in order. On edit, existing choices carry their
 // _id (no _id = a new one). Names differ ignoring case; at most one default.
 const optionsList = Joi.array()
@@ -65,7 +69,7 @@ const controlSchema = Joi.object({
     }),
     defaultText: Joi.when('type', {
         switch: [
-            { is: CONTROL_TYPES.TEXTFIELD, then: Joi.when('isPrice', { is: true, then: defaultAmount, otherwise: defaultText }) },
+            { is: CONTROL_TYPES.TEXTFIELD, then: Joi.when('isPrice', { is: true, then: defaultAmount, otherwise: Joi.when('isQuantity', { is: true, then: defaultQuantity, otherwise: defaultText }) }) },
             { is: CONTROL_TYPES.TEXTAREA, then: defaultText }
         ],
         otherwise: Joi.any().strip()
@@ -79,6 +83,12 @@ const controlSchema = Joi.object({
     isPriceIncludedInTax: Joi.when('type', {
         is: CONTROL_TYPES.TEXTFIELD,
         then: Joi.when('isPrice', { is: true, then: Joi.boolean().default(false).label('Include this price in tax'), otherwise: Joi.any().strip() }),
+        otherwise: Joi.any().strip()
+    }),
+    // A quantity is never a price: with isPrice it is always false.
+    isQuantity: Joi.when('type', {
+        is: CONTROL_TYPES.TEXTFIELD,
+        then: Joi.when('isPrice', { is: true, then: Joi.any().strip(), otherwise: Joi.boolean().default(false).label('This is a quantity field') }),
         otherwise: Joi.any().strip()
     }),
     defaultChecked: Joi.when('type', {

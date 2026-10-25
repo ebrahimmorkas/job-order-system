@@ -234,6 +234,7 @@ const ControlsListPage = ({ onCreate, onView, onEdit, onClone }) => {
         <span className="inline-flex flex-wrap items-center gap-1.5">
           <Badge variant="blue" size="sm">{CONTROL_TYPES[control.type].label}</Badge>
           {control.isPrice && (isTaxed(control) ? <Badge variant="green" size="sm">Price + tax</Badge> : <Badge variant="gray" size="sm">Price</Badge>)}
+          {control.isQuantity && <Badge variant="purple" size="sm">Quantity</Badge>}
         </span>
       ),
     },

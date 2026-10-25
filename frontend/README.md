@@ -122,6 +122,8 @@ Each section's code is downloaded the first time it is opened
   create (pick the type), copy and edit with a live preview; radio choices
   with a default. "Include this price in tax" shows only while tax is
   available (the tax feature on and one country's tax details filled in).
+  A text field that isn't a price can be ticked "This is a quantity field"
+  (whole numbers only; one per vendor; a "Quantity" badge in the list).
 - **Job Orders** - the list (newest first, search by number, job name,
   customer or place; the Job name column shows each item's job name on its
   own line; the Customer column shows name, phone and place; view / print /
@@ -140,7 +142,12 @@ Each section's code is downloaded the first time it is opened
   <value>?" for each picked value lists only the people who have that value
   (several can be picked, optional) and, once someone is picked, "Complete
   in" (a number and Seconds / Minutes / Hours / Days / Months / Years;
-  empty = no deadline) - every control and its images; then the tax rate,
+  empty = no deadline) - every control and its images. When Company Settings
+  says "Software calculates the price", each price shows a Rate and a Total
+  (rate x the item's quantity, still editable; emptying it goes back to rate
+  x quantity); changing the quantity or a rate while a total was typed by
+  hand asks "Keep my totals" or "Recalculate" (a job order keeps the way it
+  was made). Then the tax rate,
   and a summary beside it that updates as you type - every answer (item
   after item under its heading when there are several), the prices of all items,
   subtotal, tax split (CGST + SGST, or IGST for another Indian state) and
@@ -182,7 +189,9 @@ Each section's code is downloaded the first time it is opened
   PNG or JPEG. Leaving with unsaved changes asks first.
 - **Company Settings** - tabs: General (company name, login tagline, logo -
   the menu and browser tab update at once), Job Orders (automatic numbers,
-  ask the customer address, where to use master short names, when the work
+  ask the customer address, where to use master short names, price on a job
+  order - "I enter the price" or "Software calculates the price" (rate x
+  quantity) - when the work
   time starts with steps on, and - with Layout Master and RBAC on - what the
   printed "Work given" field shows: who does it, start date, due time, step
   and %, hold reason), Shop (the owner only: close and open the shop) and
@@ -238,7 +247,7 @@ To try a second vendor on the same computer:
 
 - `src/components/common/` - the reusable building blocks every module uses:
   Accordion, Alert, Autocomplete, Avatar, Badge, Breadcrumbs, BulkActionBar,
-  ActionIcons, Button, Card, Checkbox, ColorField (colour picker with its code), ConfirmDialog, DatePicker, DefaultChoice,
+  ActionIcons, Button, Card, Checkbox, ColorField (colour picker with its code), ConfirmDialog (optional cancelLabel), DatePicker, DefaultChoice,
   Divider, Dropdown, EmptyState, FileUpload, Form, HtmlEditor, IconButton,
   ImageUploader (a grid of images with add / remove, checking type, size and count; a usage pill when the count is limited),
   InputField, ListItemsEditor (an ordered, editable list of named items with a

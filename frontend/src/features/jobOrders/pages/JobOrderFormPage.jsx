@@ -5,13 +5,15 @@ import Button from '../../../components/common/Buttons';
 import Card from '../../../components/common/Card';
 import Alert from '../../../components/common/Alert';
 import Spinner from '../../../components/common/Spinner';
+import ConfirmDialog from '../../../components/common/ConfirmDialog';
 import { BackIcon } from '../../../components/common/ActionIcons';
 import { useUnsavedChanges } from '../../../components/common/UnsavedChanges';
 import JobOrderSummary from '../components/JobOrderSummary';
 import JobOrderItemFields from '../components/JobOrderItemFields';
 import { computeTotals } from '../jobOrderTotals';
 import { summaryRowsOf } from '../summaryRows';
-import { PRICE_PATTERN } from '../../controls/controlTypes';
+import { PRICE_PATTERN, QUANTITY_PATTERN } from '../../controls/controlTypes';
+import { RATE_TIMES_QUANTITY, quantityOf, priceAmountOf, workedTotalOf } from '../jobOrderItems';
 import { taxLabel } from '../../companySettings/taxRules';
 import * as jobOrdersApi from '../api/jobOrdersApi';
 import CustomerSearch from '../components/CustomerSearch';
@@ -45,6 +47,9 @@ const freshItem = ({ masters, controls }, key) => ({
     text: control.defaultText || '',
     checked: !!control.defaultChecked,
     optionId: control.options?.some((option) => option._id === control.defaultOptionId) ? control.defaultOptionId : '',
+    // Rate x quantity prices: the total typed by hand (isTotalEdited), else rate x quantity.
+    total: '',
+    isTotalEdited: false,
   }])),
   // { key, imageId, url } saved / { key, file, src, name } picked now
   images: [],
@@ -76,6 +81,8 @@ const savedItem = ({ masters, controls }, item, key) => {
         text: saved.text || '',
         checked: saved.checked === true,
         optionId: control.options?.some((option) => option._id === optionId) ? optionId : '',
+        total: saved.isAmountEdited ? String(saved.amount) : '',
+        isTotalEdited: saved.isAmountEdited === true,
       }];
     })),
     images: item.images.map((image) => ({ key: idOf(image.imageId), imageId: idOf(image.imageId), url: image.url })),
@@ -129,6 +136,10 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  // On edit: how the job order's prices are worked out (it keeps its own way).
+  const [savedPriceCalculation, setSavedPriceCalculation] = useState('');
+  // The quantity or a rate changed while totals were typed by hand: { index, controlIds }.
+  const [outdatedTotals, setOutdatedTotals] = useState(null);
   // Previews of picked images (object URLs), freed when removed or on leaving.
   const previewUrls = useRef(new Set());
   const nextImageKey = useRef(0);
@@ -149,6 +160,8 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
         setParts(data);
         setEarlierPeople(earlierPeopleOf(saved?.jobOrder));
         setSavedItemCount(saved?.jobOrder.items.length || 0);
+        // Older job orders have none: the price was typed.
+        setSavedPriceCalculation(saved ? saved.jobOrder.priceCalculation || 'manual' : '');
         setForm(initial);
         setSavedSnapshot(JSON.stringify(initial));
       })
@@ -166,6 +179,8 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
   const askContact = settings?.askCustomerContact === true;
   const countries = useMemo(() => parts?.countries || [], [parts]);
   const maxItems = Math.max(settings?.maxItems ?? 1, savedItemCount);
+  // A price is its rate x the item's quantity (still editable by hand).
+  const isRateTimesQuantity = (isEdit ? savedPriceCalculation : settings?.priceCalculation) === RATE_TIMES_QUANTITY;
 
   // userId -> name, of everyone who can be (or was) given work.
   const personNames = useMemo(() => {
@@ -185,6 +200,7 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
     // Tax country: the customer's country, or the vendor's only country.
     const taxCountry = (askAddress && country) || (countries.length === 1 ? countries[0] : null);
     const items = form.items.map((item) => {
+      const quantity = isRateTimesQuantity ? quantityOf(parts.controls, item.answers) : 1;
       const controls = [];
       for (const control of parts.controls) {
         const answer = item.answers[control._id];
@@ -192,8 +208,11 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
         if (control.type === 'checkbox') controls.push({ ...base, checked: answer.checked });
         else if (control.type === 'radio') controls.push({ ...base, optionName: control.options.find((o) => o._id === answer.optionId)?.name || null });
         else if (control.isPrice) {
-          const text = answer.text.trim();
-          if (PRICE_PATTERN.test(text)) controls.push({ ...base, isPrice: true, isPriceIncludedInTax: control.isPriceIncludedInTax, amount: Number(text) });
+          const amount = priceAmountOf(answer, quantity, isRateTimesQuantity);
+          if (amount === null) continue;
+          const rate = isRateTimesQuantity ? Number(answer.text.trim()) : null;
+          const isAmountEdited = isRateTimesQuantity && amount !== workedTotalOf(answer.text, quantity);
+          controls.push({ ...base, isPrice: true, isPriceIncludedInTax: control.isPriceIncludedInTax, amount, rate, isAmountEdited });
         } else controls.push({ ...base, text: answer.text });
       }
       const masters = parts.masters.map((master) => ({
@@ -204,7 +223,7 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
           .filter((value) => item.picks[master._id].includes(value._id))
           .map((value) => ({ ...value, assignedTo: (item.assign[value._id] || []).map((userId) => ({ userId, name: personNames.get(userId) })) })),
       }));
-      return { name: item.name.trim(), masters, controls };
+      return { name: item.name.trim(), quantity, masters, controls };
     });
     // Every price of every item.
     const prices = items.flatMap((item) => item.controls).filter((c) => c.isPrice).map((c) => ({ amount: c.amount, isTaxed: c.isPriceIncludedInTax }));
@@ -249,7 +268,7 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
       tax: { isApplied: !!rate, reason, name: rate?.name, components: totals.components, taxableAmount: totals.taxableAmount, amount: totals.taxAmount },
       total: totals.total,
     };
-  }, [parts, form, countries, askAddress, askContact, settings, personNames]);
+  }, [parts, form, countries, askAddress, askContact, settings, personNames, isRateTimesQuantity]);
 
   const clearError = (...fields) => {
     if (fields.some((field) => fieldErrors[field])) {
@@ -319,6 +338,15 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
     return options;
   };
 
+  // "Recalculate": the totals typed by hand go back to rate x quantity.
+  const recalculateTotals = () => {
+    const { index, controlIds } = outdatedTotals;
+    updateItem(index, (item) => ({
+      answers: { ...item.answers, ...Object.fromEntries(controlIds.map((id) => [id, { ...item.answers[id], total: '', isTotalEdited: false }])) },
+    }), ...controlIds.map((id) => `items.${index}.controls.${id}`));
+    setOutdatedTotals(null);
+  };
+
   const addImages = (index, files) => {
     const added = files.map((file) => {
       const src = URL.createObjectURL(file);
@@ -359,12 +387,16 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
         } else if (control.type === 'radio') {
           if (control.isRequired && !answer.optionId) errors[field] = 'Pick one';
         } else {
-          const text = control.isPrice ? answer.text.trim() : answer.text;
+          const isNumber = control.isPrice || control.isQuantity;
+          const text = isNumber ? answer.text.trim() : answer.text;
           const max = control.maxLength ?? ANSWER_MAX_LENGTH;
           if (!text) {
-            if (control.isRequired) errors[field] = control.isPrice ? 'Enter the amount' : 'This is required';
+            if (control.isRequired) errors[field] = control.isPrice ? 'Enter the amount' : control.isQuantity ? 'Enter the quantity' : 'This is required';
           } else if (text.length > max) errors[field] = `At most ${max} characters`;
           else if (control.isPrice && !PRICE_PATTERN.test(text)) errors[field] = 'Enter an amount with at most 2 decimals, e.g. 150 or 150.50';
+          else if (control.isPrice && isRateTimesQuantity && answer.isTotalEdited && !PRICE_PATTERN.test(answer.total.trim())) {
+            errors[field] = 'Total: Enter an amount with at most 2 decimals, e.g. 150 or 150.50';
+          } else if (control.isQuantity && !QUANTITY_PATTERN.test(text)) errors[field] = 'Enter a whole number from 1 to 999999';
         }
       }
     });
@@ -399,6 +431,8 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
           const answer = item.answers[control._id];
           if (control.type === 'checkbox') return { controlId: control._id, checked: answer.checked };
           if (control.type === 'radio') return { controlId: control._id, optionId: answer.optionId || null };
+          // Rate x quantity: text is the rate; total only when typed by hand.
+          if (control.isPrice && isRateTimesQuantity) return { controlId: control._id, text: answer.text, total: answer.isTotalEdited ? answer.total.trim() : null };
           return { controlId: control._id, text: answer.text };
         }),
         keepImageIds: item.images.filter((image) => image.imageId).map((image) => image.imageId),
@@ -527,6 +561,8 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
               onRemoveImage={(key) => removeImage(index, key)}
               currency={preview.currency}
               isTaxApplied={preview.tax.isApplied}
+              isRateTimesQuantity={isRateTimesQuantity}
+              onTotalsOutdated={(controlIds) => setOutdatedTotals({ index, controlIds })}
               disabled={isSaving}
             />
           ))}
@@ -572,6 +608,17 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
           </div>
         </div>
       </form>
+
+      <ConfirmDialog
+        isOpen={!!outdatedTotals}
+        title="Work out the totals again?"
+        message={`You typed ${outdatedTotals?.controlIds.length === 1 ? 'a total' : 'some totals'} by hand. The quantity or rate changed - work ${outdatedTotals?.controlIds.length === 1 ? 'it' : 'them'} out again as rate × quantity, or keep what you typed?`}
+        confirmLabel="Recalculate"
+        cancelLabel="Keep my totals"
+        variant="primary"
+        onConfirm={recalculateTotals}
+        onCancel={() => setOutdatedTotals(null)}
+      />
     </div>
   );
 };

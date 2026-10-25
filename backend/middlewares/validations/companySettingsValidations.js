@@ -1,6 +1,6 @@
 const Joi = require('joi');
 const { TAX_FIELD_KEY_PATTERN, TAX_FIELD_VALUE_MAX_LENGTH, ADDRESS_LINE_MAX_LENGTH, POSTAL_CODE_MAX_LENGTH } = require('../../constants/taxConstants');
-const { SHORT_NAME_PLACE_VALUES, PRINT_WORK_OPTIONS } = require('../../constants/jobOrderConstants');
+const { SHORT_NAME_PLACE_VALUES, PRINT_WORK_OPTIONS, PRICE_CALCULATIONS, PRICE_CALCULATION_VALUES } = require('../../constants/jobOrderConstants');
 const { WORK_TIME_STARTS, WORK_TIME_START_VALUES, WORK_TIME_CHANGE_FROM, WORK_TIME_CHANGE_FROM_VALUES } = require('../../constants/stepConstants');
 
 // The rules of each country (its tax fields, postal code, states, cities,
@@ -32,6 +32,7 @@ const jobOrderSettingsSchema = Joi.object({
     useShortNamesOn: Joi.string().valid(...SHORT_NAME_PLACE_VALUES).required().label('Use short names on'),
     workTimeStartsOn: Joi.string().valid(...WORK_TIME_START_VALUES).default(WORK_TIME_STARTS.ON_ASSIGN).label('Work time starts'),
     workTimeChangeCountsFrom: Joi.string().valid(...WORK_TIME_CHANGE_FROM_VALUES).default(WORK_TIME_CHANGE_FROM.PERSON_START).label('Changed time counts from'),
+    priceCalculation: Joi.string().valid(...PRICE_CALCULATION_VALUES).default(PRICE_CALCULATIONS.MANUAL).label('Price calculation'),
     // Left out: unchanged.
     printWork: Joi.object(Object.fromEntries(PRINT_WORK_OPTIONS.map((option) => [option, Joi.boolean().required()]))).label('Printed work')
 });

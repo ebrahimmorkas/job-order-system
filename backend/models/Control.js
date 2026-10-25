@@ -58,6 +58,14 @@ const controlSchema = new mongoose.Schema({
         type: Boolean,
         default: undefined
     },
+    // Textfield only (never a price): the answer is the item's quantity, a
+    // whole number (QUANTITY_PATTERN). At most one per vendor among controls
+    // not deleted. With CompanySettings.priceCalculation rateTimesQuantity
+    // every price of the item is its rate x this quantity.
+    isQuantity: {
+        type: Boolean,
+        default: undefined
+    },
     // Checkbox only: ticked on a new job order.
     defaultChecked: {
         type: Boolean,

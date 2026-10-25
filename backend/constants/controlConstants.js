@@ -21,6 +21,8 @@ const CONTROL_SEARCH_MAX_LENGTH = 200;
 // A text field that is a price takes an amount: no minus, at most 2 decimals
 // (150, 150.5, 150.50).
 const PRICE_PATTERN = /^\d+(\.\d{1,2})?$/;
+// A quantity text field takes a whole number from 1 to 999999.
+const QUANTITY_PATTERN = /^[1-9]\d{0,5}$/;
 
 // A radio group needs at least two choices.
 const MIN_RADIO_OPTIONS = 2;
@@ -34,6 +36,7 @@ module.exports = {
     TEXT_CONTROL_TYPES,
     CONTROL_SEARCH_MAX_LENGTH,
     PRICE_PATTERN,
+    QUANTITY_PATTERN,
     MIN_RADIO_OPTIONS,
     CONTROL_LIST_MAX_PAGE_SIZE
 };

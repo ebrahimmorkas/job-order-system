@@ -11,6 +11,16 @@ const SHORT_NAME_PLACES = {
 };
 const SHORT_NAME_PLACE_VALUES = Object.values(SHORT_NAME_PLACES);
 
+// How a price on a job order is worked out (CompanySettings.priceCalculation):
+// manual - the owner types the price for all pieces; rateTimesQuantity -
+// the owner types the rate of one piece and the price is rate x the item's
+// quantity (the quantity control's answer), still editable by hand.
+const PRICE_CALCULATIONS = {
+    MANUAL: 'manual',
+    RATE_TIMES_QUANTITY: 'rateTimesQuantity'
+};
+const PRICE_CALCULATION_VALUES = Object.values(PRICE_CALCULATIONS);
+
 // A number made by the app: JO-0001, JO-0002... per vendor.
 const AUTO_NUMBER_PREFIX = 'JO-';
 const AUTO_NUMBER_DIGITS = 4;
@@ -47,6 +57,8 @@ const JOB_ORDER_LIST_MAX_PAGE_SIZE = 100;
 module.exports = {
     SHORT_NAME_PLACES,
     SHORT_NAME_PLACE_VALUES,
+    PRICE_CALCULATIONS,
+    PRICE_CALCULATION_VALUES,
     AUTO_NUMBER_PREFIX,
     AUTO_NUMBER_DIGITS,
     JOB_ORDER_NUMBER_MAX_LENGTH,

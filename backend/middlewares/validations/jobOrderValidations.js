@@ -51,7 +51,10 @@ const itemSchema = Joi.object({
         controlId: objectId('Control').required(),
         text: Joi.string().max(ANSWER_MAX_LENGTH).allow('', null).default(null).label('Answer'),
         checked: Joi.boolean().default(false).label('Ticked'),
-        optionId: objectId('Choice').allow(null).default(null)
+        optionId: objectId('Choice').allow(null).default(null),
+        // A price worked out as rate x quantity: the amount typed over it by
+        // hand (null = rate x quantity). text is then the rate of one piece.
+        total: Joi.string().trim().max(30).allow('', null).empty(['', null]).default(null).label('Total')
     })).unique('controlId').default([]).label('Controls'),
     // Editing: the job order's images this item keeps (the rest are removed).
     keepImageIds: Joi.array().items(objectId('Image')).unique().default([]).label('Images'),

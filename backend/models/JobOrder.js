@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const auditPlugin = require('./plugins/auditPlugin');
 const { CASE_INSENSITIVE_COLLATION, LIVE_STATUSES } = require('../constants/masterConstants');
-const { JOB_ORDER_NUMBER_MAX_LENGTH, JOB_NAME_MAX_LENGTH, DURATION_UNITS } = require('../constants/jobOrderConstants');
+const { JOB_ORDER_NUMBER_MAX_LENGTH, JOB_NAME_MAX_LENGTH, DURATION_UNITS, PRICE_CALCULATION_VALUES, PRICE_CALCULATIONS } = require('../constants/jobOrderConstants');
 const { FIXED_STEP_VALUES, WORK_TIME_START_VALUES, WORK_TIME_STARTS } = require('../constants/stepConstants');
 const { CONTROL_TYPE_VALUES } = require('../constants/controlConstants');
 
@@ -82,7 +82,14 @@ const answeredControlSchema = new mongoose.Schema({
     // A price text field: its amount (added to the total) and whether tax is charged on it.
     isPrice: { type: Boolean, default: false },
     isPriceIncludedInTax: { type: Boolean, default: false },
-    amount: { type: Number, default: null }
+    amount: { type: Number, default: null },
+    // A price worked out as rate x quantity (priceCalculation rateTimesQuantity):
+    // text / rate is the rate of one piece; isAmountEdited - the amount was
+    // typed by hand instead of rate x quantity.
+    rate: { type: Number, default: null },
+    isAmountEdited: { type: Boolean, default: false },
+    // The quantity text field (text is the number).
+    isQuantity: { type: Boolean, default: false }
 }, { _id: false });
 
 // One thing the customer wants done, e.g. a glass cut round: its job name,
@@ -90,6 +97,8 @@ const answeredControlSchema = new mongoose.Schema({
 // on it. Its _id stays the same on edit, so the work keeps its progress.
 const itemSchema = new mongoose.Schema({
     name: { type: String, trim: true, maxlength: JOB_NAME_MAX_LENGTH, default: null },
+    // The answer of the quantity control (1 when there is none or it is empty).
+    quantity: { type: Number, default: 1 },
     masters: { type: [pickedMasterSchema], default: [] },
     controls: { type: [answeredControlSchema], default: [] },
     // Photos added to the item (ImageAsset ids, with their address).
@@ -130,6 +139,9 @@ const jobOrderSchema = new mongoose.Schema({
     customerId: { type: mongoose.Types.ObjectId, default: null },
     // At least one; at most CompanyMaster.numberOfItemsAllowedToAddInJobOrder.
     items: { type: [itemSchema], default: [] },
+    // How its prices are worked out (CompanySettings.priceCalculation when it
+    // was created; kept on edit). Missing on older job orders = manual.
+    priceCalculation: { type: String, enum: PRICE_CALCULATION_VALUES, default: PRICE_CALCULATIONS.MANUAL },
     // The currency of the tax country (null when there is none).
     currency: {
         code: { type: String, default: null },

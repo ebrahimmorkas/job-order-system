@@ -1,5 +1,5 @@
 // How the control will look on the job order form (not interactive).
-const ControlPreview = ({ type, label, isRequired, placeholder, defaultText, isPrice, isPriceIncludedInTax, defaultChecked, options }) => {
+const ControlPreview = ({ type, label, isRequired, placeholder, defaultText, isPrice, isPriceIncludedInTax, isQuantity, defaultChecked, options }) => {
   const title = label.trim() || (type === 'checkbox' ? 'Checkbox text' : 'Label');
   const required = isRequired && <span className="text-red-500"> *</span>;
   const box = 'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400';
@@ -17,6 +17,7 @@ const ControlPreview = ({ type, label, isRequired, placeholder, defaultText, isP
     <fieldset className="min-w-0">
       <legend className="mb-1.5 text-sm font-medium text-gray-700 break-words">{title}{required}</legend>
       {type === 'textfield' && <input className={box} value={defaultText} placeholder={placeholder} inputMode={isPrice ? 'decimal' : undefined} readOnly tabIndex={-1} />}
+      {type === 'textfield' && !isPrice && isQuantity && <p className="mt-1 text-xs text-gray-500">Quantity - a whole number</p>}
       {type === 'textfield' && isPrice && (
         <p className="mt-1 text-xs text-gray-500">{isPriceIncludedInTax ? 'Price - tax is charged on it' : 'Price - no tax on it'}</p>
       )}

@@ -3,7 +3,7 @@ const JobOrder = require('../models/JobOrder');
 const Counter = require('../models/Counter');
 const common = require('../utils/common');
 const logger = require('../utils/logger');
-const { computeTotals } = require('../utils/jobOrderTotals');
+const { computeTotals, roundTo } = require('../utils/jobOrderTotals');
 const masterService = require('./masterService');
 const controlService = require('./controlService');
 const featureAccessService = require('./featureAccessService');
@@ -15,8 +15,8 @@ const customerService = require('./customerService');
 const { jobOrderSettingsOf } = require('./companySettingsService');
 const { assignedCountryIdsOf, isTaxOn, taxReadyCountryIds, loadCountries, detailsByCountry } = require('./taxSettingsService');
 const { LIVE_STATUSES, CASE_INSENSITIVE_COLLATION } = require('../constants/masterConstants');
-const { CONTROL_TYPES, PRICE_PATTERN } = require('../constants/controlConstants');
-const { SHORT_NAME_PLACES, AUTO_NUMBER_PREFIX, AUTO_NUMBER_DIGITS, ANSWER_MAX_LENGTH, DEFAULT_ITEMS_ALLOWED } = require('../constants/jobOrderConstants');
+const { CONTROL_TYPES, PRICE_PATTERN, QUANTITY_PATTERN } = require('../constants/controlConstants');
+const { SHORT_NAME_PLACES, AUTO_NUMBER_PREFIX, AUTO_NUMBER_DIGITS, ANSWER_MAX_LENGTH, DEFAULT_ITEMS_ALLOWED, PRICE_CALCULATIONS } = require('../constants/jobOrderConstants');
 const { addDuration } = require('../utils/days');
 const { WORK_TIME_STARTS, WORK_TIME_CHANGE_FROM, FIXED_STEPS } = require('../constants/stepConstants');
 const { FEATURE_FLAGS } = require('../constants/featureConstants');
@@ -368,9 +368,39 @@ const pickMasters = (masters, input, workers, previous, { workTimeStartsOn: time
     }
 };
 
+const AMOUNT_MESSAGE = 'Enter an amount with at most 2 decimals, e.g. 150 or 150.50';
+
+// The item's quantity: the quantity control's answer (1 when there is none,
+// it is empty or not a whole number - that error is given by answerControls).
+const quantityOf = (controls, answers) => {
+    try {
+        const control = controls.find((entry) => entry.type === CONTROL_TYPES.TEXTFIELD && entry.isQuantity);
+        const text = control ? (answers.get(String(control._id))?.text || '').trim() : '';
+        return QUANTITY_PATTERN.test(text) ? Number(text) : 1;
+    } catch (err) {
+        throw err;
+    }
+};
+
+// A price: { error } or what to store. isRateTimesQuantity: text is the rate
+// of one piece and the amount is rate x quantity, unless a total was typed.
+const priceOf = ({ control, text, total, quantity, isRateTimesQuantity }) => {
+    try {
+        if (!PRICE_PATTERN.test(text)) return { error: AMOUNT_MESSAGE };
+        const stored = { text, isPrice: true, isPriceIncludedInTax: control.isPriceIncludedInTax === true };
+        if (!isRateTimesQuantity) return { stored: { ...stored, amount: Number(text) } };
+        if (total !== null && !PRICE_PATTERN.test(total)) return { error: `Total: ${AMOUNT_MESSAGE}` };
+        const worked = roundTo(Number(text) * quantity, 2);
+        const amount = total === null ? worked : Number(total);
+        return { stored: { ...stored, rate: Number(text), amount, isAmountEdited: amount !== worked } };
+    } catch (err) {
+        throw err;
+    }
+};
+
 // The controls answered on one item: field errors by control ("<prefix>controls.<id>"),
-// and what to store.
-const answerControls = (controls, input, prefix) => {
+// what to store and the item's quantity. isRateTimesQuantity: prices are rate x quantity.
+const answerControls = (controls, input, prefix, { isRateTimesQuantity = false } = {}) => {
     try {
         const errors = [];
         const answers = new Map(input.map((entry) => [entry.controlId, entry]));
@@ -378,6 +408,7 @@ const answerControls = (controls, input, prefix) => {
         for (const controlId of answers.keys()) {
             if (!known.has(controlId)) errors.push({ field: `${prefix}controls.${controlId}`, message: 'This field is no longer available. Please reload the page.' });
         }
+        const quantity = quantityOf(controls, answers);
 
         const stored = [];
         for (const control of controls) {
@@ -401,10 +432,11 @@ const answerControls = (controls, input, prefix) => {
             }
 
             // Text field / text area.
-            const text = (control.isPrice ? (answer.text || '').trim() : answer.text || '') || null;
+            const isNumber = control.isPrice || control.isQuantity;
+            const text = (isNumber ? (answer.text || '').trim() : answer.text || '') || null;
             const max = control.maxLength ?? ANSWER_MAX_LENGTH;
             if (!text) {
-                if (control.isRequired) errors.push({ field, message: control.isPrice ? 'Enter the amount' : 'This is required' });
+                if (control.isRequired) errors.push({ field, message: control.isPrice ? 'Enter the amount' : control.isQuantity ? 'Enter the quantity' : 'This is required' });
                 continue;
             }
             if (text.length > max) {
@@ -412,16 +444,19 @@ const answerControls = (controls, input, prefix) => {
                 continue;
             }
             if (control.isPrice) {
-                if (!PRICE_PATTERN.test(text)) {
-                    errors.push({ field, message: 'Enter an amount with at most 2 decimals, e.g. 150 or 150.50' });
-                    continue;
-                }
-                stored.push({ ...base, text, isPrice: true, isPriceIncludedInTax: control.isPriceIncludedInTax === true, amount: Number(text) });
+                const price = priceOf({ control, text, total: answer.total ?? null, quantity, isRateTimesQuantity });
+                if (price.error) errors.push({ field, message: price.error });
+                else stored.push({ ...base, ...price.stored });
+                continue;
+            }
+            if (control.isQuantity) {
+                if (QUANTITY_PATTERN.test(text)) stored.push({ ...base, text, isQuantity: true });
+                else errors.push({ field, message: 'Enter a whole number from 1 to 999999' });
                 continue;
             }
             stored.push({ ...base, text });
         }
-        return { errors, stored };
+        return { errors, stored, quantity };
     } catch (err) {
         throw err;
     }
@@ -507,7 +542,7 @@ const workOutMoney = ({ parts, prices, taxCountry, customerStateId, taxId }) => 
 // Each item checked: field errors ("items.<index>.…") and what to store (images
 // added later). A saved item keeps its _id; a new one gets one now, so the
 // work on it can be told apart before it is saved.
-const buildItems = (parts, inputs, current) => {
+const buildItems = (parts, inputs, current, { isRateTimesQuantity }) => {
     try {
         const errors = [];
         const limit = Math.max(parts.settings.maxItems, current?.items.length || 0);
@@ -524,9 +559,9 @@ const buildItems = (parts, inputs, current) => {
                 for (const value of master.values) previous.set(String(value.valueId), value);
             }
             const masters = pickMasters(parts.masters, input.masters, parts.workers, previous, parts.settings, prefix);
-            const controls = answerControls(parts.controls, input.controls, prefix);
+            const controls = answerControls(parts.controls, input.controls, prefix, { isRateTimesQuantity });
             errors.push(...masters.errors, ...controls.errors);
-            return { _id: saved?._id ?? new mongoose.Types.ObjectId(), name: input.name, masters: masters.stored, controls: controls.stored };
+            return { _id: saved?._id ?? new mongoose.Types.ObjectId(), name: input.name, quantity: controls.quantity, masters: masters.stored, controls: controls.stored };
         });
         return { errors, items };
     } catch (err) {
@@ -539,7 +574,10 @@ const buildItems = (parts, inputs, current) => {
 // edited (its items), or null.
 const buildJobOrder = (parts, data, current = null) => {
     try {
-        const items = buildItems(parts, data.items, current);
+        // A new job order takes the vendor's way of working out prices; an
+        // edited one keeps its own (older ones: manual).
+        const priceCalculation = current ? (current.priceCalculation || PRICE_CALCULATIONS.MANUAL) : parts.settings.priceCalculation;
+        const items = buildItems(parts, data.items, current, { isRateTimesQuantity: priceCalculation === PRICE_CALCULATIONS.RATE_TIMES_QUANTITY });
         const customer = customerOf(parts, data.customer);
 
         const countryId = customer.stored.countryId ? String(customer.stored.countryId) : (parts.countries.length === 1 ? String(parts.countries[0]._id) : null);
@@ -550,7 +588,7 @@ const buildJobOrder = (parts, data, current = null) => {
 
         const errors = [...items.errors, ...customer.errors, ...money.errors];
         if (errors.length > 0) return { errors };
-        return { doc: { customer: customer.stored, items: items.items, ...money.stored } };
+        return { doc: { customer: customer.stored, items: items.items, priceCalculation, ...money.stored } };
     } catch (err) {
         throw err;
     }
@@ -635,7 +673,7 @@ const updateJobOrder = async ({ userId, id, data, files = [], ...vendorData }) =
     try {
         const { vendorId, websiteMasterData, companyMasterData } = vendorData;
         const [current, parts] = await Promise.all([
-            JobOrder.findOne({ _id: id, vendorId, status: LIVE }).select('jobOrderNumber items').lean(),
+            JobOrder.findOne({ _id: id, vendorId, status: LIVE }).select('jobOrderNumber items priceCalculation').lean(),
             loadFormParts(vendorData)
         ]);
         if (!current) return common.returnResult(false, 404, 'Job order not found.');

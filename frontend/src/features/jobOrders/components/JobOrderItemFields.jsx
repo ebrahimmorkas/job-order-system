@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import InputField from '../../../components/common/InputField';
 import TextArea from '../../../components/common/TextArea';
 import Dropdown from '../../../components/common/DropDown';
@@ -10,7 +11,7 @@ import NumberField from '../../../components/common/NumberField';
 import { TrashIcon } from '../../../components/common/ActionIcons';
 import { masterLabelOf } from '../summaryRows';
 import { DURATION_UNITS, DURATION_AMOUNT_MAX } from '../workTime';
-import { JOB_NAME_MAX_LENGTH } from '../jobOrderItems';
+import { JOB_NAME_MAX_LENGTH, quantityOf, workedTotalOf } from '../jobOrderItems';
 
 // Same as the backend (constants/jobOrderConstants.js).
 const ANSWER_MAX_LENGTH = 5000;
@@ -23,7 +24,9 @@ const IMAGE_MIME_TYPES = { jpeg: 'image/jpeg', png: 'image/png', webp: 'image/we
  * One item of the job order form: its job name ("Same as above" from the
  * second item copies the name of the item above, still editable), every
  * master (with who does each picked value of a role master, and by when),
- * every control and its images.
+ * every control and its images. With prices worked out as rate x quantity,
+ * a price shows its rate and its total (rate x the item's quantity, still
+ * editable by hand).
  *
  * @param {Object} props
  * @param {Object} props.item - { key, itemId, name, sameAsAbove, picks, answers, images, assign, completeIn }
@@ -41,14 +44,27 @@ const IMAGE_MIME_TYPES = { jpeg: 'image/jpeg', png: 'image/png', webp: 'image/we
  * @param {(key: string) => void} props.onRemoveImage
  * @param {Object|null} props.currency - The tax country's
  * @param {boolean} props.isTaxApplied - Tax is charged on this job order
+ * @param {boolean} props.isRateTimesQuantity - Prices are rate x quantity
+ * @param {(controlIds: string[]) => void} props.onTotalsOutdated - The quantity or a rate changed while these prices have totals typed by hand
  * @param {boolean} props.disabled
  */
 const JobOrderItemFields = ({
   item, title, prefix, parts, errors, onChange, onSameAsAbove, onRemove, peopleOptionsOf,
-  imageRules, maxImages, onAddImages, onRemoveImage, currency, isTaxApplied, disabled,
+  imageRules, maxImages, onAddImages, onRemoveImage, currency, isTaxApplied, isRateTimesQuantity, onTotalsOutdated, disabled,
 }) => {
   const { settings } = parts;
   const showImages = imageRules?.isOn || item.images.length > 0;
+  const quantity = isRateTimesQuantity ? quantityOf(parts.controls, item.answers) : 1;
+  // The quantity or rate when its field got the focus: changed on leaving it,
+  // totals typed by hand may need working out again.
+  const focusedText = useRef('');
+
+  const checkTotals = (control, text) => {
+    if (!isRateTimesQuantity || text.trim() === focusedText.current.trim()) return;
+    const affected = control.isQuantity ? parts.controls.filter((entry) => entry.isPrice) : [control];
+    const edited = affected.filter((entry) => item.answers[entry._id].isTotalEdited).map((entry) => entry._id);
+    if (edited.length > 0) onTotalsOutdated(edited);
+  };
 
   const setPick = (masterId, valueIds) => onChange((prev) => ({ picks: { ...prev.picks, [masterId]: valueIds } }), `${prefix}masters.${masterId}`);
 
@@ -260,22 +276,61 @@ const JobOrderItemFields = ({
               }
 
               const isTaxed = control.isPrice && control.isPriceIncludedInTax && isTaxApplied;
+              const symbol = currency?.symbol ? ` (${currency.symbol})` : '';
+              const isRate = control.isPrice && isRateTimesQuantity;
+              const watchChange = isRate || (isRateTimesQuantity && control.isQuantity)
+                ? { onFocus: () => { focusedText.current = answer.text; }, onBlur: (e) => checkTotals(control, e.target.value) }
+                : {};
+              const field = (
+                <InputField
+                  label={isRate ? `Rate${symbol}` : control.isPrice ? `${control.label}${symbol}` : control.label}
+                  name={name}
+                  placeholder={control.placeholder || (control.isPrice ? 'e.g. 150.50' : control.isQuantity ? 'e.g. 5' : '')}
+                  inputMode={control.isPrice ? 'decimal' : control.isQuantity ? 'numeric' : undefined}
+                  value={answer.text}
+                  onChange={(e) => setAnswer(control._id, { text: e.target.value })}
+                  error={error}
+                  maxLength={max}
+                  required={control.isRequired}
+                  disabled={disabled}
+                  {...watchChange}
+                />
+              );
+              if (!isRate) {
+                return (
+                  <div key={control._id}>
+                    {field}
+                    {control.isPrice && <p className="mt-1 text-xs text-gray-500">{isTaxed ? 'Price - tax is added on it' : 'Price'}</p>}
+                  </div>
+                );
+              }
+
+              // Rate x quantity: the total shows rate x quantity until typed over;
+              // emptying it goes back to rate x quantity.
+              const worked = workedTotalOf(answer.text, quantity);
               return (
-                <div key={control._id}>
-                  <InputField
-                    label={control.isPrice && currency?.symbol ? `${control.label} (${currency.symbol})` : control.label}
-                    name={name}
-                    placeholder={control.placeholder || (control.isPrice ? 'e.g. 150.50' : '')}
-                    inputMode={control.isPrice ? 'decimal' : undefined}
-                    value={answer.text}
-                    onChange={(e) => setAnswer(control._id, { text: e.target.value })}
-                    error={error}
-                    maxLength={max}
-                    required={control.isRequired}
-                    disabled={disabled}
-                  />
-                  {control.isPrice && <p className="mt-1 text-xs text-gray-500">{isTaxed ? 'Price - tax is added on it' : 'Price'}</p>}
-                </div>
+                <fieldset key={control._id} className="min-w-0">
+                  <legend className="mb-2 text-sm font-medium text-gray-700 break-words">
+                    {control.label}{control.isRequired && <span className="text-red-500 ml-1">*</span>}
+                  </legend>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {field}
+                    <InputField
+                      label={`Total${symbol}`}
+                      name={`total-${item.key}-${control._id}`}
+                      placeholder="Rate × quantity"
+                      inputMode="decimal"
+                      value={answer.isTotalEdited ? answer.total : (worked === null ? '' : String(worked))}
+                      onChange={(e) => setAnswer(control._id, e.target.value.trim() ? { total: e.target.value, isTotalEdited: true } : { total: '', isTotalEdited: false })}
+                      maxLength={30}
+                      disabled={disabled}
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500">
+                    {answer.isTotalEdited ? 'Total typed by hand - empty it to go back to rate × quantity.' : `Rate × quantity (${quantity}).`}
+                    {isTaxed ? ' Tax is added on it.' : ''}
+                  </p>
+                </fieldset>
               );
             })}
           </div>

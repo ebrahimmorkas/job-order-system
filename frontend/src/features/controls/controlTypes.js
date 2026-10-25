@@ -13,6 +13,8 @@ export const TEXT_TYPES = ['textfield', 'textarea'];
 export const MIN_RADIO_OPTIONS = 2;
 // A price text field takes an amount: no minus, at most 2 decimals.
 export const PRICE_PATTERN = /^\d+(\.\d{1,2})?$/;
+// A quantity text field takes a whole number from 1 to 999999.
+export const QUANTITY_PATTERN = /^[1-9]\d{0,5}$/;
 
 // The vendor's limit for this type is reached (null = no limit).
 export const isTypeFull = (limits, type) => {

@@ -28,7 +28,8 @@ const valueTextOf = (value) => {
 /**
  * Several items: each starts with a heading row ("Item 2 · Square glass") and
  * its prices say which item they are of. One item: its job name is a row.
- * @param {{ customer, items: Array<{ name, masters, controls }> }} jobOrder
+ * A price worked out as rate x quantity says so: "Cutting (5 × 200)".
+ * @param {{ customer, items: Array<{ name, quantity?, masters, controls }> }} jobOrder
  * @param {{ useShortNames?: boolean, showCustomer?: boolean }} options
  * @returns {Array<{ key, label?, heading?, value?, isPrice?, amount?, isTaxed? }>}
  */
@@ -51,7 +52,9 @@ export const summaryRowsOf = ({ customer, items }, { useShortNames = false, show
     for (const control of item.controls) {
       const key = `${at}c-${control.controlId}`;
       if (control.isPrice) {
-        const label = isSeveral ? `${control.label} (Item ${index + 1})` : control.label;
+        const quantity = item.quantity ?? 1;
+        const worked = control.rate !== null && control.rate !== undefined && quantity > 1 && !control.isAmountEdited ? ` (${quantity} × ${control.rate})` : '';
+        const label = `${control.label}${worked}${isSeveral ? ` (Item ${index + 1})` : ''}`;
         rows.push({ key, label, isPrice: true, amount: control.amount, isTaxed: control.isPriceIncludedInTax });
       } else if (control.type === 'checkbox') {
         if (control.checked) rows.push({ key, label: control.label, value: 'Yes' });

@@ -13,7 +13,7 @@ const { CONTROL_TYPES, CONTROL_TYPE_VALUES, TEXT_CONTROL_TYPES } = require('../c
 // Every limit comes from CompanyMaster, and null there means no limit.
 
 const LIVE = { $in: LIVE_STATUSES };
-const CONTROL_FIELDS = '_id type label isRequired placeholder defaultText isPrice isPriceIncludedInTax defaultChecked options defaultOptionId precedence status updatedAt';
+const CONTROL_FIELDS = '_id type label isRequired placeholder defaultText isPrice isPriceIncludedInTax isQuantity defaultChecked options defaultOptionId precedence status updatedAt';
 
 const TYPE_NAMES = {
     [CONTROL_TYPES.TEXTFIELD]: 'text field',
@@ -97,6 +97,20 @@ const invalid = (errors) => common.returnResult(false, 400, errors[0].message, {
 
 const notAvailable = () => common.returnResult(false, 403, 'This type of control is not available for your account.');
 
+// Only one quantity field per vendor (among controls not deleted): a field
+// error when another one already is, else null. exceptId: the control being edited.
+const quantityTakenResult = async ({ vendorId, data, exceptId = null }) => {
+    try {
+        if (data.type !== CONTROL_TYPES.TEXTFIELD || !data.isQuantity) return null;
+        const other = await Control.findOne({ vendorId, isQuantity: true, status: LIVE, ...(exceptId && { _id: { $ne: exceptId } }) }).select('label').lean();
+        if (!other) return null;
+        const message = `"${other.label}" is already the quantity field. Only one control can be the quantity.`;
+        return common.returnResult(false, 409, message, { errors: [{ field: 'isQuantity', message }] });
+    } catch (err) {
+        throw err;
+    }
+};
+
 // A unique index refused the write (the label) -> 409 for the label field.
 const duplicateResult = (err, data) => {
     try {
@@ -123,6 +137,7 @@ const toStored = (data, { isTaxAvailable, keepTaxOf = null }) => {
             stored.isPrice = data.isPrice;
             const includedInTax = isTaxAvailable ? data.isPriceIncludedInTax : keepTaxOf?.isPriceIncludedInTax === true;
             stored.isPriceIncludedInTax = data.isPrice && includedInTax;
+            stored.isQuantity = !data.isPrice && data.isQuantity === true;
         }
         if (data.type === CONTROL_TYPES.CHECKBOX) stored.defaultChecked = data.defaultChecked;
         if (data.type === CONTROL_TYPES.RADIO) {
@@ -194,6 +209,8 @@ const createControl = async ({ vendorId, userId, data, companyMasterData, websit
         if (allowed !== null && used >= allowed) {
             return common.returnResult(false, 403, `You can have at most ${allowed} ${TYPE_NAMES[data.type]}${allowed === 1 ? '' : 's'}. Delete one you no longer need to add another.`);
         }
+        const quantityTaken = await quantityTakenResult({ vendorId, data });
+        if (quantityTaken) return quantityTaken;
 
         let control;
         try {
@@ -225,6 +242,8 @@ const updateControl = async ({ vendorId, userId, id, data, companyMasterData, we
                 return common.returnResult(false, 409, 'This control was changed meanwhile. Please reload it and make your changes again.');
             }
         }
+        const quantityTaken = await quantityTakenResult({ vendorId, data, exceptId: id });
+        if (quantityTaken) return quantityTaken;
 
         let control;
         try {
@@ -303,28 +322,29 @@ const moveControl = async ({ vendorId, userId, id, direction, companyMasterData 
 // GET /api/controls/for-job-order - the active controls of the assigned
 // types, in order, with what the form needs: the longest text allowed
 // (null = no limit) and the defaults. A text field also says whether it is a
-// price (an amount added to the total) and whether tax is charged on it.
+// price (an amount added to the total), whether tax is charged on it and
+// whether it is the quantity.
 const getControlsForJobOrder = async ({ vendorId, companyMasterData }) => {
     try {
         const limits = limitsOf({ companyMasterData });
         const controls = limits.assignedTypes.length === 0 ? [] : await Control.find({ vendorId, type: { $in: limits.assignedTypes }, status: 'A' })
-            .select('_id type label isRequired placeholder defaultText isPrice isPriceIncludedInTax defaultChecked options defaultOptionId').sort({ precedence: 1 }).lean();
+            .select('_id type label isRequired placeholder defaultText isPrice isPriceIncludedInTax isQuantity defaultChecked options defaultOptionId').sort({ precedence: 1 }).lean();
 
         return common.returnResult(true, 200, 'Controls fetched successfully.', {
             controls: controls.map((control) => {
                 if (control.type === CONTROL_TYPES.TEXTFIELD) {
                     const { defaultChecked, options, defaultOptionId, ...text } = control;
-                    return { ...text, isPrice: !!text.isPrice, isPriceIncludedInTax: !!text.isPriceIncludedInTax, maxLength: limits.maxLength[control.type] };
+                    return { ...text, isPrice: !!text.isPrice, isPriceIncludedInTax: !!text.isPriceIncludedInTax, isQuantity: !!text.isQuantity, maxLength: limits.maxLength[control.type] };
                 }
                 if (control.type === CONTROL_TYPES.TEXTAREA) {
-                    const { isPrice, isPriceIncludedInTax, defaultChecked, options, defaultOptionId, ...text } = control;
+                    const { isPrice, isPriceIncludedInTax, isQuantity, defaultChecked, options, defaultOptionId, ...text } = control;
                     return { ...text, maxLength: limits.maxLength[control.type] };
                 }
                 if (control.type === CONTROL_TYPES.CHECKBOX) {
-                    const { placeholder, defaultText, isPrice, isPriceIncludedInTax, options, defaultOptionId, ...checkbox } = control;
+                    const { placeholder, defaultText, isPrice, isPriceIncludedInTax, isQuantity, options, defaultOptionId, ...checkbox } = control;
                     return checkbox;
                 }
-                const { placeholder, defaultText, isPrice, isPriceIncludedInTax, defaultChecked, ...radio } = control;
+                const { placeholder, defaultText, isPrice, isPriceIncludedInTax, isQuantity, defaultChecked, ...radio } = control;
                 return radio;
             })
         });

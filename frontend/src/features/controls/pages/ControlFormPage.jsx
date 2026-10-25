@@ -11,12 +11,12 @@ import ListItemsEditor, { checkItemName } from '../../../components/common/ListI
 import { BackIcon } from '../../../components/common/ActionIcons';
 import { useUnsavedChanges } from '../../../components/common/UnsavedChanges';
 import ControlPreview from '../components/ControlPreview';
-import { CONTROL_TYPES, TEXT_TYPES, MIN_RADIO_OPTIONS, PRICE_PATTERN, isTypeFull } from '../controlTypes';
+import { CONTROL_TYPES, TEXT_TYPES, MIN_RADIO_OPTIONS, PRICE_PATTERN, QUANTITY_PATTERN, isTypeFull } from '../controlTypes';
 import * as controlsApi from '../api/controlsApi';
 
 const COPY_SUFFIX = ' (Copy)';
 const OPTION_NOUN = { singular: 'choice', plural: 'choices', owner: 'radio group' };
-const EMPTY_FIELDS = { label: '', isRequired: false, placeholder: '', defaultText: '', isPrice: false, isPriceIncludedInTax: false, defaultChecked: false };
+const EMPTY_FIELDS = { label: '', isRequired: false, placeholder: '', defaultText: '', isPrice: false, isPriceIncludedInTax: false, isQuantity: false, defaultChecked: false };
 
 const toFields = (control) => ({
   label: control.label,
@@ -25,6 +25,7 @@ const toFields = (control) => ({
   defaultText: control.defaultText || '',
   isPrice: !!control.isPrice,
   isPriceIncludedInTax: !!control.isPriceIncludedInTax,
+  isQuantity: !!control.isQuantity,
   defaultChecked: !!control.defaultChecked,
 });
 
@@ -142,6 +143,7 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
   const isCheckbox = type === 'checkbox';
   const isRadio = type === 'radio';
   const isPrice = type === 'textfield' && fields.isPrice;
+  const isQuantity = type === 'textfield' && !fields.isPrice && fields.isQuantity;
   // Only with the tax feature on and the tax details of a country filled in.
   const isTaxAvailable = limits?.isTaxAvailable === true;
   // null = no limit
@@ -190,6 +192,7 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
     if (isText && placeholderMax !== null && fields.placeholder.trim().length > placeholderMax) errors.placeholder = `At most ${placeholderMax} characters`;
     if (isText && textMax !== null && fields.defaultText.length > textMax) errors.defaultText = `At most ${textMax} characters`;
     else if (isPrice && fields.defaultText.trim() && !PRICE_PATTERN.test(fields.defaultText.trim())) errors.defaultText = 'Enter an amount with at most 2 decimals, e.g. 150 or 150.50';
+    else if (isQuantity && fields.defaultText.trim() && !QUANTITY_PATTERN.test(fields.defaultText.trim())) errors.defaultText = 'Enter a whole number from 1 to 999999';
     if (isRadio && optionsToSave.length < MIN_RADIO_OPTIONS) errors.options = `Add at least ${MIN_RADIO_OPTIONS} choices`;
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
@@ -202,8 +205,8 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
     if (!optionsToSave || !validate(optionsToSave)) return;
 
     const payload = { type, label: fields.label.trim(), isRequired: fields.isRequired };
-    if (isText) Object.assign(payload, { placeholder: fields.placeholder.trim() || null, defaultText: (isPrice ? fields.defaultText.trim() : fields.defaultText) || null });
-    if (type === 'textfield') Object.assign(payload, { isPrice: fields.isPrice, isPriceIncludedInTax: isPrice && isTaxAvailable && fields.isPriceIncludedInTax });
+    if (isText) Object.assign(payload, { placeholder: fields.placeholder.trim() || null, defaultText: (isPrice || isQuantity ? fields.defaultText.trim() : fields.defaultText) || null });
+    if (type === 'textfield') Object.assign(payload, { isPrice: fields.isPrice, isPriceIncludedInTax: isPrice && isTaxAvailable && fields.isPriceIncludedInTax, isQuantity });
     if (isCheckbox) payload.defaultChecked = fields.defaultChecked;
     if (isRadio) {
       payload.options = optionsToSave.map(({ _id, name, isDefault }) => (_id ? { _id, name, isDefault } : { name, isDefault }));
@@ -316,10 +319,10 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
 
                   {type === 'textfield' && (
                     <InputField
-                      label={isPrice ? 'Default amount' : 'Default text'}
+                      label={isPrice ? 'Default amount' : isQuantity ? 'Default quantity' : 'Default text'}
                       name="defaultText"
-                      placeholder={isPrice ? 'e.g. 150.50 (optional)' : 'Filled in on a new job order (optional)'}
-                      inputMode={isPrice ? 'decimal' : undefined}
+                      placeholder={isPrice ? 'e.g. 150.50 (optional)' : isQuantity ? 'e.g. 1 (optional)' : 'Filled in on a new job order (optional)'}
+                      inputMode={isPrice ? 'decimal' : isQuantity ? 'numeric' : undefined}
                       value={fields.defaultText}
                       onChange={(e) => setField('defaultText', e.target.value)}
                       error={fieldErrors.defaultText}
@@ -355,11 +358,24 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
                         description="Only an amount can be typed here (e.g. 150.50), and it is added to the job order total."
                         checked={fields.isPrice}
                         onChange={(e) => {
-                          setFields((prev) => ({ ...prev, isPrice: e.target.checked, isPriceIncludedInTax: e.target.checked && prev.isPriceIncludedInTax }));
+                          // A price is never the quantity.
+                          setFields((prev) => ({ ...prev, isPrice: e.target.checked, isPriceIncludedInTax: e.target.checked && prev.isPriceIncludedInTax, isQuantity: !e.target.checked && prev.isQuantity }));
                           clearError('defaultText');
+                          clearError('isQuantity');
                         }}
                         disabled={isLocked}
                       />
+                      {!isPrice && (
+                        <Checkbox
+                          name="isQuantity"
+                          label="This is a quantity field"
+                          description="Only a whole number can be typed here (e.g. 5). With Company Settings > Job orders set to 'Software calculates the price', every price of the item is rate × this quantity. Only one control can be the quantity."
+                          checked={fields.isQuantity}
+                          onChange={(e) => { setField('isQuantity', e.target.checked); clearError('defaultText'); }}
+                          error={fieldErrors.isQuantity}
+                          disabled={isLocked}
+                        />
+                      )}
                       {isPrice && isTaxAvailable && (
                         <div className="pl-7">
                           <Checkbox
