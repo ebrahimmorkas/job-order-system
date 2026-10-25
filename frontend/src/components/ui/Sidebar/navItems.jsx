@@ -1,4 +1,4 @@
-import { DashboardIcon, MyWorkIcon, JobOrdersIcon, MastersIcon, ControlsIcon, UsersIcon, RolesIcon, LayoutsIcon, CompanySettingsIcon } from './icons';
+import { DashboardIcon, MyWorkIcon, JobOrdersIcon, CustomersIcon, MastersIcon, ControlsIcon, UsersIcon, RolesIcon, LayoutsIcon, CompanySettingsIcon } from './icons';
 
 // The sidebar's default menu. Add each new module here as it is built.
 // path is the section's address; its screens add to it (e.g. /users/new).
@@ -12,6 +12,7 @@ export const DEFAULT_NAV_ITEMS = [
   { key: 'dashboard', path: '/', label: 'Dashboard', icon: DashboardIcon },
   { key: 'myWork', path: '/my-work', label: 'My work', icon: MyWorkIcon, workOnly: true },
   { key: 'jobOrders', path: '/job-orders', label: 'Job Orders', icon: JobOrdersIcon, module: 'jobOrders' },
+  { key: 'customers', path: '/customers', label: 'Customers', icon: CustomersIcon, featureFlag: 'isCustomersFeatureOn', module: 'customers' },
   { key: 'masters', path: '/masters', label: 'Masters', icon: MastersIcon, featureFlag: 'isMasterModuleFeatureOn', module: 'masters' },
   { key: 'controls', path: '/controls', label: 'Controls', icon: ControlsIcon, featureFlag: 'isControlsFeatureOn', module: 'controls' },
   { key: 'users', path: '/users', label: 'Users', icon: UsersIcon, featureFlag: 'isRBACFeatureOn', module: 'users' },

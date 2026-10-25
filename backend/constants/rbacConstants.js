@@ -56,6 +56,8 @@ const MODULES = {
     // work sees their own.
     dashboard: { label: 'Dashboard', permissions: [PERMISSIONS.VIEW] },
     jobOrders: { label: 'Job Orders', permissions: CRUD },
+    // Saved from job orders only: never created here.
+    customers: { label: 'Customers', permissions: [PERMISSIONS.VIEW, PERMISSIONS.DETAILS, PERMISSIONS.EDIT, PERMISSIONS.DELETE], featureFlag: FEATURE_FLAGS.CUSTOMERS },
     masters: { label: 'Masters', permissions: CRUD, featureFlag: FEATURE_FLAGS.MASTER_MODULE },
     controls: { label: 'Controls', permissions: CRUD, featureFlag: FEATURE_FLAGS.CONTROLS },
     users: { label: 'Users', permissions: [...CRUD, PERMISSIONS.ASSIGN_ROLE], featureFlag: FEATURE_FLAGS.RBAC },

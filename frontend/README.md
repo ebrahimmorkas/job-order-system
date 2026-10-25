@@ -32,6 +32,7 @@ tab, stays on it:
 | `/job-orders`, `/job-orders/new`, `/job-orders/:id`, `/job-orders/:id/edit`, `/job-orders/:id/print` | Job Orders |
 | `/masters`, `/controls`, `/roles`, `/layouts` (+ `/new`, `/:id/edit`, `/:id/copy`) | list, create, edit, copy |
 | `/users`, `/users/new`, `/users/:id/edit` | Users |
+| `/customers`, `/customers/:id`, `/customers/:id/edit` | Customers (list, details, edit - no create) |
 | `/company-settings`, `/company-settings/job-orders`, `/company-settings/shop`, `/company-settings/tax` | Company Settings tabs |
 
 Logged out, any address shows the login page and logging in opens it.
@@ -120,11 +121,14 @@ Each section's code is downloaded the first time it is opened
   create (pick the type), copy and edit with a live preview; radio choices
   with a default. "Include this price in tax" shows only while tax is
   available (the tax feature on and one country's tax details filled in).
-- **Job Orders** - the list (newest first, search by number or customer
-  place, view / print / edit / cancel; Back on a print opened from the list
-  returns to the list) and the job order form: the number (only when
-  typed by hand), the customer address (only when asked; the country is
-  locked when the vendor has one), every master as a searchable dropdown
+- **Job Orders** - the list (newest first, search by number, customer or
+  place; the Customer column shows name, phone and place; view / print /
+  edit / cancel; Back on a print opened from the list returns to the list)
+  and the job order form: the number (only when typed by hand), the
+  customer - with Customers on, "Find a saved customer" (type any part of
+  the name, phone, email or address; picking one fills the form) and name,
+  phone, email - and the address (only when asked; the country is locked
+  when the vendor has one), every master as a searchable dropdown
   (multi-select where allowed, default picked, short name when chosen in
   Company Settings, required ones starred) - under a role master, "Who does
   <value>?" for each picked value lists only the people who have that value
@@ -140,6 +144,14 @@ Each section's code is downloaded the first time it is opened
   Master on, the view has Print: pick a layout (the default first), see the
   job order in it, then Print (the page at the layout's paper size) or
   Download PDF / PNG / JPEG.
+- **Customers** (`features/customers`, only while the feature is on) -
+  saved from job orders with a phone or an email (one per phone / email).
+  The list (latest job order first, search by name, phone, email or address,
+  job order count, last job order, bulk delete; no create) and the edit /
+  details screen: name, phone, email (one of the two needed) and the address
+  dropdowns. Job orders keep the details they were saved with.
+  `components/CustomerFields.jsx` (the inputs) and `customerFields.js` (the
+  checks) are shared with the job order form.
 - **Layout Master** (only while the feature is on) - the list (search, status
   filter, Default badge and star to make one the default, paper, items count,
   status switch, copy / edit / delete, bulk actions, layouts usage pill). New
@@ -236,7 +248,7 @@ To try a second vendor on the same computer:
   `hooks/`, `pages/` and `components/`. `auth` (session, login page),
   `branding` (company name / tagline / logo, loaded once per page load),
   `featureAccess` (which features are on), `access` (what the logged-in
-  person may do), `myWork`, `dashboard`, `masters`, `controls`,
+  person may do), `myWork`, `dashboard`, `masters`, `controls`, `customers`,
   `companySettings`, `jobOrders` and `layouts` (the designer, the drawing
   shared by the designer, printing and exports, and the PDF / image export).
 - `src/layouts/AppShell.jsx` - the logged-in layout: sidebar + the page of

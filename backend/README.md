@@ -68,6 +68,7 @@ it (`GET /api/feature-access`). The flags are listed in
 | Users and Role Master (RBAC) | `isRBACFeatureOn` | optional limits `numberOfRoleCreationAllowed`, `numberOfUsersAllowed`; `isAssigningSeveralRolesAllowed`, `isRoleAssignmentOnUserModuleAllowed` (see Users) |
 | Layout Master (print layouts) | `isLayoutMasterFeatureOn` | optional limit `numberOfLayoutsAllowed`; `isControlFeatureInLayoutOn` for text formatting (see Layout Master) |
 | Steps of assigned work | `isStepFeatureOn` | `steps` and optional limit `numberOfStepsAllowed` (see Steps of assigned work) |
+| Customers | `isCustomersFeatureOn` (WebsiteMaster default on, CompanyMaster default off) | nothing (see Customers) |
 
 `CompanyMaster.fetchMastersEvenWhenBitIsOff` (default false) only matters while
 the vendor's `isMasterModuleFeatureOn` is off: the Masters page stays hidden and
@@ -348,7 +349,9 @@ whose roles give Job Orders permissions, creates, edits and cancels them.
   "fetch even when off" switch - allows), the vendor's assigned countries with
   their states, cities, current rates, currency, `isTaxReady`, the vendor's
   default rate and business state, and the job order settings.
-- Saved: `jobOrderNumber`, the customer address, every master picked and
+- Saved: `jobOrderNumber`, the customer (name, phone and email while
+  Customers is on; the address while it is asked) and `customerId` (the saved
+  customer, see Customers), every master picked and
   control answered, `currency`, `subtotal`, `tax` (`isApplied`, `reason` when
   not, rate, `components`, `taxableAmount`, `amount`) and `total`. Names are
   copied in, so an old job order still shows what was picked that day.
@@ -406,6 +409,38 @@ whose roles give Job Orders permissions, creates, edits and cancels them.
     what was stored is removed again. Images taken off are deleted from the
     storage after the save. With the feature off, saved images can still be
     removed but none added.
+
+## Customers
+
+The vendor's customers (`models/Customer.js`), saved from job orders - there
+is no create. Only while `isCustomersFeatureOn` is on (WebsiteMaster and
+CompanyMaster); otherwise `/api/customers` is refused and job orders keep no
+name, phone or email.
+
+- The job order form asks the customer's name, phone and email (all
+  optional; form data `settings.askCustomerContact`). The address still
+  follows `askCustomerAddress`.
+- Saving a job order with a phone or an email saves the customer
+  (`customerService.saveFromJobOrder`): the customer with the same phone, or
+  else the same email, gets the newest details (a name, phone or email left
+  empty keeps the saved one; any address part given replaces the whole
+  address). A phone or email that belongs to another customer stays with
+  them. Otherwise a new customer is added. Without a phone or email nothing
+  is saved and `customerId` stays null.
+- One customer per phone and per email (unique indexes among live
+  customers). Phone: 10 to 13 digits, optionally starting with +; the email
+  is kept in small letters.
+- Job orders keep a copy of the details: editing or deleting a customer
+  never changes them. A deleted customer's phone or email saves a new
+  customer next time.
+- The job order form's search (`GET /api/customers/for-job-order`) needs Job
+  Orders Create or Edit; the Customers module needs its own permissions (Role
+  Master: View, Details, Edit, Delete).
+- The list: latest job order first, searched by any part of the name, phone,
+  email or address, each with `jobOrderCount`.
+- Editing: a phone or an email stays required (errors on both); the address
+  is checked like a job order's (field errors `address.<field>`); a phone or
+  email of another customer -> 409.
 
 ## Layout Master
 
@@ -576,12 +611,17 @@ too (see Users logging in) - except Layout Master, which stays owner only.
 | POST | `/api/layouts/bulk` | owner, Layout Master on - `{ action: activate|deactivate|delete, ids }` |
 | GET | `/api/layouts/for-print` | Job Orders View, Layout Master on - the active layouts, default first |
 | GET | `/api/layouts/for-print/:id` | Job Orders View, Layout Master on - one active layout and what fills it besides the job order |
+| GET | `/api/customers/for-job-order` | Job Orders Create or Edit, Customers on - `search`: at most 8 matching customers, latest job order first |
+| GET | `/api/customers/form-data` | owner (users: Customers Details), Customers on - the countries for the address |
+| GET | `/api/customers` | owner (users: Customers View), Customers on - list (search, page, limit), each with `jobOrderCount` |
+| GET / PUT / DELETE | `/api/customers/:id` | owner (users: Details / Edit / Delete), Customers on - one customer / save `{ name, phone, email, address: { countryId, stateId, cityId, postalCode, address } }` / delete |
+| POST | `/api/customers/bulk` | owner (users: Customers Delete), Customers on - `{ action: delete, ids }` |
 | GET | `/api/job-orders/form-data` | owner (users: Create or Edit) - everything the job order form needs (see Job orders) |
-| GET / POST | `/api/job-orders` | owner - list, newest first (search number or customer place, page, limit) / create |
+| GET / POST | `/api/job-orders` | owner - list, newest first (search number, customer name / phone / email or place, page, limit) / create |
 | GET / PUT / DELETE | `/api/job-orders/:id` | owner - one job order / save it (worked out again) / cancel it |
 
-`POST` / `PUT /api/job-orders` take `{ jobOrderNumber, customer: { countryId,
-stateId, cityId, postalCode, address }, masters: [{ masterId, valueIds,
+`POST` / `PUT /api/job-orders` take `{ jobOrderNumber, customer: { name, phone,
+email, countryId, stateId, cityId, postalCode, address }, masters: [{ masterId, valueIds,
 assignments: [{ valueId, userIds, completeIn: { amount, unit } | null }] }],
 controls: [{ controlId, text | checked | optionId }], taxId, keepImageIds }`
 (`taxId` null = the vendor's default rate) as JSON, or as multipart with that

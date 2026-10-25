@@ -46,6 +46,9 @@ const FIELD_SOURCE_VALUES = Object.values(FIELD_SOURCES);
 const SYSTEM_FIELDS = {
     jobOrderNumber: 'Job order number',
     jobOrderDate: 'Date',
+    customerName: 'Customer name',
+    customerPhone: 'Customer phone',
+    customerEmail: 'Customer email',
     customerAddress: 'Customer address',
     subtotal: 'Subtotal',
     taxSummary: 'Tax',

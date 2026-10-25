@@ -25,6 +25,7 @@ export const PERMISSIONS = [
 export const MODULE_LABELS = {
   dashboard: 'Dashboard',
   jobOrders: 'Job Orders',
+  customers: 'Customers',
   masters: 'Masters',
   controls: 'Controls',
   users: 'Users',

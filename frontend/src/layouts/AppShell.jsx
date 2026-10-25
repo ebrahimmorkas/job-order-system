@@ -22,6 +22,7 @@ const PAGES = {
   masters: lazyPage(() => import('../features/masters/pages/MastersPage')),
   controls: lazyPage(() => import('../features/controls/pages/ControlsPage')),
   users: lazyPage(() => import('../features/users/pages/UsersPage')),
+  customers: lazyPage(() => import('../features/customers/pages/CustomersPage')),
   roles: lazyPage(() => import('../features/roles/pages/RolesPage')),
   layouts: lazyPage(() => import('../features/layouts/pages/LayoutsPage')),
   companySettings: lazyPage(() => import('../features/companySettings/pages/CompanySettingsPage')),

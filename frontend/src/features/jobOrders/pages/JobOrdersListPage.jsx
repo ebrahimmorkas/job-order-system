@@ -22,8 +22,8 @@ const PAGE_SIZE = 25;
 const formatDate = (value) => new Date(value).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 
 /**
- * The vendor's job orders, newest first: search by number or customer
- * place, page through, view, print, edit and cancel (each only with its
+ * The vendor's job orders, newest first: search by number, customer
+ * (name, phone, email) or place, page through, view, print, edit and cancel (each only with its
  * permission; print also needs Layout Master).
  *
  * @param {Object} props
@@ -113,10 +113,17 @@ const JobOrdersListPage = ({ onCreate, onView, onEdit, onPrint }) => {
     },
     {
       key: 'customer',
-      label: 'Customer place',
+      label: 'Customer',
       render: ({ customer }) => {
+        const who = [customer?.name, customer?.phone].filter(Boolean).join(' · ');
         const place = [customer?.cityName, customer?.stateName, customer?.countryName].filter(Boolean).join(', ');
-        return place ? <span className="break-words">{place}</span> : <span className="text-gray-400">-</span>;
+        if (!who && !place) return <span className="text-gray-400">-</span>;
+        return (
+          <div className="min-w-0 break-words">
+            {who && <p className="text-gray-900">{who}</p>}
+            {place && <p className={who ? 'text-xs text-gray-500' : undefined}>{place}</p>}
+          </div>
+        );
       },
     },
     {
@@ -186,7 +193,7 @@ const JobOrdersListPage = ({ onCreate, onView, onEdit, onPrint }) => {
       <SearchInput
         value={search}
         onChange={setSearch}
-        placeholder="Search by number or customer place"
+        placeholder="Search by number, customer or place"
         ariaLabel="Search job orders"
         className="!mb-0"
       />

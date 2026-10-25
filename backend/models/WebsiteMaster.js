@@ -60,6 +60,10 @@ const websiteMasterSchema = mongoose.Schema({
         type: Boolean,
         default: true
     },
+    isCustomersFeatureOn: {
+        type: Boolean,
+        default: true
+    },
 
     // ---- Maintenance -------------------------------------------------------
     // On: every vendor's app (owners and users, even the login page) shows

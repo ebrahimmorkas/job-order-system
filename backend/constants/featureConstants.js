@@ -12,7 +12,10 @@ const FEATURE_FLAGS = {
     // Layout Master: print layouts for job orders.
     LAYOUT_MASTER: 'isLayoutMasterFeatureOn',
     // Steps of assigned work (Start, In progress...), see CompanyMaster.steps.
-    STEPS: 'isStepFeatureOn'
+    STEPS: 'isStepFeatureOn',
+    // Customers: saved from job orders (name, phone, email, address), the
+    // Customers module and the customer search on the job order form.
+    CUSTOMERS: 'isCustomersFeatureOn'
 };
 
 // CompanyMaster-only switches that keep ONE read action of a feature

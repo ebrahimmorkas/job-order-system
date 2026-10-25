@@ -8,6 +8,9 @@ import { formatDueAt } from '../jobOrders/workTime';
 const SYSTEM_LABELS = {
   jobOrderNumber: 'Job order number',
   jobOrderDate: 'Date',
+  customerName: 'Customer name',
+  customerPhone: 'Customer phone',
+  customerEmail: 'Customer email',
   customerAddress: 'Customer address',
   subtotal: 'Subtotal',
   taxSummary: 'Tax',
@@ -93,6 +96,9 @@ export const jobOrderResolver = (jobOrder, { masters, controls, company, setting
   const SYSTEM_VALUES = {
     jobOrderNumber: () => jobOrder.jobOrderNumber,
     jobOrderDate: () => formatDate(jobOrder.createdAt),
+    customerName: () => jobOrder.customer?.name || '',
+    customerPhone: () => jobOrder.customer?.phone || '',
+    customerEmail: () => jobOrder.customer?.email || '',
     customerAddress: () => customerLineOf(jobOrder.customer),
     subtotal: () => money(jobOrder.subtotal),
     taxSummary: () => (jobOrder.tax?.isApplied ? jobOrder.tax.components.map((c) => `${c.label} ${c.rate}%: ${money(c.amount)}`).join('\n') : ''),

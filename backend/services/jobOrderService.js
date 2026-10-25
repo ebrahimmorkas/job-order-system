@@ -10,6 +10,7 @@ const imageUploadService = require('./imageUploadService');
 const workAssignmentService = require('./workAssignmentService');
 const stepService = require('./stepService');
 const notificationService = require('./notificationService');
+const customerService = require('./customerService');
 const { jobOrderSettingsOf } = require('./companySettingsService');
 const { assignedCountryIdsOf, isTaxOn, taxReadyCountryIds, loadCountries, detailsByCountry } = require('./taxSettingsService');
 const { LIVE_STATUSES, CASE_INSENSITIVE_COLLATION } = require('../constants/masterConstants');
@@ -39,7 +40,7 @@ const { IMAGE_FORMATS, IMAGE_FORMAT_VALUES, IMAGE_MODULES, MAX_IMAGES_PER_REQUES
 // value may stay even if they no longer have it.
 
 const LIVE = { $in: LIVE_STATUSES };
-const LIST_FIELDS = '_id jobOrderNumber customer.countryName customer.stateName customer.cityName currency subtotal tax.isApplied tax.amount total createdAt updatedAt masters.values.assignedTo.step.fixedStep';
+const LIST_FIELDS = '_id jobOrderNumber customer.name customer.phone customer.countryName customer.stateName customer.cityName currency subtotal tax.isApplied tax.amount total createdAt updatedAt masters.values.assignedTo.step.fixedStep';
 const COUNTER_KEY = 'jobOrder';
 
 const idOf = (value) => (value ? String(value) : null);
@@ -147,6 +148,8 @@ const loadFormParts = async ({ vendorId, websiteMasterData, companyMasterData, c
             settings: {
                 ...settings,
                 useShortNames: [SHORT_NAME_PLACES.JOB_ORDER, SHORT_NAME_PLACES.BOTH].includes(settings.useShortNamesOn),
+                // Name, phone and email asked (and the customer saved): the Customers feature.
+                askCustomerContact: access[FEATURE_FLAGS.CUSTOMERS] === true,
                 // What newly given work's time starts on (steps off = when given).
                 workTimeStartsOn: stepService.workTimeStartsOnOf(websiteMasterData, companyMasterData, companySettingsData)
             },
@@ -379,36 +382,26 @@ const answerControls = (controls, input) => {
     }
 };
 
-// The customer's address (only while it is asked): field errors and what to store.
-const customerAddress = (countries, input) => {
+// The customer: name, phone and email (Customers feature on) and the address
+// (when asked - customerService.checkAddress). Field errors and what to store.
+const customerOf = (parts, input) => {
     try {
-        const errors = [];
-        const add = (field, message) => errors.push({ field: `customer.${field}`, message });
-        const country = input.countryId ? countries.find((c) => String(c._id) === input.countryId) : null;
-        const state = country && input.stateId ? country.states.find((s) => String(s._id) === input.stateId) : null;
-        const city = state && input.cityId ? country.cities.find((c) => String(c._id) === input.cityId && String(c.stateId) === input.stateId) : null;
+        const address = parts.settings.askCustomerAddress
+            ? customerService.checkAddress(parts.countries, input, 'customer')
+            : { errors: [], stored: {} };
+        const contact = parts.settings.askCustomerContact ? { name: input.name, phone: input.phone, email: input.email } : {};
+        return { errors: address.errors, stored: { ...contact, ...address.stored } };
+    } catch (err) {
+        throw err;
+    }
+};
 
-        if (input.countryId && !country) add('countryId', 'Choose one of your countries');
-        if (input.stateId && !state) add('stateId', 'Choose a state of the chosen country');
-        if (input.cityId && !city) add('cityId', 'Choose a city of the chosen state');
-        const postal = country?.postalCode || {};
-        if (input.postalCode && postal.pattern && !new RegExp(postal.pattern).test(input.postalCode)) {
-            add('postalCode', postal.patternMessage || `Enter a valid ${postal.label || 'postal code'}`);
-        }
-
-        return {
-            errors,
-            stored: {
-                countryId: country?._id ?? null,
-                countryName: country?.name ?? null,
-                stateId: state?._id ?? null,
-                stateName: state?.name ?? null,
-                cityId: city?._id ?? null,
-                cityName: city?.name ?? null,
-                postalCode: input.postalCode,
-                address: input.address
-            }
-        };
+// The saved customer of a job order about to be saved (Customers feature on).
+const savedCustomerIdOf = async ({ vendorId, userId, parts, customer }) => {
+    try {
+        if (!parts.settings.askCustomerContact) return null;
+        const { name, phone, email, ...address } = customer;
+        return await customerService.saveFromJobOrder({ vendorId, userId, customer: { name, phone, email, address } });
     } catch (err) {
         throw err;
     }
@@ -476,7 +469,7 @@ const buildJobOrder = (parts, data, current = null) => {
         }
         const masters = pickMasters(parts.masters, data.masters, parts.workers, previous, parts.settings);
         const controls = answerControls(parts.controls, data.controls);
-        const customer = parts.settings.askCustomerAddress ? customerAddress(parts.countries, data.customer) : { errors: [], stored: {} };
+        const customer = customerOf(parts, data.customer);
 
         const countryId = customer.stored.countryId ? String(customer.stored.countryId) : (parts.countries.length === 1 ? String(parts.countries[0]._id) : null);
         const taxCountry = countryId ? parts.countries.find((c) => String(c._id) === countryId) : null;
@@ -539,6 +532,7 @@ const createJobOrder = async ({ userId, data, files = [], ...vendorData }) => {
         const stored = files.length > 0 ? await storeImages({ vendorId, userId, files, rules, companyMasterData, websiteMasterData }) : { images: [] };
         if (stored.failure) return stored.failure;
 
+        doc.customerId = await savedCustomerIdOf({ vendorId, userId, parts, customer: doc.customer });
         let jobOrder;
         let jobOrderNumber = data.jobOrderNumber;
         try {
@@ -585,6 +579,7 @@ const updateJobOrder = async ({ userId, id, data, files = [], ...vendorData }) =
         const stored = files.length > 0 ? await storeImages({ vendorId, userId, files, rules, companyMasterData, websiteMasterData }) : { images: [] };
         if (stored.failure) return stored.failure;
 
+        doc.customerId = await savedCustomerIdOf({ vendorId, userId, parts, customer: doc.customer });
         const jobOrderNumber = isAuto ? current.jobOrderNumber : data.jobOrderNumber;
         let jobOrder;
         try {
@@ -636,14 +631,15 @@ const workSummaryOf = (masters = []) => {
     }
 };
 
-// GET /api/job-orders - newest first; search by number or customer place;
+// GET /api/job-orders - newest first; search by number, customer name /
+// phone / email or place;
 // each with how its work is going (workSummaryOf).
 const listJobOrders = async ({ vendorId, search, page, limit }) => {
     try {
         const filter = { vendorId, status: 'A' };
         if (search) {
             const pattern = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-            filter.$or = [{ jobOrderNumber: pattern }, { 'customer.cityName': pattern }, { 'customer.stateName': pattern }, { 'customer.countryName': pattern }];
+            filter.$or = [{ jobOrderNumber: pattern }, { 'customer.name': pattern }, { 'customer.phone': pattern }, { 'customer.email': pattern }, { 'customer.cityName': pattern }, { 'customer.stateName': pattern }, { 'customer.countryName': pattern }];
         }
         const [total, jobOrders] = await Promise.all([
             JobOrder.countDocuments(filter),

@@ -247,6 +247,16 @@ const companyMasterSchema = new mongoose.Schema({
         default: null
     },
 
+    // ---- Customers ------------------------------------------------------------
+    // Job orders ask the customer's name, phone and email and save the
+    // customer (one per phone / email); the Customers module. Off until the
+    // platform owner switches it on for this vendor (also needs
+    // WebsiteMaster.isCustomersFeatureOn).
+    isCustomersFeatureOn: {
+        type: Boolean,
+        default: false
+    },
+
     // ---- Steps of assigned work ----------------------------------------------
     // A user given work moves it through steps (Start, In progress...). Off
     // until the platform owner switches it on for this vendor (also needs

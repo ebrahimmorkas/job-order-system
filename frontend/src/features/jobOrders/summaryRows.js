@@ -8,6 +8,10 @@ import { formatDueAt } from './workTime';
 export const customerLineOf = (customer) =>
   [customer?.address, customer?.cityName, customer?.stateName, customer?.postalCode, customer?.countryName].filter(Boolean).join(', ');
 
+/** The customer's name, phone and email as one line ("" when none is filled in). */
+export const customerContactOf = (customer) =>
+  [customer?.name, customer?.phone, customer?.email].filter(Boolean).join(' · ');
+
 /** A master's name on screen: its short name when short names are used. */
 export const masterLabelOf = (master, useShortNames) => (useShortNames && master.shortName) || master.name;
 
@@ -26,6 +30,8 @@ const valueTextOf = (value) => {
  */
 export const summaryRowsOf = ({ customer, masters, controls }, { useShortNames = false, showCustomer = true } = {}) => {
   const rows = [];
+  const customerContact = showCustomer ? customerContactOf(customer) : '';
+  if (customerContact) rows.push({ key: 'customerContact', label: 'Customer', value: customerContact });
   const customerLine = showCustomer ? customerLineOf(customer) : '';
   if (customerLine) rows.push({ key: 'customer', label: 'Customer address', value: customerLine });
 

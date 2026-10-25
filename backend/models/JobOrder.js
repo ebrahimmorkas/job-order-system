@@ -96,8 +96,13 @@ const jobOrderSchema = new mongoose.Schema({
         trim: true,
         maxlength: JOB_ORDER_NUMBER_MAX_LENGTH
     },
-    // Asked only while CompanySettings.askCustomerAddress is on; all optional.
+    // All optional. Name, phone and email while the Customers feature is on;
+    // the address while CompanySettings.askCustomerAddress is on. A copy:
+    // editing the saved customer later never changes it.
     customer: {
+        name: { type: String, default: null },
+        phone: { type: String, default: null },
+        email: { type: String, default: null },
         countryId: { type: mongoose.Types.ObjectId, default: null },
         countryName: { type: String, default: null },
         stateId: { type: mongoose.Types.ObjectId, default: null },
@@ -107,6 +112,8 @@ const jobOrderSchema = new mongoose.Schema({
         postalCode: { type: String, default: null },
         address: { type: String, default: null }
     },
+    // The saved customer (models/Customer.js) with this phone / email, or null.
+    customerId: { type: mongoose.Types.ObjectId, default: null },
     masters: { type: [pickedMasterSchema], default: [] },
     controls: { type: [answeredControlSchema], default: [] },
     // The currency of the tax country (null when there is none).
