@@ -12,15 +12,16 @@ const HOLD_REASON_MAX_LENGTH = 500;
 /**
  * Moves the user's work on one value of an item to a step - any step, in the vendor's
  * order. In progress asks how much is done (%, optional); Hold asks why
- * (optional). Saved with "Update step".
+ * (optional). Saved with "Update step". Also moves a whole job order (onSave).
  *
  * @param {Object} props
  * @param {string} props.jobOrderId
  * @param {{ itemId: string, valueId: string, valueName: string, step: Object|null }} props.work
  * @param {Array<{ key: string, fixedStep: string|null, name: string }>} props.steps
  * @param {() => void} props.onChanged - After a step is saved
+ * @param {((data: { stepKey, percent, holdReason }) => Promise<{ step: Object }>)} [props.onSave] - Saves it instead of the user's own work
  */
-const StepChanger = ({ jobOrderId, work, steps, onChanged }) => {
+const StepChanger = ({ jobOrderId, work, steps, onChanged, onSave }) => {
   const toast = useToast();
   const current = work.step;
   const [stepKey, setStepKey] = useState(current?.key && steps.some((step) => step.key === current.key) ? current.key : '');
@@ -36,13 +37,12 @@ const StepChanger = ({ jobOrderId, work, steps, onChanged }) => {
   const save = async () => {
     setIsSaving(true);
     try {
-      const result = await myWorkApi.setMyStep(jobOrderId, {
-        itemId: work.itemId,
-        valueId: work.valueId,
+      const data = {
         stepKey,
         percent: picked.fixedStep === 'inProgress' ? percent : null,
         holdReason: picked.fixedStep === 'hold' ? holdReason.trim() || null : null,
-      });
+      };
+      const result = onSave ? await onSave(data) : await myWorkApi.setMyStep(jobOrderId, { itemId: work.itemId, valueId: work.valueId, ...data });
       toast.success(`${work.valueName}: moved to ${result.step.name}.`);
       onChanged();
     } catch (err) {

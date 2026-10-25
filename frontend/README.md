@@ -154,7 +154,11 @@ Each section's code is downloaded the first time it is opened
   total in the country's currency, or why no tax is charged. Images (only
   with the image feature on, per item): thumbnails with add / remove, checked for
   format, size and count (the limit counts all items together), uploaded
-  with Create / Save; the view shows them by item (click for full size). Leaving with unsaved changes asks first. With Layout
+  with Create / Save; the view shows them by item (click for full size). With
+  steps on, the view has "Job order step" - the step of the whole job order
+  (who moved it, when, the history) with Step / Update step for the owner
+  and users with Edit (the workers' own steps don't change) - and the list
+  a Step column. Leaving with unsaved changes asks first. With Layout
   Master on, the view has Print: pick a layout (the default first), see the
   job order in it (the first item for now), then Print (the page at the layout's paper size) or
   Download PDF / PNG / JPEG.

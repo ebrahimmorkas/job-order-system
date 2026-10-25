@@ -5,7 +5,7 @@ import { formatDueAt } from '../workTime';
  * Every step someone moved their work to, newest first - shown on a click.
  *
  * @param {Object} props
- * @param {Array<{ name, percent, holdReason, at }>} props.history - Oldest first, as saved
+ * @param {Array<{ name, percent, holdReason, at, byName? }>} props.history - Oldest first, as saved (byName: who moved it)
  */
 const StepHistory = ({ history }) => {
   const id = useId();
@@ -29,7 +29,7 @@ const StepHistory = ({ history }) => {
             <li key={index} className="text-xs text-gray-600">
               <span className="font-medium text-gray-800">{entry.name}</span>
               {entry.percent !== null && entry.percent !== undefined && <span> · {entry.percent}%</span>}
-              <span className="text-gray-400"> - {formatDueAt(entry.at)}</span>
+              <span className="text-gray-400"> - {formatDueAt(entry.at)}{entry.byName && ` by ${entry.byName}`}</span>
               {entry.holdReason && <p className="text-gray-500 break-words">{entry.holdReason}</p>}
             </li>
           ))}

@@ -22,7 +22,8 @@ export const listJobOrders = ({ search, page, limit } = {}, { signal } = {}) => 
   return apiRequest(`${BASE}${qs ? `?${qs}` : ''}`, { signal });
 };
 
-/** @returns {Promise<{ jobOrder: Object }>} */
+/** steps: the vendor's steps for the job order's own step (none while steps are off). */
+/** @returns {Promise<{ jobOrder: Object, steps: Array<{ key, fixedStep, name }> }>} */
 export const getJobOrder = (id, { signal } = {}) => apiRequest(`${BASE}/${id}`, { signal });
 
 // With new images: multipart, the job order as JSON in "data" and the files in "images".
@@ -48,6 +49,14 @@ export const updateJobOrder = (id, data, files = []) => apiRequest(`${BASE}/${id
 
 export const cancelJobOrder = (id) => apiRequest(`${BASE}/${id}`, { method: 'DELETE' });
 
+/**
+ * Moves the whole job order to a step (In progress may take a %, Hold a reason);
+ * the workers' own steps don't change.
+ * @param {{ stepKey: string, percent?: number|null, holdReason?: string|null }} data
+ * @returns {Promise<{ step: Object }>}
+ */
+export const setJobOrderStep = (id, data) => apiRequest(`${BASE}/${id}/step`, { method: 'PATCH', body: data });
+
 export default {
   getFormData,
   listJobOrders,
@@ -55,4 +64,5 @@ export default {
   createJobOrder,
   updateJobOrder,
   cancelJobOrder,
+  setJobOrderStep,
 };

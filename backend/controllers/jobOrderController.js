@@ -32,7 +32,7 @@ const getFormData = async (req, res) => {
 // GET /api/job-orders
 const listJobOrders = async (req, res) => {
     try {
-        const result = await jobOrderService.listJobOrders({ vendorId: req.vendorId, ...req.query });
+        const result = await jobOrderService.listJobOrders({ ...vendorData(req), ...req.query });
         return sendResult(res, result);
     } catch (err) {
         logException('Error while fetching job orders', err);
@@ -42,7 +42,7 @@ const listJobOrders = async (req, res) => {
 // GET /api/job-orders/:id
 const getJobOrder = async (req, res) => {
     try {
-        const result = await jobOrderService.getJobOrder({ vendorId: req.vendorId, id: req.params.id });
+        const result = await jobOrderService.getJobOrder({ ...vendorData(req), id: req.params.id });
         return sendResult(res, result);
     } catch (err) {
         logException('Error while fetching the job order', err);
@@ -79,8 +79,19 @@ const cancelJobOrder = async (req, res) => {
     }
 };
 
+// PATCH /api/job-orders/:id/step
+const setJobOrderStep = async (req, res) => {
+    try {
+        const result = await jobOrderService.setJobOrderStep({ ...vendorData(req), userId: req.user._id, id: req.params.id, data: req.body });
+        return respond(res, result, { vendorId: req.vendorId, jobOrderId: req.params.id });
+    } catch (err) {
+        logException('Error while changing the job order step', err);
+    }
+};
+
 module.exports = {
     getFormData,
+    setJobOrderStep,
     listJobOrders,
     getJobOrder,
     createJobOrder,

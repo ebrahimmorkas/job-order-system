@@ -15,6 +15,7 @@ import { useToast } from '../../../components/common/Toast';
 import { useDebouncedValue } from '../../../utils/useDebouncedValue';
 import { useAccess } from '../../access/hooks/useAccess';
 import { formatMoney } from '../jobOrderTotals';
+import StepBadge from '../components/StepBadge';
 import * as jobOrdersApi from '../api/jobOrdersApi';
 
 const PAGE_SIZE = 25;
@@ -148,6 +149,13 @@ const JobOrdersListPage = ({ onCreate, onView, onEdit, onPrint }) => {
         </span>
       ),
     },
+    // The job order's own step (only while steps are on).
+    ...(data?.isStepsOn ? [{
+      key: 'step',
+      label: 'Step',
+      width: '130px',
+      render: ({ step }) => <StepBadge step={step} />,
+    }] : []),
     {
       key: 'work',
       label: 'Work',

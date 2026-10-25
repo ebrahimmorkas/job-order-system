@@ -6,6 +6,8 @@ const v = require('../middlewares/validations/jobOrderValidations');
 const imageUpload = require('../middlewares/imageUpload');
 const parseMultipartData = require('../middlewares/parseMultipartData');
 const requirePermission = require('../middlewares/requirePermission');
+const requireFeature = require('../middlewares/requireFeature');
+const { FEATURE_FLAGS } = require('../constants/featureConstants');
 
 // Logged in already (server.js mounts this below authenticate). The owner,
 // or a user whose roles give the permission.
@@ -24,5 +26,7 @@ router.post('/', can('create'), ...withImages, validate(v.jobOrderSchema), jobOr
 router.get('/:id', can('details'), byId, jobOrderController.getJobOrder);
 router.put('/:id', can('edit'), byId, ...withImages, validate(v.jobOrderSchema), jobOrderController.updateJobOrder);
 router.delete('/:id', can('delete'), byId, jobOrderController.cancelJobOrder);
+// The job order's own step: Edit on job orders, steps on (RBAC not needed).
+router.patch('/:id/step', can('edit'), requireFeature(FEATURE_FLAGS.STEPS), byId, validate(v.jobOrderStepSchema), jobOrderController.setJobOrderStep);
 
 module.exports = router;

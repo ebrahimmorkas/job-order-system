@@ -26,6 +26,20 @@ const stepEntrySchema = new mongoose.Schema({
     at: { type: Date, required: true }
 }, { _id: false });
 
+// A step of the whole job order, moved by the owner or a user with Edit on
+// job orders (from the Job Order module; apart from the workers' own steps):
+// who moved it (name copied in).
+const jobOrderStepSchema = new mongoose.Schema({
+    key: { type: String, required: true },
+    name: { type: String, required: true },
+    fixedStep: { type: String, enum: [...FIXED_STEP_VALUES, null], default: null },
+    percent: { type: Number, default: null },
+    holdReason: { type: String, default: null },
+    at: { type: Date, required: true },
+    byUserId: { type: mongoose.Types.ObjectId, required: true },
+    byName: { type: String, required: true }
+}, { _id: false });
+
 // Someone given a value's work, and how far they are.
 const assigneeSchema = new mongoose.Schema({
     userId: { type: mongoose.Types.ObjectId, required: true },
@@ -139,6 +153,10 @@ const jobOrderSchema = new mongoose.Schema({
     customerId: { type: mongoose.Types.ObjectId, default: null },
     // At least one; at most CompanyMaster.numberOfItemsAllowedToAddInJobOrder.
     items: { type: [itemSchema], default: [] },
+    // The job order's own step (null = not started) and every step so far,
+    // oldest first. Doesn't change the workers' steps, due times or "Overdue".
+    step: { type: jobOrderStepSchema, default: null },
+    stepHistory: { type: [jobOrderStepSchema], default: [] },
     // How its prices are worked out (CompanySettings.priceCalculation when it
     // was created; kept on edit). Missing on older job orders = manual.
     priceCalculation: { type: String, enum: PRICE_CALCULATION_VALUES, default: PRICE_CALCULATIONS.MANUAL },

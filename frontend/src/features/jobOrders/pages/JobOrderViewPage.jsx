@@ -9,9 +9,13 @@ import Spinner from '../../../components/common/Spinner';
 import { BackIcon, EditIcon, PrintIcon } from '../../../components/common/ActionIcons';
 import JobOrderSummary from '../components/JobOrderSummary';
 import WorkProgress from '../components/WorkProgress';
+import StepBadge from '../components/StepBadge';
+import StepHistory from '../components/StepHistory';
+import StepChanger from '../../myWork/components/StepChanger';
 import ImageGrid from '../components/ImageGrid';
 import { summaryRowsOf } from '../summaryRows';
 import { itemLabelOf } from '../jobOrderItems';
+import { formatDueAt } from '../workTime';
 import * as jobOrdersApi from '../api/jobOrdersApi';
 
 const formatDateTime = (value) => new Date(value).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -24,9 +28,12 @@ const formatDateTime = (value) => new Date(value).toLocaleString('en-IN', { day:
  * @param {() => void} props.onBack
  * @param {(() => void)|null} props.onEdit - null without the Edit permission
  * @param {(() => void)|null} props.onPrint - null while Layout Master is off
+ * @param {boolean} props.canChangeStep - May move the job order's own step (Edit on job orders)
  */
-const JobOrderViewPage = ({ jobOrderId, onBack, onEdit, onPrint }) => {
+const JobOrderViewPage = ({ jobOrderId, onBack, onEdit, onPrint, canChangeStep }) => {
   const [jobOrder, setJobOrder] = useState(null);
+  // The vendor's steps (none while steps are off).
+  const [steps, setSteps] = useState([]);
   const [error, setError] = useState('');
   // Bumped when the server says this job order changed.
   const [reloadKey, setReloadKey] = useState(0);
@@ -35,7 +42,10 @@ const JobOrderViewPage = ({ jobOrderId, onBack, onEdit, onPrint }) => {
     const controller = new AbortController();
     jobOrdersApi
       .getJobOrder(jobOrderId, { signal: controller.signal })
-      .then((result) => setJobOrder(result.jobOrder))
+      .then((result) => {
+        setJobOrder(result.jobOrder);
+        setSteps(result.steps || []);
+      })
       .catch((err) => err?.name !== 'AbortError' && setError(err.message));
     return () => controller.abort();
   }, [jobOrderId, reloadKey]);
@@ -85,6 +95,30 @@ const JobOrderViewPage = ({ jobOrderId, onBack, onEdit, onPrint }) => {
                 <ImageGrid images={item.images} altOf={(index) => `Image ${index + 1} of ${itemCount > 1 ? `item ${itemIndex + 1} of ` : ''}job order ${jobOrder.jobOrderNumber}`} />
               </div>
             ))}
+          </div>
+        </Card>
+      )}
+
+      {steps.length > 0 && (
+        <Card variant="outlined" title="Job order step" subtitle="The step of the whole job order. The workers' own steps don't change.">
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <StepBadge step={jobOrder.step} />
+              {jobOrder.step && <span className="text-xs text-gray-500">by {jobOrder.step.byName} - {formatDueAt(jobOrder.step.at)}</span>}
+            </div>
+            {jobOrder.step?.holdReason && <p className="text-sm text-gray-600 break-words">{jobOrder.step.holdReason}</p>}
+            {canChangeStep && (
+              <StepChanger
+                // A fresh form after each change (the saved step is its start).
+                key={jobOrder.step?.at || 'none'}
+                jobOrderId={jobOrder._id}
+                work={{ itemId: 'jobOrder', valueId: jobOrder._id, valueName: `Job order ${jobOrder.jobOrderNumber}`, step: jobOrder.step }}
+                steps={steps}
+                onSave={(data) => jobOrdersApi.setJobOrderStep(jobOrder._id, data)}
+                onChanged={() => setReloadKey((n) => n + 1)}
+              />
+            )}
+            <StepHistory history={jobOrder.stepHistory} />
           </div>
         </Card>
       )}

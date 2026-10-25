@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const JobOrder = require('../models/JobOrder');
+const User = require('../models/User');
 const Counter = require('../models/Counter');
 const common = require('../utils/common');
 const logger = require('../utils/logger');
@@ -11,6 +12,7 @@ const imageUploadService = require('./imageUploadService');
 const workAssignmentService = require('./workAssignmentService');
 const stepService = require('./stepService');
 const notificationService = require('./notificationService');
+const realtimeService = require('./realtimeService');
 const customerService = require('./customerService');
 const { jobOrderSettingsOf } = require('./companySettingsService');
 const { assignedCountryIdsOf, isTaxOn, taxReadyCountryIds, loadCountries, detailsByCountry } = require('./taxSettingsService');
@@ -18,7 +20,8 @@ const { LIVE_STATUSES, CASE_INSENSITIVE_COLLATION } = require('../constants/mast
 const { CONTROL_TYPES, PRICE_PATTERN, QUANTITY_PATTERN } = require('../constants/controlConstants');
 const { SHORT_NAME_PLACES, AUTO_NUMBER_PREFIX, AUTO_NUMBER_DIGITS, ANSWER_MAX_LENGTH, DEFAULT_ITEMS_ALLOWED, PRICE_CALCULATIONS } = require('../constants/jobOrderConstants');
 const { addDuration } = require('../utils/days');
-const { WORK_TIME_STARTS, WORK_TIME_CHANGE_FROM, FIXED_STEPS } = require('../constants/stepConstants');
+const { WORK_TIME_STARTS, WORK_TIME_CHANGE_FROM, FIXED_STEPS, STEP_HISTORY_MAX } = require('../constants/stepConstants');
+const { REALTIME_EVENTS } = require('../constants/notificationConstants');
 const { FEATURE_FLAGS } = require('../constants/featureConstants');
 const { IMAGE_FORMATS, IMAGE_FORMAT_VALUES, IMAGE_MODULES, MAX_IMAGES_PER_REQUEST } = require('../constants/storageConstants');
 
@@ -44,7 +47,7 @@ const { IMAGE_FORMATS, IMAGE_FORMAT_VALUES, IMAGE_MODULES, MAX_IMAGES_PER_REQUES
 // its _id (so its work keeps its progress).
 
 const LIVE = { $in: LIVE_STATUSES };
-const LIST_FIELDS = '_id jobOrderNumber customer.name customer.phone customer.countryName customer.stateName customer.cityName currency subtotal tax.isApplied tax.amount total createdAt updatedAt items.name items.masters.values.assignedTo.step.fixedStep';
+const LIST_FIELDS = '_id jobOrderNumber customer.name customer.phone customer.countryName customer.stateName customer.cityName currency subtotal tax.isApplied tax.amount total createdAt updatedAt items.name items.masters.values.assignedTo.step.fixedStep step.key step.name step.fixedStep step.percent';
 const COUNTER_KEY = 'jobOrder';
 
 const idOf = (value) => (value ? String(value) : null);
@@ -747,8 +750,9 @@ const workSummaryOf = (items = []) => {
 
 // GET /api/job-orders - newest first; search by number, job name, customer
 // name / phone / email or place; each with its items' job names (each once)
-// and how its work is going (workSummaryOf).
-const listJobOrders = async ({ vendorId, search, page, limit }) => {
+// and how its work is going (workSummaryOf). isStepsOn: the job order's own
+// step can be shown.
+const listJobOrders = async ({ vendorId, search, page, limit, websiteMasterData, companyMasterData }) => {
     try {
         const filter = { vendorId, status: 'A' };
         if (search) {
@@ -765,20 +769,55 @@ const listJobOrders = async ({ vendorId, search, page, limit }) => {
                 jobNames: [...new Set(items.map((item) => item.name).filter(Boolean))],
                 work: workSummaryOf(items)
             })),
-            pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
+            pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+            isStepsOn: stepService.isStepsOn(websiteMasterData, companyMasterData)
         });
     } catch (err) {
         throw err;
     }
 };
 
-// GET /api/job-orders/:id
-const getJobOrder = async ({ vendorId, id }) => {
+// GET /api/job-orders/:id - with the vendor's steps (none while steps are
+// off) for the job order's own step.
+const getJobOrder = async ({ vendorId, id, websiteMasterData, companyMasterData }) => {
     try {
         const jobOrder = await JobOrder.findOne({ _id: id, vendorId, status: 'A' })
             .select('-vendorId -createdBy -updatedBy -deletedBy -deletedDate -activeMarkedBy -activeMarkedDate -inActiveMarkedBy -inactiveMarkedDate -__v').lean();
         if (!jobOrder) return common.returnResult(false, 404, 'Job order not found.');
-        return common.returnResult(true, 200, 'Job order fetched successfully.', { jobOrder });
+        return common.returnResult(true, 200, 'Job order fetched successfully.', { jobOrder, steps: stepService.stepsOf(websiteMasterData, companyMasterData) });
+    } catch (err) {
+        throw err;
+    }
+};
+
+// PATCH /api/job-orders/:id/step - moves the whole job order to any step
+// (In progress may take a %, Hold a reason), saying who moved it. Apart from
+// the workers' own steps: their steps, due times and "Overdue" don't change,
+// and nobody is notified (open screens reload).
+const setJobOrderStep = async ({ vendorId, userId, id, data, websiteMasterData, companyMasterData }) => {
+    try {
+        const step = stepService.stepsOf(websiteMasterData, companyMasterData).find((entry) => entry.key === data.stepKey);
+        if (!step) return common.returnResult(false, 400, 'This step is no longer available. Please reload the page.', { errors: [{ field: 'stepKey', message: 'This step is no longer available' }] });
+        const user = await User.findOne({ _id: userId, vendorId }).select('name').lean();
+        const entry = {
+            key: step.key,
+            name: step.name,
+            fixedStep: step.fixedStep,
+            percent: step.fixedStep === FIXED_STEPS.IN_PROGRESS ? data.percent ?? null : null,
+            holdReason: step.fixedStep === FIXED_STEPS.HOLD ? data.holdReason ?? null : null,
+            at: new Date(),
+            byUserId: userId,
+            byName: user?.name || 'Owner'
+        };
+        const jobOrder = await JobOrder.findOneAndUpdate(
+            { _id: id, vendorId, status: 'A' },
+            { $set: { step: entry }, $push: { stepHistory: { $each: [entry], $slice: -STEP_HISTORY_MAX } } },
+            // A step change isn't an edit of the job order: its "last updated" stays.
+            { timestamps: false, auditUserId: userId, projection: { _id: 1 } }
+        ).lean();
+        if (!jobOrder) return common.returnResult(false, 404, 'Job order not found.');
+        realtimeService.toVendor(vendorId, REALTIME_EVENTS.JOB_ORDERS_CHANGED, { jobOrderId: jobOrder._id });
+        return common.returnResult(true, 200, `Job order moved to ${step.name}.`, { step: entry });
     } catch (err) {
         throw err;
     }
@@ -806,5 +845,6 @@ module.exports = {
     updateJobOrder,
     listJobOrders,
     getJobOrder,
+    setJobOrderStep,
     cancelJobOrder
 };

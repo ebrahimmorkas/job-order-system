@@ -2,6 +2,7 @@ const Joi = require('joi');
 const { JOB_ORDER_NUMBER_MAX_LENGTH, CUSTOMER_ADDRESS_MAX_LENGTH, ANSWER_MAX_LENGTH, ASSIGNEES_PER_VALUE_MAX, DURATION_UNITS, DURATION_AMOUNT_MAX, JOB_ORDER_LIST_MAX_PAGE_SIZE, JOB_ORDER_ITEMS_MAX, JOB_NAME_MAX_LENGTH } = require('../../constants/jobOrderConstants');
 const { MAX_IMAGES_PER_REQUEST } = require('../../constants/storageConstants');
 const { POSTAL_CODE_MAX_LENGTH } = require('../../constants/taxConstants');
+const { HOLD_REASON_MAX_LENGTH } = require('../../constants/stepConstants');
 const { contact } = require('./customerValidations');
 
 // What the vendor's own masters, controls, countries and rates allow is
@@ -85,7 +86,18 @@ const jobOrderSchema = Joi.object({
     taxId: objectId('Tax rate').allow(null).default(null)
 });
 
+// PATCH /api/job-orders/:id/step - the job order's own step (which steps the
+// vendor has is checked in services/jobOrderService.js).
+const jobOrderStepSchema = Joi.object({
+    stepKey: Joi.string().max(100).required().label('Step'),
+    // In progress only: how much is done.
+    percent: Joi.number().integer().min(0).max(100).allow(null).default(null).label('Work done (%)'),
+    // Hold only: why.
+    holdReason: Joi.string().trim().max(HOLD_REASON_MAX_LENGTH).allow('', null).empty(['', null]).default(null).label('Reason')
+});
+
 module.exports = {
+    jobOrderStepSchema,
     jobOrderIdParamSchema,
     listJobOrdersQuerySchema,
     jobOrderSchema

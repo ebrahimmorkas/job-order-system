@@ -301,6 +301,15 @@ progress...). Set by the platform owner in CompanyMaster (no screens):
   `workTimeChangeCountsFrom`: `personStart` (their start, the default) or
   `change` (the moment of the edit); an edit that keeps the time keeps
   their due time. A step change doesn't change the job order's `updatedAt`.
+- The job order's own step (`step`, `stepHistory` - each with `byUserId`,
+  `byName`): the whole job order moved through the same steps from the Job
+  Order module, by the owner or a user with Edit on job orders - for a vendor
+  with no users too (only the steps feature needed, not RBAC). Apart from
+  the workers' steps: their steps, due times and "Overdue" don't change, and
+  nobody is notified (open screens reload). Kept on edit; not an edit
+  (`updatedAt` stays). `GET /api/job-orders/:id` returns the vendor's
+  `steps` (none while steps are off); the list returns each `step` and
+  `isStepsOn`.
 - The job order list returns `work: { people, completed, onHold, started }`
   (null when no work was given); the job order view has everyone's steps.
 
@@ -613,6 +622,7 @@ too (see Users logging in) - except Layout Master, which stays owner only.
 | GET | `/api/dashboard` | owner (users: Dashboard) - the company dashboard (see Dashboard) |
 | GET | `/api/my-work/:id` | user, RBAC on - one of them, read only, without money, with their work, history and the vendor's `steps` |
 | PATCH | `/api/my-work/:id/step` | user, RBAC and steps on - `{ itemId, valueId, stepKey, percent (In progress), holdReason (Hold) }` |
+| PATCH | `/api/job-orders/:id/step` | owner (users: Edit on job orders), steps on - the job order's own step `{ stepKey, percent (In progress), holdReason (Hold) }` |
 | GET | `/api/masters/for-job-order` | logged in - active masters with their active values and default, for the job order form |
 | GET / POST | `/api/masters` | owner - list (search, status, page, limit) / create with values |
 | GET / PUT / DELETE | `/api/masters/:id` | owner - one master with its values / save details and the full values list / delete |

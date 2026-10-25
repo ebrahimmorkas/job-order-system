@@ -54,6 +54,7 @@ const JobOrdersPage = ({ featureAccess, basePath, segments }) => {
         onBack={backToList}
         onEdit={can('jobOrders', 'edit') ? () => navigate(`${basePath}/${screen.id}/edit`) : null}
         onPrint={canPrint ? () => navigate(`${basePath}/${screen.id}/print`) : null}
+        canChangeStep={can('jobOrders', 'edit')}
       />
     );
   }
