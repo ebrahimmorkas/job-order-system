@@ -3,12 +3,12 @@ import StepBadge from '../../jobOrders/components/StepBadge';
 import { durationTextOf, formatDueAt, timeStatusOf } from '../../jobOrders/workTime';
 
 /**
- * One piece of work on a job order: the master value, the user's step, who
+ * One piece of work on a job order: the master value (and its item), the user's step, who
  * else does it, and when it is due - with the time left, "Overdue",
  * "Completed", not counting until the first step, or "No deadline".
  *
  * @param {Object} props
- * @param {{ masterName, valueName, assignedAt, completeIn, timeStartsOn, dueAt, startedAt, step, coWorkers: string[] }} props.work
+ * @param {{ itemLabel, masterName, valueName, assignedAt, completeIn, timeStartsOn, dueAt, startedAt, step, coWorkers: string[] }} props.work
  * @param {number} props.now - The current time (ms), see utils/useNow
  */
 const WorkItem = ({ work, now }) => {
@@ -21,6 +21,7 @@ const WorkItem = ({ work, now }) => {
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium text-gray-900 break-words">{work.valueName}</span>
         <span className="text-xs text-gray-500 break-words">{work.masterName}</span>
+        {work.itemLabel && <span className="text-xs text-indigo-600 break-words">{work.itemLabel}</span>}
         {work.step !== undefined && <StepBadge step={work.step} />}
         {(!status.isCompleted || status.hasDeadline) && <Badge variant={status.variant} size="sm">{status.text}</Badge>}
       </div>

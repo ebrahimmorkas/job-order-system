@@ -26,6 +26,14 @@ const CUSTOMER_ADDRESS_MAX_LENGTH = 500;
 // A text field / text area answer when the vendor set no limit.
 const ANSWER_MAX_LENGTH = 5000;
 
+// The items of one job order (each with its own job name, masters, controls,
+// images and work). CompanyMaster.numberOfItemsAllowedToAddInJobOrder sets
+// the vendor's own limit (1 when not set); never more than this.
+const JOB_ORDER_ITEMS_MAX = 50;
+const DEFAULT_ITEMS_ALLOWED = 1;
+// An item's job name.
+const JOB_NAME_MAX_LENGTH = 100;
+
 // Most people one picked master value (its work) can be given to.
 const ASSIGNEES_PER_VALUE_MAX = 20;
 
@@ -45,6 +53,9 @@ module.exports = {
     PRINT_WORK_OPTIONS,
     CUSTOMER_ADDRESS_MAX_LENGTH,
     ANSWER_MAX_LENGTH,
+    JOB_ORDER_ITEMS_MAX,
+    DEFAULT_ITEMS_ALLOWED,
+    JOB_NAME_MAX_LENGTH,
     ASSIGNEES_PER_VALUE_MAX,
     DURATION_UNITS,
     DURATION_AMOUNT_MAX,

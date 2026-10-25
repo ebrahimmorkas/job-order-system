@@ -72,7 +72,8 @@ Each section's code is downloaded the first time it is opened
   numbers and what is due next. Both load again by themselves when work
   changes. Job order numbers open the job order only with Job Orders Details.
 - **My work** (users given master values' work) - the job orders given to
-  them, newest first, with what they do on each, their step, when it is due
+  them, newest first, with what they do on each (and on which item, when
+  there are several), their step, when it is due
   and the time left ("Overdue", "Completed on time", "Completed late by 2
   hours", "No deadline", or not counting
   until their first step), who else does it, and a read-only view of the job
@@ -121,28 +122,34 @@ Each section's code is downloaded the first time it is opened
   create (pick the type), copy and edit with a live preview; radio choices
   with a default. "Include this price in tax" shows only while tax is
   available (the tax feature on and one country's tax details filled in).
-- **Job Orders** - the list (newest first, search by number, customer or
-  place; the Customer column shows name, phone and place; view / print /
+- **Job Orders** - the list (newest first, search by number, job name,
+  customer or place; the Job name column shows each item's job name on its
+  own line; the Customer column shows name, phone and place; view / print /
   edit / cancel; Back on a print opened from the list returns to the list)
   and the job order form: the number (only when typed by hand), the
   customer - with Customers on, "Find a saved customer" (type any part of
   the name, phone, email or address; picking one fills the form) and name,
   phone, email - and the address (only when asked; the country is locked
-  when the vendor has one), every master as a searchable dropdown
+  when the vendor has one), then the items - one card each ("Details" when
+  the vendor may have one item, else "Item 1", "Item 2"... with "+ Add item"
+  up to the vendor's limit and Remove on each when there are several). An
+  item has its job name (optional; from the second item "Same as above"
+  copies the name of the item just above, still editable), every master as a searchable dropdown
   (multi-select where allowed, default picked, short name when chosen in
   Company Settings, required ones starred) - under a role master, "Who does
   <value>?" for each picked value lists only the people who have that value
   (several can be picked, optional) and, once someone is picked, "Complete
   in" (a number and Seconds / Minutes / Hours / Days / Months / Years;
-  empty = no deadline) - every control, the tax rate, and a
-  summary beside it that updates as you type - every answer, the prices,
+  empty = no deadline) - every control and its images; then the tax rate,
+  and a summary beside it that updates as you type - every answer (item
+  after item under its heading when there are several), the prices of all items,
   subtotal, tax split (CGST + SGST, or IGST for another Indian state) and
   total in the country's currency, or why no tax is charged. Images (only
-  with the image feature on): thumbnails with add / remove, checked for
-  format, size and count, uploaded with Create / Save; the view shows them
-  (click for full size). Leaving with unsaved changes asks first. With Layout
+  with the image feature on, per item): thumbnails with add / remove, checked for
+  format, size and count (the limit counts all items together), uploaded
+  with Create / Save; the view shows them by item (click for full size). Leaving with unsaved changes asks first. With Layout
   Master on, the view has Print: pick a layout (the default first), see the
-  job order in it, then Print (the page at the layout's paper size) or
+  job order in it (the first item for now), then Print (the page at the layout's paper size) or
   Download PDF / PNG / JPEG.
 - **Customers** (`features/customers`, only while the feature is on) -
   saved from job orders with a phone or an email (one per phone / email).

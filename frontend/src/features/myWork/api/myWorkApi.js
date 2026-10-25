@@ -4,7 +4,7 @@ const BASE = '/my-work';
 
 /**
  * The job orders the logged-in user is given work on, newest first; each
- * with work: [{ masterName, valueName, assignedAt, completeIn, dueAt, coWorkers }].
+ * with work: [{ itemId, itemLabel, masterName, valueName, assignedAt, completeIn, dueAt, coWorkers }].
  * @returns {Promise<{ jobOrders: Array, pagination: Object }>}
  */
 export const listMyWork = ({ search, page, limit } = {}, { signal } = {}) => {
@@ -24,10 +24,10 @@ export const listMyWork = ({ search, page, limit } = {}, { signal } = {}) => {
 export const getMyWorkJobOrder = (id, { signal } = {}) => apiRequest(`${BASE}/${id}`, { signal });
 
 /**
- * Moves the user's work on one value to a step (In progress may take a %,
+ * Moves the user's work on one value of an item to a step (In progress may take a %,
  * Hold a reason).
  * @param {string} id - The job order
- * @param {{ valueId: string, stepKey: string, percent?: number|null, holdReason?: string|null }} data
+ * @param {{ itemId: string, valueId: string, stepKey: string, percent?: number|null, holdReason?: string|null }} data
  * @returns {Promise<{ step: Object }>}
  */
 export const setMyStep = (id, data) => apiRequest(`${BASE}/${id}/step`, { method: 'PATCH', body: data });

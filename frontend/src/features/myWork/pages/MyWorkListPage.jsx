@@ -39,7 +39,7 @@ const MyWorkListPage = ({ onView }) => {
   const [loadedKey, setLoadedKey] = useState(null);
   // Bumped when the server says the person's work changed.
   const [reloadKey, setReloadKey] = useState(0);
-  // The work whose step changer is open: '<jobOrderId>|<valueId>'.
+  // The work whose step changer is open: '<jobOrderId>|<itemId>|<valueId>'.
   const [openStepKey, setOpenStepKey] = useState(null);
 
   // A new search starts again from page 1.
@@ -92,7 +92,7 @@ const MyWorkListPage = ({ onView }) => {
       render: (jobOrder) => (
         <ul className="space-y-3">
           {jobOrder.work.map((work, index) => {
-            const stepKey = `${jobOrder._id}|${work.valueId}`;
+            const stepKey = `${jobOrder._id}|${work.itemId}|${work.valueId}`;
             const isOpen = openStepKey === stepKey;
             return (
               <li key={index} className="space-y-2">
@@ -164,7 +164,7 @@ const MyWorkListPage = ({ onView }) => {
       <SearchInput
         value={search}
         onChange={setSearch}
-        placeholder="Search by number or customer place"
+        placeholder="Search by number, job name or customer place"
         ariaLabel="Search my work"
         className="!mb-0"
       />

@@ -3,27 +3,31 @@ import { useNow } from '../../../utils/useNow';
 import { formatDueAt, timeStatusOf } from '../workTime';
 import StepBadge from './StepBadge';
 import StepHistory from './StepHistory';
+import { itemLabelOf } from '../jobOrderItems';
 
 /**
  * How the work given on a job order is going (the owner's view): for each
- * value given to people, each person's step, % / hold reason, start, time
- * left and history. Nothing when no work was given.
+ * value given to people (on each item), each person's step, % / hold
+ * reason, start, time left and history. Nothing when no work was given.
  *
  * @param {Object} props
- * @param {Array} props.masters - The job order's masters as saved
+ * @param {Array} props.items - The job order's items as saved
  */
-const WorkProgress = ({ masters }) => {
+const WorkProgress = ({ items }) => {
   const now = useNow();
-  const given = masters.flatMap((master) => master.values.filter((value) => value.assignedTo?.length > 0).map((value) => ({ master, value })));
+  const given = items.flatMap((item, index) => item.masters.flatMap((master) => master.values
+    .filter((value) => value.assignedTo?.length > 0)
+    .map((value) => ({ key: `${item._id}-${value.valueId}`, itemLabel: itemLabelOf(item, index, items.length), master, value }))));
   if (given.length === 0) return null;
 
   return (
     <ul className="divide-y divide-gray-100">
-      {given.map(({ master, value }) => (
-        <li key={value.valueId} className="py-3 first:pt-0 last:pb-0">
+      {given.map(({ key, itemLabel, master, value }) => (
+        <li key={key} className="py-3 first:pt-0 last:pb-0">
           <p className="text-sm">
             <span className="font-medium text-gray-900 break-words">{value.name}</span>
             <span className="ml-2 text-xs text-gray-500 break-words">{master.name}</span>
+            {itemLabel && <span className="ml-2 text-xs text-indigo-600 break-words">{itemLabel}</span>}
           </p>
           <ul className="mt-2 space-y-3">
             {value.assignedTo.map((person) => {

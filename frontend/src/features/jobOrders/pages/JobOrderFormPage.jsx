@@ -1,23 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import InputField from '../../../components/common/InputField';
-import TextArea from '../../../components/common/TextArea';
 import Dropdown from '../../../components/common/DropDown';
-import Checkbox from '../../../components/common/Checkbox';
-import { Radio } from '../../../components/common/Radio';
 import Button from '../../../components/common/Buttons';
 import Card from '../../../components/common/Card';
 import Alert from '../../../components/common/Alert';
 import Spinner from '../../../components/common/Spinner';
-import ImageUploader from '../../../components/common/ImageUploader';
-import NumberField from '../../../components/common/NumberField';
 import { BackIcon } from '../../../components/common/ActionIcons';
 import { useUnsavedChanges } from '../../../components/common/UnsavedChanges';
 import JobOrderSummary from '../components/JobOrderSummary';
+import JobOrderItemFields from '../components/JobOrderItemFields';
 import { computeTotals } from '../jobOrderTotals';
-import { summaryRowsOf, masterLabelOf } from '../summaryRows';
+import { summaryRowsOf } from '../summaryRows';
 import { PRICE_PATTERN } from '../../controls/controlTypes';
 import { taxLabel } from '../../companySettings/taxRules';
-import { DURATION_UNITS, DURATION_AMOUNT_MAX } from '../workTime';
 import * as jobOrdersApi from '../api/jobOrdersApi';
 import CustomerSearch from '../components/CustomerSearch';
 import CustomerFields from '../../customers/components/CustomerFields';
@@ -32,22 +27,25 @@ const ANSWER_MAX_LENGTH = 5000;
 // Same as the backend: several countries and the address (with its country) not asked.
 const NO_COUNTRY_REASON = 'No tax is charged: you have more than one country and the customer address is not asked. Turn on "Ask the customer address" in Company Settings.';
 
-// The backend's format names (CompanyMaster.imageFormatsAllowed) and their types.
-const IMAGE_MIME_TYPES = { jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' };
-
 const idOf = (value) => (value ? String(value) : '');
 
-// A new job order: each master's default value, each control's default answer.
-const freshForm = ({ masters, controls, countries }) => ({
-  jobOrderNumber: '',
-  customer: { ...EMPTY_CUSTOMER, countryId: countries.length === 1 ? countries[0]._id : '' },
+// "<itemId>|<valueId>": the work on one value of one saved item.
+const workKeyOf = (itemId, valueId) => `${idOf(itemId)}|${idOf(valueId)}`;
+
+// A new item: each master's default value, each control's default answer.
+const freshItem = ({ masters, controls }, key) => ({
+  key,
+  // The saved item this is ('' = a new item).
+  itemId: '',
+  name: '',
+  // "Same as above" ticked (the name was copied from the item above once).
+  sameAsAbove: false,
   picks: Object.fromEntries(masters.map((master) => [master._id, master.defaultValueId ? [master.defaultValueId] : []])),
   answers: Object.fromEntries(controls.map((control) => [control._id, {
     text: control.defaultText || '',
     checked: !!control.defaultChecked,
     optionId: control.options?.some((option) => option._id === control.defaultOptionId) ? control.defaultOptionId : '',
   }])),
-  taxId: '',
   // { key, imageId, url } saved / { key, file, src, name } picked now
   images: [],
   // valueId -> the ids of the people given its work (role masters only)
@@ -56,19 +54,17 @@ const freshForm = ({ masters, controls, countries }) => ({
   completeIn: {},
 });
 
-const DEFAULT_UNIT = 'days';
-
-// valueId -> the people a saved job order gave its work to ({ userId, name }).
-const earlierPeopleOf = (jobOrder) => new Map((jobOrder?.masters || []).flatMap((master) => master.values.map((value) => [idOf(value.valueId), value.assignedTo || []])));
-
-// A saved job order on today's form: answers of masters, values, controls
-// and choices no longer available are left out.
-const savedForm = ({ masters, controls, countries }, jobOrder) => {
-  const savedMasters = new Map(jobOrder.masters.map((master) => [idOf(master.masterId), master.values.map((value) => idOf(value.valueId))]));
-  const savedControls = new Map(jobOrder.controls.map((control) => [idOf(control.controlId), control]));
+// A saved item on today's form: answers of masters, values, controls and
+// choices no longer available are left out.
+const savedItem = ({ masters, controls }, item, key) => {
+  const savedMasters = new Map(item.masters.map((master) => [idOf(master.masterId), master.values.map((value) => idOf(value.valueId))]));
+  const savedControls = new Map(item.controls.map((control) => [idOf(control.controlId), control]));
+  const values = item.masters.flatMap((master) => master.values);
   return {
-    jobOrderNumber: jobOrder.jobOrderNumber,
-    customer: formCustomerOf(countries, jobOrder.customer || {}),
+    key,
+    itemId: idOf(item._id),
+    name: item.name || '',
+    sameAsAbove: false,
     picks: Object.fromEntries(masters.map((master) => {
       const known = new Set(master.values.map((value) => value._id));
       return [master._id, (savedMasters.get(master._id) || []).filter((id) => known.has(id))];
@@ -82,17 +78,36 @@ const savedForm = ({ masters, controls, countries }, jobOrder) => {
         optionId: control.options?.some((option) => option._id === optionId) ? optionId : '',
       }];
     })),
-    taxId: idOf(jobOrder.tax?.taxId),
-    images: (jobOrder.images || []).map((image) => ({ key: idOf(image.imageId), imageId: idOf(image.imageId), url: image.url })),
-    assign: Object.fromEntries([...earlierPeopleOf(jobOrder)].filter(([, people]) => people.length > 0).map(([valueId, people]) => [valueId, people.map((person) => idOf(person.userId))])),
-    completeIn: Object.fromEntries(jobOrder.masters.flatMap((master) => master.values.filter((value) => value.completeIn).map((value) => [idOf(value.valueId), { ...value.completeIn }]))),
+    images: item.images.map((image) => ({ key: idOf(image.imageId), imageId: idOf(image.imageId), url: image.url })),
+    assign: Object.fromEntries(values.filter((value) => value.assignedTo?.length > 0).map((value) => [idOf(value.valueId), value.assignedTo.map((person) => idOf(person.userId))])),
+    completeIn: Object.fromEntries(values.filter((value) => value.completeIn).map((value) => [idOf(value.valueId), { ...value.completeIn }])),
   };
 };
 
+// A new job order: one item.
+const freshForm = (parts) => ({
+  jobOrderNumber: '',
+  customer: { ...EMPTY_CUSTOMER, countryId: parts.countries.length === 1 ? parts.countries[0]._id : '' },
+  taxId: '',
+  items: [freshItem(parts, 'item-0')],
+});
+
+const savedForm = (parts, jobOrder) => ({
+  jobOrderNumber: jobOrder.jobOrderNumber,
+  customer: formCustomerOf(parts.countries, jobOrder.customer || {}),
+  taxId: idOf(jobOrder.tax?.taxId),
+  items: jobOrder.items.map((item, index) => savedItem(parts, item, `item-${index}`)),
+});
+
+// "<itemId>|<valueId>" -> the people a saved job order gave that work to ({ userId, name }).
+const earlierPeopleOf = (jobOrder) => new Map((jobOrder?.items || []).flatMap((item) => item.masters.flatMap((master) => master.values
+  .map((value) => [workKeyOf(item._id, value.valueId), value.assignedTo || []]))));
+
 /**
  * Create or edit a job order: the job order number (when typed by hand),
- * the customer's address (when asked), every master and control, the tax
- * rate, and a summary that updates as the form is filled in. Everything is
+ * the customer (when asked), one or more items - each with its job name,
+ * masters, controls and images (up to the vendor's limit) - the tax rate,
+ * and a summary that updates as the form is filled in. Everything is
  * checked and worked out again by the backend on Create / Save.
  *
  * @param {Object} props
@@ -104,8 +119,10 @@ const savedForm = ({ masters, controls, countries }, jobOrder) => {
 const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
   const isEdit = mode === 'edit';
   const [parts, setParts] = useState(null);
-  // On edit: valueId -> the people the job order gave its work to (they may stay).
+  // On edit: "<itemId>|<valueId>" -> the people the job order gave that work to (they may stay).
   const [earlierPeople, setEarlierPeople] = useState(() => new Map());
+  // On edit: how many items it was saved with (it may keep them, even over today's limit).
+  const [savedItemCount, setSavedItemCount] = useState(0);
   const [form, setForm] = useState(null);
   const [savedSnapshot, setSavedSnapshot] = useState('');
   const [loadError, setLoadError] = useState('');
@@ -115,6 +132,8 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
   // Previews of picked images (object URLs), freed when removed or on leaving.
   const previewUrls = useRef(new Set());
   const nextImageKey = useRef(0);
+  // Keeps each item's key unique, also after one is removed.
+  const nextItemKey = useRef(0);
   useEffect(() => {
     const urls = previewUrls.current;
     return () => urls.forEach((url) => URL.revokeObjectURL(url));
@@ -126,8 +145,10 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
     Promise.all([jobOrdersApi.getFormData({ signal }), isEdit ? jobOrdersApi.getJobOrder(jobOrderId, { signal }) : null])
       .then(([data, saved]) => {
         const initial = saved ? savedForm(data, saved.jobOrder) : freshForm(data);
+        nextItemKey.current = initial.items.length;
         setParts(data);
         setEarlierPeople(earlierPeopleOf(saved?.jobOrder));
+        setSavedItemCount(saved?.jobOrder.items.length || 0);
         setForm(initial);
         setSavedSnapshot(JSON.stringify(initial));
       })
@@ -144,6 +165,7 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
   // Name, phone and email (and the customer saved): the Customers feature.
   const askContact = settings?.askCustomerContact === true;
   const countries = useMemo(() => parts?.countries || [], [parts]);
+  const maxItems = Math.max(settings?.maxItems ?? 1, savedItemCount);
 
   // userId -> name, of everyone who can be (or was) given work.
   const personNames = useMemo(() => {
@@ -155,25 +177,37 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
   // Everything worked out from the form, the way the backend does it.
   const preview = useMemo(() => {
     if (!parts || !form) return null;
-    const { customer, picks, answers, assign } = form;
+    const { customer } = form;
     const country = countries.find((c) => c._id === customer.countryId) || null;
     const state = country?.states.find((s) => s._id === customer.stateId) || null;
     const city = state ? country.cities.find((c) => c._id === customer.cityId) || null : null;
 
     // Tax country: the customer's country, or the vendor's only country.
     const taxCountry = (askAddress && country) || (countries.length === 1 ? countries[0] : null);
-    const controls = [];
-    for (const control of parts.controls) {
-      const answer = answers[control._id];
-      const base = { controlId: control._id, type: control.type, label: control.label };
-      if (control.type === 'checkbox') controls.push({ ...base, checked: answer.checked });
-      else if (control.type === 'radio') controls.push({ ...base, optionName: control.options.find((o) => o._id === answer.optionId)?.name || null });
-      else if (control.isPrice) {
-        const text = answer.text.trim();
-        if (PRICE_PATTERN.test(text)) controls.push({ ...base, isPrice: true, isPriceIncludedInTax: control.isPriceIncludedInTax, amount: Number(text) });
-      } else controls.push({ ...base, text: answer.text });
-    }
-    const prices = controls.filter((c) => c.isPrice).map((c) => ({ amount: c.amount, isTaxed: c.isPriceIncludedInTax }));
+    const items = form.items.map((item) => {
+      const controls = [];
+      for (const control of parts.controls) {
+        const answer = item.answers[control._id];
+        const base = { controlId: control._id, type: control.type, label: control.label };
+        if (control.type === 'checkbox') controls.push({ ...base, checked: answer.checked });
+        else if (control.type === 'radio') controls.push({ ...base, optionName: control.options.find((o) => o._id === answer.optionId)?.name || null });
+        else if (control.isPrice) {
+          const text = answer.text.trim();
+          if (PRICE_PATTERN.test(text)) controls.push({ ...base, isPrice: true, isPriceIncludedInTax: control.isPriceIncludedInTax, amount: Number(text) });
+        } else controls.push({ ...base, text: answer.text });
+      }
+      const masters = parts.masters.map((master) => ({
+        masterId: master._id,
+        name: master.name,
+        shortName: master.shortName,
+        values: master.values
+          .filter((value) => item.picks[master._id].includes(value._id))
+          .map((value) => ({ ...value, assignedTo: (item.assign[value._id] || []).map((userId) => ({ userId, name: personNames.get(userId) })) })),
+      }));
+      return { name: item.name.trim(), masters, controls };
+    });
+    // Every price of every item.
+    const prices = items.flatMap((item) => item.controls).filter((c) => c.isPrice).map((c) => ({ amount: c.amount, isTaxed: c.isPriceIncludedInTax }));
 
     // The rate dropdown: tax on, a country registered for tax, a price taxed.
     const canChooseRate = parts.isTaxOn && !!taxCountry?.isTaxReady && taxCountry.taxes.length > 0
@@ -198,15 +232,6 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
       interStateLabel: isInterState ? taxCountry.interStateTaxLabel : null,
     });
 
-    const masters = parts.masters.map((master) => ({
-      masterId: master._id,
-      name: master.name,
-      shortName: master.shortName,
-      values: master.values
-        .filter((value) => picks[master._id].includes(value._id))
-        .map((value) => ({ ...value, assignedTo: (assign[value._id] || []).map((userId) => ({ userId, name: personNames.get(userId) })) })),
-    }));
-
     return {
       country,
       taxCountry,
@@ -217,8 +242,7 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
           ...(askAddress && { postalCode: customer.postalCode, address: customer.address, countryName: country?.name, stateName: state?.name, cityName: city?.name }),
           ...(askContact && { name: customer.name.trim(), phone: customer.phone.trim(), email: customer.email.trim() }),
         },
-        masters,
-        controls,
+        items,
       }, { useShortNames: settings.useShortNames }),
       currency: taxCountry?.currency || null,
       subtotal: totals.subtotal,
@@ -249,65 +273,68 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
       ...Object.keys(filled).map((field) => `customer.${field}`));
   };
 
-  const setPick = (masterId, valueIds) => {
-    setForm((prev) => ({ ...prev, picks: { ...prev.picks, [masterId]: valueIds } }));
-    clearError(`masters.${masterId}`);
+  // Changes one item: update(item) gives the fields that change.
+  const updateItem = (index, update, ...fields) => {
+    setForm((prev) => ({ ...prev, items: prev.items.map((item, i) => (i === index ? { ...item, ...update(item) } : item)) }));
+    clearError(...fields);
   };
 
-  const setAssign = (masterId, valueId, userIds) => {
-    setForm((prev) => {
-      const assign = { ...prev.assign, [valueId]: userIds };
-      if (userIds.length === 0) delete assign[valueId];
-      return { ...prev, assign };
-    });
-    clearError(`masters.${masterId}`);
+  // Item errors are by position: adding or removing one clears them all.
+  const clearItemErrors = () => {
+    setFieldErrors((prev) => Object.fromEntries(Object.entries(prev).filter(([field]) => !field.startsWith('items'))));
+    if (formError) setFormError('');
   };
 
-  // How long the people given a value's work have (whole numbers only).
-  const setCompleteIn = (masterId, valueId, changes) => {
-    if (changes.amount !== undefined && changes.amount !== null && !Number.isInteger(changes.amount)) return;
-    setForm((prev) => ({
-      ...prev,
-      completeIn: { ...prev.completeIn, [valueId]: { amount: null, unit: DEFAULT_UNIT, ...prev.completeIn[valueId], ...changes } },
-    }));
-    clearError(`masters.${masterId}`);
+  const addItem = () => {
+    setForm((prev) => ({ ...prev, items: [...prev.items, freshItem(parts, `item-${nextItemKey.current++}`)] }));
+    clearItemErrors();
   };
 
-  // Who can be given a value's work: those who have it now, and on edit
-  // those it was given to before (marked when they no longer have it).
-  const peopleOptionsOf = (value) => {
+  const removeItem = (index) => {
+    for (const image of form.items[index].images) {
+      if (!image.src) continue;
+      URL.revokeObjectURL(image.src);
+      previewUrls.current.delete(image.src);
+    }
+    setForm((prev) => ({ ...prev, items: prev.items.filter((_, i) => i !== index) }));
+    clearItemErrors();
+  };
+
+  // "Same as above": copies the job name of the item just above once (it
+  // stays editable); unticking keeps the text.
+  const setSameAsAbove = (index, isTicked) => updateItem(index, () => ({
+    sameAsAbove: isTicked,
+    ...(isTicked && { name: form.items[index - 1].name }),
+  }), `items.${index}.name`);
+
+  // Who can be given a value's work on an item: those who have it now, and
+  // on edit those it was given to before (marked when they no longer have it).
+  const peopleOptionsOf = (item, value) => {
     const eligible = new Set(value.workerIds || []);
     const options = (parts.workers || []).filter((worker) => eligible.has(worker._id)).map((worker) => ({ value: worker._id, label: `${worker.name} (@${worker.username})` }));
-    for (const person of earlierPeople.get(value._id) || []) {
+    for (const person of earlierPeople.get(workKeyOf(item.itemId, value._id)) || []) {
       const userId = idOf(person.userId);
       if (!eligible.has(userId)) options.push({ value: userId, label: `${person.name} (no longer has ${value.name})` });
     }
     return options;
   };
 
-  const addImages = (files) => {
+  const addImages = (index, files) => {
     const added = files.map((file) => {
       const src = URL.createObjectURL(file);
       previewUrls.current.add(src);
       return { key: `new-${nextImageKey.current++}`, file, src, name: file.name };
     });
-    setForm((prev) => ({ ...prev, images: [...prev.images, ...added] }));
-    clearError('images');
+    updateItem(index, (item) => ({ images: [...item.images, ...added] }), `items.${index}.images`);
   };
 
-  const removeImage = (key) => {
-    const image = form.images.find((i) => i.key === key);
+  const removeImage = (index, key) => {
+    const image = form.items[index].images.find((i) => i.key === key);
     if (image?.src) {
       URL.revokeObjectURL(image.src);
       previewUrls.current.delete(image.src);
     }
-    setForm((prev) => ({ ...prev, images: prev.images.filter((i) => i.key !== key) }));
-    clearError('images');
-  };
-
-  const setAnswer = (controlId, changes) => {
-    setForm((prev) => ({ ...prev, answers: { ...prev.answers, [controlId]: { ...prev.answers[controlId], ...changes } } }));
-    clearError(`controls.${controlId}`);
+    updateItem(index, (item) => ({ images: item.images.filter((i) => i.key !== key) }), `items.${index}.images`);
   };
 
   // The same checks as the backend, so most mistakes show without a round trip.
@@ -319,25 +346,28 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
     }
     const postalError = askAddress ? postalErrorOf(preview.country, form.customer.postalCode) : '';
     if (postalError) errors['customer.postalCode'] = postalError;
-    for (const master of parts.masters) {
-      if (master.isRequired && form.picks[master._id].length === 0) errors[`masters.${master._id}`] = `Pick a ${master.name}`;
-    }
-    for (const control of parts.controls) {
-      const answer = form.answers[control._id];
-      const field = `controls.${control._id}`;
-      if (control.type === 'checkbox') {
-        if (control.isRequired && !answer.checked) errors[field] = 'This must be ticked';
-      } else if (control.type === 'radio') {
-        if (control.isRequired && !answer.optionId) errors[field] = 'Pick one';
-      } else {
-        const text = control.isPrice ? answer.text.trim() : answer.text;
-        const max = control.maxLength ?? ANSWER_MAX_LENGTH;
-        if (!text) {
-          if (control.isRequired) errors[field] = control.isPrice ? 'Enter the amount' : 'This is required';
-        } else if (text.length > max) errors[field] = `At most ${max} characters`;
-        else if (control.isPrice && !PRICE_PATTERN.test(text)) errors[field] = 'Enter an amount with at most 2 decimals, e.g. 150 or 150.50';
+    form.items.forEach((item, index) => {
+      const prefix = `items.${index}.`;
+      for (const master of parts.masters) {
+        if (master.isRequired && item.picks[master._id].length === 0) errors[`${prefix}masters.${master._id}`] = `Pick a ${master.name}`;
       }
-    }
+      for (const control of parts.controls) {
+        const answer = item.answers[control._id];
+        const field = `${prefix}controls.${control._id}`;
+        if (control.type === 'checkbox') {
+          if (control.isRequired && !answer.checked) errors[field] = 'This must be ticked';
+        } else if (control.type === 'radio') {
+          if (control.isRequired && !answer.optionId) errors[field] = 'Pick one';
+        } else {
+          const text = control.isPrice ? answer.text.trim() : answer.text;
+          const max = control.maxLength ?? ANSWER_MAX_LENGTH;
+          if (!text) {
+            if (control.isRequired) errors[field] = control.isPrice ? 'Enter the amount' : 'This is required';
+          } else if (text.length > max) errors[field] = `At most ${max} characters`;
+          else if (control.isPrice && !PRICE_PATTERN.test(text)) errors[field] = 'Enter an amount with at most 2 decimals, e.g. 150 or 150.50';
+        }
+      }
+    });
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -352,26 +382,32 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
 
     const { customer } = form;
     const payload = {
-      masters: parts.masters.map((master) => {
-        const valueIds = form.picks[master._id];
-        const assignments = master.isRoleProvided
-          ? valueIds.filter((valueId) => form.assign[valueId]?.length > 0).map((valueId) => {
-            const time = form.completeIn[valueId];
-            return { valueId, userIds: form.assign[valueId], completeIn: time?.amount ? { amount: time.amount, unit: time.unit } : null };
-          })
-          : [];
-        return { masterId: master._id, valueIds, assignments };
-      }),
-      controls: parts.controls.map((control) => {
-        const answer = form.answers[control._id];
-        if (control.type === 'checkbox') return { controlId: control._id, checked: answer.checked };
-        if (control.type === 'radio') return { controlId: control._id, optionId: answer.optionId || null };
-        return { controlId: control._id, text: answer.text };
-      }),
+      items: form.items.map((item) => ({
+        itemId: item.itemId || null,
+        name: item.name,
+        masters: parts.masters.map((master) => {
+          const valueIds = item.picks[master._id];
+          const assignments = master.isRoleProvided
+            ? valueIds.filter((valueId) => item.assign[valueId]?.length > 0).map((valueId) => {
+              const time = item.completeIn[valueId];
+              return { valueId, userIds: item.assign[valueId], completeIn: time?.amount ? { amount: time.amount, unit: time.unit } : null };
+            })
+            : [];
+          return { masterId: master._id, valueIds, assignments };
+        }),
+        controls: parts.controls.map((control) => {
+          const answer = item.answers[control._id];
+          if (control.type === 'checkbox') return { controlId: control._id, checked: answer.checked };
+          if (control.type === 'radio') return { controlId: control._id, optionId: answer.optionId || null };
+          return { controlId: control._id, text: answer.text };
+        }),
+        keepImageIds: item.images.filter((image) => image.imageId).map((image) => image.imageId),
+        newImageCount: item.images.filter((image) => image.file).length,
+      })),
       taxId: preview.canChooseRate && preview.rate ? preview.rate._id : null,
-      keepImageIds: form.images.filter((image) => image.imageId).map((image) => image.imageId),
     };
-    const files = form.images.filter((image) => image.file).map((image) => image.file);
+    // Item after item, as each item's newImageCount says.
+    const files = form.items.flatMap((item) => item.images.filter((image) => image.file).map((image) => image.file));
     if (!isAutoNumber) payload.jobOrderNumber = form.jobOrderNumber.trim();
     if (askAddress || askContact) {
       payload.customer = { ...(askContact && contactPayloadOf(customer)), ...(askAddress && addressPayloadOf(customer)) };
@@ -408,7 +444,10 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
 
   const isEmptyForm = parts.masters.length === 0 && parts.controls.length === 0;
   const imageRules = parts.images;
-  const showImages = imageRules?.isOn || form.images.length > 0;
+  const imageMax = imageRules?.maxCount ?? null;
+  const imageCount = form.items.reduce((count, item) => count + item.images.length, 0);
+  // Several items allowed: each card says which item it is.
+  const canHaveSeveral = maxItems > 1;
 
   return (
     <div className="space-y-6">
@@ -426,7 +465,7 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
         <div className="space-y-6 lg:col-span-3 min-w-0">
           {formError && <Alert variant="error">{formError}</Alert>}
           {isEmptyForm && (
-            <Alert variant="info">There is nothing to fill in yet. Add masters (Masters) or fields (Controls) to show them on job orders.</Alert>
+            <Alert variant="info">There is nothing to fill in yet besides the job name. Add masters (Masters) or fields (Controls) to show them on job orders.</Alert>
           )}
 
           {!isAutoNumber && (
@@ -469,210 +508,40 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
             </Card>
           )}
 
-          {parts.masters.length > 0 && (
-            <Card variant="outlined" title="Details">
-              <div className="grid gap-5 sm:grid-cols-2">
-                {parts.masters.map((master) => {
-                  const label = masterLabelOf(master, settings.useShortNames);
-                  const options = master.values.map((value) => ({ value: value._id, label: value.name }));
-                  const picked = form.picks[master._id];
-                  const pickedValues = master.isRoleProvided ? master.values.filter((value) => picked.includes(value._id)) : [];
-                  return (
-                    <div key={master._id} className="space-y-3">
-                      <Dropdown
-                        label={label}
-                        name={`master-${master._id}`}
-                        options={options}
-                        multiple={master.isMultiselectAllowed}
-                        value={master.isMultiselectAllowed ? picked : picked[0] || ''}
-                        onChange={(value) => setPick(master._id, master.isMultiselectAllowed ? value : (value ? [value] : []))}
-                        placeholder={master.isMultiselectAllowed ? 'Choose one or more' : `Choose ${label}`}
-                        searchable
-                        clearable={!master.isRequired}
-                        required={master.isRequired}
-                        error={fieldErrors[`masters.${master._id}`]}
-                        disabled={isSaving}
-                        aria-label={label}
-                      />
-                      {pickedValues.map((value) => {
-                        const people = peopleOptionsOf(value);
-                        if (!parts.canAssignWork && people.length === 0) return null;
-                        return (
-                          <div key={value._id} className="border-l-2 border-indigo-100 pl-3">
-                            {people.length > 0 ? (
-                              <Dropdown
-                                label={`Who does ${value.name}?`}
-                                name={`assign-${value._id}`}
-                                options={people}
-                                multiple
-                                searchable
-                                value={form.assign[value._id] || []}
-                                onChange={(userIds) => setAssign(master._id, value._id, userIds)}
-                                placeholder="Nobody yet (optional)"
-                                size="sm"
-                                disabled={isSaving}
-                                aria-label={`Assign ${value.name} to`}
-                              />
-                            ) : (
-                              <p className="text-xs text-gray-500">Nobody has {value.name} in their role yet, so its work can't be given to anyone.</p>
-                            )}
-                            {form.assign[value._id]?.length > 0 && (
-                              <div className="mt-2">
-                                <div className="flex items-end gap-2">
-                                  <NumberField
-                                    label="Complete in"
-                                    value={form.completeIn[value._id]?.amount ?? null}
-                                    onChange={(amount) => setCompleteIn(master._id, value._id, { amount })}
-                                    min={1}
-                                    max={DURATION_AMOUNT_MAX}
-                                    allowEmpty
-                                    placeholder="No deadline"
-                                    disabled={isSaving}
-                                    className="w-32"
-                                  />
-                                  <div className="w-36">
-                                    <Dropdown
-                                      name={`complete-unit-${value._id}`}
-                                      options={DURATION_UNITS}
-                                      value={form.completeIn[value._id]?.unit || DEFAULT_UNIT}
-                                      onChange={(unit) => setCompleteIn(master._id, value._id, { unit })}
-                                      size="sm"
-                                      disabled={isSaving}
-                                      aria-label={`Unit for ${value.name}`}
-                                    />
-                                  </div>
-                                </div>
-                                <p className="mt-1 text-xs text-gray-400">
-                                  {parts.settings.workTimeStartsOn === 'onFirstStep' ? "From each person's first step." : 'From when the work is first given.'} Leave empty for no deadline.
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
+          {form.items.map((item, index) => (
+            <JobOrderItemFields
+              key={item.key}
+              item={item}
+              title={canHaveSeveral ? `Item ${index + 1}` : 'Details'}
+              prefix={`items.${index}.`}
+              parts={parts}
+              errors={fieldErrors}
+              onChange={(update, ...fields) => updateItem(index, update, ...fields)}
+              onSameAsAbove={index > 0 ? (isTicked) => setSameAsAbove(index, isTicked) : null}
+              onRemove={form.items.length > 1 ? () => removeItem(index) : null}
+              peopleOptionsOf={(value) => peopleOptionsOf(item, value)}
+              imageRules={imageRules}
+              // The job order's limit counts every item's images.
+              maxImages={imageMax === null ? null : Math.max(0, imageMax - (imageCount - item.images.length))}
+              onAddImages={(files) => addImages(index, files)}
+              onRemoveImage={(key) => removeImage(index, key)}
+              currency={preview.currency}
+              isTaxApplied={preview.tax.isApplied}
+              disabled={isSaving}
+            />
+          ))}
+
+          {canHaveSeveral && (
+            <div className="flex flex-wrap items-center gap-3">
+              {form.items.length < maxItems && (
+                <Button variant="outline" onClick={addItem} disabled={isSaving}>+ Add item</Button>
+              )}
+              <p className="text-sm text-gray-500">
+                {form.items.length} of {maxItems} items{form.items.length >= maxItems && ' - the most one job order can have'}
+              </p>
+            </div>
           )}
-
-          {parts.controls.length > 0 && (
-            <Card variant="outlined" title={parts.masters.length > 0 ? 'More details' : 'Details'}>
-              <div className="space-y-5">
-                {parts.controls.map((control) => {
-                  const answer = form.answers[control._id];
-                  const error = fieldErrors[`controls.${control._id}`];
-                  const max = control.maxLength ?? ANSWER_MAX_LENGTH;
-
-                  if (control.type === 'checkbox') {
-                    return (
-                      <Checkbox
-                        key={control._id}
-                        name={`control-${control._id}`}
-                        label={control.label}
-                        checked={answer.checked}
-                        onChange={(e) => setAnswer(control._id, { checked: e.target.checked })}
-                        required={control.isRequired}
-                        error={error}
-                        disabled={isSaving}
-                      />
-                    );
-                  }
-
-                  if (control.type === 'radio') {
-                    return (
-                      <fieldset key={control._id} className="min-w-0">
-                        <legend className="mb-2 text-sm font-medium text-gray-700 break-words">
-                          {control.label}{control.isRequired && <span className="text-red-500 ml-1">*</span>}
-                        </legend>
-                        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-                          {control.options.map((option) => (
-                            <Radio
-                              key={option._id}
-                              name={`control-${control._id}`}
-                              value={option._id}
-                              label={option.name}
-                              checked={answer.optionId === option._id}
-                              onChange={() => setAnswer(control._id, { optionId: option._id })}
-                              disabled={isSaving}
-                            />
-                          ))}
-                          {!control.isRequired && answer.optionId && (
-                            <button type="button" onClick={() => setAnswer(control._id, { optionId: '' })} className="text-xs text-gray-500 hover:text-gray-900 underline cursor-pointer" disabled={isSaving}>
-                              Clear
-                            </button>
-                          )}
-                        </div>
-                        {error && <p className="mt-1 text-sm text-red-600" role="alert">{error}</p>}
-                      </fieldset>
-                    );
-                  }
-
-                  if (control.type === 'textarea') {
-                    return (
-                      <div key={control._id}>
-                        <TextArea
-                          label={control.label}
-                          name={`control-${control._id}`}
-                          placeholder={control.placeholder || ''}
-                          value={answer.text}
-                          onChange={(e) => setAnswer(control._id, { text: e.target.value })}
-                          maxLength={max}
-                          showCharCount={control.maxLength !== null && control.maxLength !== undefined}
-                          rows={3}
-                          required={control.isRequired}
-                          disabled={isSaving}
-                        />
-                        {error && <p className="mt-1 text-sm text-red-600" role="alert">{error}</p>}
-                      </div>
-                    );
-                  }
-
-                  const currency = preview.currency;
-                  const isTaxed = control.isPrice && control.isPriceIncludedInTax && preview.tax.isApplied;
-                  return (
-                    <div key={control._id}>
-                      <InputField
-                        label={control.isPrice && currency?.symbol ? `${control.label} (${currency.symbol})` : control.label}
-                        name={`control-${control._id}`}
-                        placeholder={control.placeholder || (control.isPrice ? 'e.g. 150.50' : '')}
-                        inputMode={control.isPrice ? 'decimal' : undefined}
-                        value={answer.text}
-                        onChange={(e) => setAnswer(control._id, { text: e.target.value })}
-                        error={error}
-                        maxLength={max}
-                        required={control.isRequired}
-                        disabled={isSaving}
-                      />
-                      {control.isPrice && <p className="mt-1 text-xs text-gray-500">{isTaxed ? 'Price - tax is added on it' : 'Price'}</p>}
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
-          )}
-
-          {showImages && (
-            <Card
-              variant="outlined"
-              title="Images"
-              subtitle={imageRules?.isOn ? 'Photos of the work, e.g. the part or the drawing. Uploaded when you save.' : 'Adding images is not available for your account; you can still remove these.'}
-            >
-              <ImageUploader
-                images={form.images.map((image) => ({ key: image.key, src: image.src || image.url, name: image.name }))}
-                onAdd={addImages}
-                onRemove={removeImage}
-                accept={(imageRules?.formats || Object.keys(IMAGE_MIME_TYPES)).map((format) => IMAGE_MIME_TYPES[format])}
-                maxSizeMB={imageRules?.maxSizeMB ?? null}
-                maxCount={imageRules?.maxCount ?? null}
-                canAdd={imageRules?.isOn === true}
-                disabled={isSaving}
-                label="job order images"
-                error={fieldErrors.images}
-              />
-            </Card>
-          )}
+          {fieldErrors.items && <p className="text-sm text-red-600" role="alert">{fieldErrors.items}</p>}
 
           {preview.canChooseRate && (
             <Card variant="outlined" title={`${preview.taxCountry.taxName} rate`} subtitle={`Charged on the prices marked for tax, in ${preview.taxCountry.name}.`}>

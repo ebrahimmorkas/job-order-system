@@ -1,6 +1,7 @@
 const JobOrder = require('../models/JobOrder');
 const logger = require('../utils/logger');
 const notificationService = require('./notificationService');
+const { mastersOfItems, withItemLabel } = require('../utils/jobOrderItems');
 const { FIXED_STEPS } = require('../constants/stepConstants');
 const { OVERDUE_CHECK_MS, OVERDUE_LOOKBACK_MS } = require('../constants/notificationConstants');
 
@@ -15,13 +16,13 @@ const look = async () => {
     try {
         const now = new Date();
         const range = { $gt: new Date(now.getTime() - OVERDUE_LOOKBACK_MS), $lte: now };
-        const jobOrders = await JobOrder.find({ status: 'A', $or: [{ 'masters.values.dueAt': range }, { 'masters.values.assignedTo.dueAt': range }] })
-            .select('vendorId jobOrderNumber masters.values.valueId masters.values.name masters.values.dueAt masters.values.assignedTo.userId masters.values.assignedTo.name masters.values.assignedTo.dueAt masters.values.assignedTo.step.fixedStep')
+        const jobOrders = await JobOrder.find({ status: 'A', $or: [{ 'items.masters.values.dueAt': range }, { 'items.masters.values.assignedTo.dueAt': range }] })
+            .select('vendorId jobOrderNumber items._id items.name items.masters.values.valueId items.masters.values.name items.masters.values.dueAt items.masters.values.assignedTo.userId items.masters.values.assignedTo.name items.masters.values.assignedTo.dueAt items.masters.values.assignedTo.step.fixedStep')
             .lean();
 
         const byVendor = new Map();
         for (const jobOrder of jobOrders) {
-            for (const master of jobOrder.masters) {
+            for (const { itemId, itemLabel, master } of mastersOfItems(jobOrder.items)) {
                 for (const value of master.values) {
                     for (const person of value.assignedTo) {
                         const dueAt = person.dueAt ?? value.dueAt;
@@ -31,9 +32,9 @@ const look = async () => {
                         byVendor.get(vendorId).push({
                             jobOrderId: jobOrder._id,
                             jobOrderNumber: jobOrder.jobOrderNumber,
-                            valueName: value.name,
+                            valueName: withItemLabel(value.name, itemLabel),
                             workerName: person.name,
-                            key: `overdue:${jobOrder._id}:${value.valueId}:${person.userId}:${new Date(dueAt).getTime()}`
+                            key: `overdue:${jobOrder._id}:${itemId}:${value.valueId}:${person.userId}:${new Date(dueAt).getTime()}`
                         });
                     }
                 }

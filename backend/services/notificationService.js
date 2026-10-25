@@ -3,6 +3,7 @@ const User = require('../models/User');
 const common = require('../utils/common');
 const logger = require('../utils/logger');
 const realtimeService = require('./realtimeService');
+const { mastersOfItems, withItemLabel } = require('../utils/jobOrderItems');
 const { ROLES } = require('../constants/roleConstants');
 const { FIXED_STEPS } = require('../constants/stepConstants');
 const { NOTIFICATION_TYPES, NOTIFICATION_KEEP_DAYS, REALTIME_EVENTS } = require('../constants/notificationConstants');
@@ -55,16 +56,17 @@ const ownerIdsOf = async (vendorId) => {
     }
 };
 
-// Everyone given work on a job order: "valueId|userId" -> { userId, valueName, completeIn, dueAt }.
-const peopleOf = (masters = []) => {
+// Everyone given work on a job order's items:
+// "itemId|valueId|userId" -> { userId, valueName (with its item), completeIn, dueAt }.
+const peopleOf = (items = []) => {
     try {
         const people = new Map();
-        for (const master of masters) {
+        for (const { itemId, itemLabel, master } of mastersOfItems(items)) {
             for (const value of master.values || []) {
                 for (const person of value.assignedTo || []) {
-                    people.set(`${idOf(value.valueId)}|${idOf(person.userId)}`, {
+                    people.set(`${idOf(itemId)}|${idOf(value.valueId)}|${idOf(person.userId)}`, {
                         userId: idOf(person.userId),
-                        valueName: value.name,
+                        valueName: withItemLabel(value.name, itemLabel),
                         completeIn: value.completeIn ?? null,
                         dueAt: person.dueAt ?? value.dueAt ?? null
                     });
@@ -105,7 +107,7 @@ const workChangesOf = (before, after) => {
 /**
  * A job order was created, saved or cancelled: tells the people whose work
  * changed, and every open page of the vendor to load again.
- * before / after: the job order's masters (with values and assignedTo).
+ * before / after: the job order's items (with masters, values and assignedTo).
  */
 const announceJobOrderSaved = async ({ vendorId, jobOrderId, jobOrderNumber, before = [], after = [], isCancelled = false }) => {
     try {

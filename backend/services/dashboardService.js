@@ -1,5 +1,6 @@
 const JobOrder = require('../models/JobOrder');
 const common = require('../utils/common');
+const { mastersOfItems } = require('../utils/jobOrderItems');
 const { FIXED_STEPS } = require('../constants/stepConstants');
 const { DASHBOARD_LIMITS, WORK_STATES } = require('../constants/dashboardConstants');
 
@@ -12,7 +13,7 @@ const { DASHBOARD_LIMITS, WORK_STATES } = require('../constants/dashboardConstan
 const DAY_MS = 24 * 60 * 60 * 1000;
 const idOf = (value) => String(value);
 
-const WORK_FIELDS = 'jobOrderNumber masters.name masters.values.valueId masters.values.name masters.values.assignedAt masters.values.completeIn masters.values.dueAt masters.values.assignedTo.userId masters.values.assignedTo.name masters.values.assignedTo.startedAt masters.values.assignedTo.dueAt masters.values.assignedTo.step masters.values.assignedTo.history';
+const WORK_FIELDS = 'jobOrderNumber items._id items.name items.masters.name items.masters.values.valueId items.masters.values.name items.masters.values.assignedAt items.masters.values.completeIn items.masters.values.dueAt items.masters.values.assignedTo.userId items.masters.values.assignedTo.name items.masters.values.assignedTo.startedAt items.masters.values.assignedTo.dueAt items.masters.values.assignedTo.step items.masters.values.assignedTo.history';
 
 // The job orders worth reading: someone's work isn't completed, or a step
 // changed since `since` (for "completed this week" and the latest activity).
@@ -23,8 +24,8 @@ const workFilterOf = ({ vendorId, userId = null, since }) => {
             vendorId,
             status: 'A',
             $or: [
-                { 'masters.values.assignedTo': { $elemMatch: { ...person, 'step.fixedStep': { $ne: FIXED_STEPS.COMPLETED } } } },
-                { 'masters.values.assignedTo': { $elemMatch: { ...person, 'step.at': { $gte: since } } } }
+                { 'items.masters.values.assignedTo': { $elemMatch: { ...person, 'step.fixedStep': { $ne: FIXED_STEPS.COMPLETED } } } },
+                { 'items.masters.values.assignedTo': { $elemMatch: { ...person, 'step.at': { $gte: since } } } }
             ]
         };
     } catch (err) {
@@ -32,14 +33,14 @@ const workFilterOf = ({ vendorId, userId = null, since }) => {
     }
 };
 
-// Everyone's work on these job orders, one entry per person per value:
+// Everyone's work on these job orders, one entry per person per value per item:
 // its state now (notStarted / inProgress / onHold / completed) and whether
 // it is past its due time.
 const workItemsOf = (jobOrders, now) => {
     try {
         const items = [];
         for (const jobOrder of jobOrders) {
-            for (const master of jobOrder.masters) {
+            for (const { itemId, itemLabel, master } of mastersOfItems(jobOrder.items)) {
                 for (const value of master.values) {
                     for (const person of value.assignedTo || []) {
                         const fixedStep = person.step?.fixedStep;
@@ -51,6 +52,8 @@ const workItemsOf = (jobOrders, now) => {
                         items.push({
                             jobOrderId: jobOrder._id,
                             jobOrderNumber: jobOrder.jobOrderNumber,
+                            itemId,
+                            itemLabel,
                             masterName: master.name,
                             valueId: value.valueId,
                             valueName: value.name,
@@ -134,7 +137,7 @@ const getDashboard = async ({ vendorId }) => {
             for (const entry of item.history) {
                 if (new Date(entry.at) < activitySince) continue;
                 activity.push({
-                    jobOrderId: item.jobOrderId, jobOrderNumber: item.jobOrderNumber, valueName: item.valueName, userName: item.userName,
+                    jobOrderId: item.jobOrderId, jobOrderNumber: item.jobOrderNumber, itemLabel: item.itemLabel, valueName: item.valueName, userName: item.userName,
                     step: { name: entry.name, fixedStep: entry.fixedStep, percent: entry.percent, holdReason: entry.holdReason }, at: entry.at
                 });
             }

@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const JobOrder = require('../models/JobOrder');
 const Counter = require('../models/Counter');
 const common = require('../utils/common');
@@ -15,15 +16,16 @@ const { jobOrderSettingsOf } = require('./companySettingsService');
 const { assignedCountryIdsOf, isTaxOn, taxReadyCountryIds, loadCountries, detailsByCountry } = require('./taxSettingsService');
 const { LIVE_STATUSES, CASE_INSENSITIVE_COLLATION } = require('../constants/masterConstants');
 const { CONTROL_TYPES, PRICE_PATTERN } = require('../constants/controlConstants');
-const { SHORT_NAME_PLACES, AUTO_NUMBER_PREFIX, AUTO_NUMBER_DIGITS, ANSWER_MAX_LENGTH } = require('../constants/jobOrderConstants');
+const { SHORT_NAME_PLACES, AUTO_NUMBER_PREFIX, AUTO_NUMBER_DIGITS, ANSWER_MAX_LENGTH, DEFAULT_ITEMS_ALLOWED } = require('../constants/jobOrderConstants');
 const { addDuration } = require('../utils/days');
 const { WORK_TIME_STARTS, WORK_TIME_CHANGE_FROM, FIXED_STEPS } = require('../constants/stepConstants');
 const { FEATURE_FLAGS } = require('../constants/featureConstants');
 const { IMAGE_FORMATS, IMAGE_FORMAT_VALUES, IMAGE_MODULES, MAX_IMAGES_PER_REQUEST } = require('../constants/storageConstants');
 
-// The vendor's job orders. A job order is the masters picked and controls
-// answered on the job order form, the customer's address (when asked) and
-// the money: every price, the tax and the total. Everything is checked and
+// The vendor's job orders. A job order is the customer (when asked), one or
+// more items - each with its job name, the masters picked, the controls
+// answered and its images - and the money: every price of every item, the
+// tax and the total. Everything is checked and
 // worked out here from the current masters, controls, countries and rates -
 // whatever the browser shows is only a preview - and names are copied in.
 //
@@ -31,16 +33,18 @@ const { IMAGE_FORMATS, IMAGE_FORMAT_VALUES, IMAGE_MODULES, MAX_IMAGES_PER_REQUES
 // charged only on prices marked "Include this price in tax", and only in a
 // country the vendor is registered in (tax ready).
 //
-// Images come as files with Create / Save. Every file is checked before any
+// Images come as files with Create / Save, item after item (each item says
+// how many are its own). Every file is checked before any
 // is stored; if storing or saving fails, the files stored for it are removed
 // again, and images taken off a job order are removed once it is saved.
 //
 // Work: each picked value of a role master can be given to people who have
-// that value (see workAssignmentService). On edit, people already given a
-// value may stay even if they no longer have it.
+// that value (see workAssignmentService), per item. On edit, people already
+// given a value may stay even if they no longer have it, and an item keeps
+// its _id (so its work keeps its progress).
 
 const LIVE = { $in: LIVE_STATUSES };
-const LIST_FIELDS = '_id jobOrderNumber customer.name customer.phone customer.countryName customer.stateName customer.cityName currency subtotal tax.isApplied tax.amount total createdAt updatedAt masters.values.assignedTo.step.fixedStep';
+const LIST_FIELDS = '_id jobOrderNumber customer.name customer.phone customer.countryName customer.stateName customer.cityName currency subtotal tax.isApplied tax.amount total createdAt updatedAt items.name items.masters.values.assignedTo.step.fixedStep';
 const COUNTER_KEY = 'jobOrder';
 
 const idOf = (value) => (value ? String(value) : null);
@@ -67,19 +71,22 @@ const imageRulesOf = (websiteMasterData, companyMasterData) => {
     }
 };
 
-// Field errors ('images') for new files, before anything is stored.
-const checkImages = ({ rules, files, keptCount, companyMasterData }) => {
+// Field errors ('items.<index>.images') for new files, before anything is
+// stored. fileItems: the item index of each file. The limit counts the
+// images of all items together.
+const checkImages = ({ rules, files, fileItems, keptCount, companyMasterData }) => {
     try {
         if (files.length === 0) return [];
-        if (!rules.isOn) return [{ field: 'images', message: 'Adding images is not available for your account.' }];
+        const fieldOf = (fileIndex) => `items.${fileItems[fileIndex]}.images`;
+        if (!rules.isOn) return [{ field: fieldOf(files.length - 1), message: 'Adding images is not available for your account.' }];
         const errors = [];
         if (keptCount + files.length > rules.maxCount) {
-            errors.push({ field: 'images', message: `At most ${rules.maxCount} ${rules.maxCount === 1 ? 'image' : 'images'} per job order.` });
+            errors.push({ field: fieldOf(files.length - 1), message: `At most ${rules.maxCount} ${rules.maxCount === 1 ? 'image' : 'images'} per job order (all items together).` });
         }
-        for (const file of files) {
+        files.forEach((file, index) => {
             const check = imageUploadService.validateImage(file, companyMasterData, { allowedMimeTypes: rules.mimeTypes });
-            if (!check.isSuccess) errors.push({ field: 'images', message: `${file.originalname.slice(0, 80)}: ${check.message}` });
-        }
+            if (!check.isSuccess) errors.push({ field: fieldOf(index), message: `${file.originalname.slice(0, 80)}: ${check.message}` });
+        });
         return errors;
     } catch (err) {
         throw err;
@@ -120,6 +127,41 @@ const storeImages = async ({ vendorId, userId, files, rules, companyMasterData, 
     }
 };
 
+// Which images each item keeps (the job order's own, each once) and which
+// are taken off, and which item each new file is for. { errors } or the plan.
+const planImages = ({ items, currentImages = [], fileCount }) => {
+    try {
+        const byId = new Map(currentImages.map((image) => [String(image.imageId), image]));
+        const used = new Set();
+        const keptByItem = items.map((item) => item.keepImageIds.filter((imageId) => {
+            if (!byId.has(imageId) || used.has(imageId)) return false;
+            used.add(imageId);
+            return true;
+        }).map((imageId) => byId.get(imageId)));
+        const fileItems = items.flatMap((item, index) => Array(item.newImageCount).fill(index));
+        if (fileItems.length !== fileCount) return { errors: [{ field: 'items', message: "The images sent don't match the items. Please try again." }] };
+        return {
+            keptByItem,
+            keptCount: used.size,
+            removed: currentImages.filter((image) => !used.has(String(image.imageId))),
+            fileItems
+        };
+    } catch (err) {
+        throw err;
+    }
+};
+
+// The images of each item: the kept ones, then its new ones (stored in file order).
+const imagesByItem = ({ plan, storedImages }) => {
+    try {
+        const images = plan.keptByItem.map((kept) => [...kept]);
+        storedImages.forEach((image, index) => images[plan.fileItems[index]].push(image));
+        return images;
+    } catch (err) {
+        throw err;
+    }
+};
+
 // ---- what the form needs ----------------------------------------------------
 
 // The masters and controls the job order gets (each only while its feature
@@ -148,6 +190,8 @@ const loadFormParts = async ({ vendorId, websiteMasterData, companyMasterData, c
             settings: {
                 ...settings,
                 useShortNames: [SHORT_NAME_PLACES.JOB_ORDER, SHORT_NAME_PLACES.BOTH].includes(settings.useShortNamesOn),
+                // How many items one job order may have (CompanyMaster).
+                maxItems: companyMasterData?.numberOfItemsAllowedToAddInJobOrder ?? DEFAULT_ITEMS_ALLOWED,
                 // Name, phone and email asked (and the customer saved): the Customers feature.
                 askCustomerContact: access[FEATURE_FLAGS.CUSTOMERS] === true,
                 // What newly given work's time starts on (steps off = when given).
@@ -255,9 +299,9 @@ const timingOf = ({ assignees, completeIn, before, now, timeStartsOn, changeCoun
     }
 };
 
-// The masters picked: field errors by master, and what to store.
-// previous: valueId -> the value as saved before (on edit).
-const pickMasters = (masters, input, workers, previous, { workTimeStartsOn: timeStartsOn, workTimeChangeCountsFrom: changeCountsFrom }) => {
+// The masters picked on one item: field errors by master ("<prefix>masters.<id>"),
+// and what to store. previous: valueId -> the value as saved before on this item (on edit).
+const pickMasters = (masters, input, workers, previous, { workTimeStartsOn: timeStartsOn, workTimeChangeCountsFrom: changeCountsFrom }, prefix) => {
     try {
         const errors = [];
         const now = new Date();
@@ -266,13 +310,13 @@ const pickMasters = (masters, input, workers, previous, { workTimeStartsOn: time
         const workerById = new Map(workers.map((worker) => [String(worker._id), worker]));
         const known = new Set(masters.map((master) => String(master._id)));
         for (const masterId of picked.keys()) {
-            if (!known.has(masterId)) errors.push({ field: `masters.${masterId}`, message: 'This list is no longer available. Please reload the page.' });
+            if (!known.has(masterId)) errors.push({ field: `${prefix}masters.${masterId}`, message: 'This list is no longer available. Please reload the page.' });
         }
 
         const stored = [];
         for (const master of masters) {
             const masterId = String(master._id);
-            const field = `masters.${masterId}`;
+            const field = `${prefix}masters.${masterId}`;
             const valueIds = picked.get(masterId) || [];
             const valueById = new Map(master.values.map((value) => [String(value._id), value]));
             if (valueIds.some((valueId) => !valueById.has(valueId))) {
@@ -324,20 +368,21 @@ const pickMasters = (masters, input, workers, previous, { workTimeStartsOn: time
     }
 };
 
-// The controls answered: field errors by control, and what to store.
-const answerControls = (controls, input) => {
+// The controls answered on one item: field errors by control ("<prefix>controls.<id>"),
+// and what to store.
+const answerControls = (controls, input, prefix) => {
     try {
         const errors = [];
         const answers = new Map(input.map((entry) => [entry.controlId, entry]));
         const known = new Set(controls.map((control) => String(control._id)));
         for (const controlId of answers.keys()) {
-            if (!known.has(controlId)) errors.push({ field: `controls.${controlId}`, message: 'This field is no longer available. Please reload the page.' });
+            if (!known.has(controlId)) errors.push({ field: `${prefix}controls.${controlId}`, message: 'This field is no longer available. Please reload the page.' });
         }
 
         const stored = [];
         for (const control of controls) {
             const controlId = String(control._id);
-            const field = `controls.${controlId}`;
+            const field = `${prefix}controls.${controlId}`;
             const answer = answers.get(controlId) || {};
             const base = { controlId: control._id, type: control.type, label: control.label };
 
@@ -459,26 +504,53 @@ const workOutMoney = ({ parts, prices, taxCountry, customerStateId, taxId }) => 
     }
 };
 
-// Everything checked and worked out: { errors } or { doc } (without the number).
-// current: the job order being edited (its masters), or null.
+// Each item checked: field errors ("items.<index>.…") and what to store (images
+// added later). A saved item keeps its _id; a new one gets one now, so the
+// work on it can be told apart before it is saved.
+const buildItems = (parts, inputs, current) => {
+    try {
+        const errors = [];
+        const limit = Math.max(parts.settings.maxItems, current?.items.length || 0);
+        if (inputs.length > limit) {
+            errors.push({ field: 'items', message: `At most ${parts.settings.maxItems} ${parts.settings.maxItems === 1 ? 'item' : 'items'} per job order.` });
+        }
+        const savedById = new Map((current?.items || []).map((item) => [String(item._id), item]));
+        const items = inputs.map((input, index) => {
+            const prefix = `items.${index}.`;
+            const saved = input.itemId ? savedById.get(input.itemId) : null;
+            if (input.itemId && !saved) errors.push({ field: `${prefix}name`, message: 'This item is no longer on the job order. Please reload the page.' });
+            const previous = new Map();
+            for (const master of saved?.masters || []) {
+                for (const value of master.values) previous.set(String(value.valueId), value);
+            }
+            const masters = pickMasters(parts.masters, input.masters, parts.workers, previous, parts.settings, prefix);
+            const controls = answerControls(parts.controls, input.controls, prefix);
+            errors.push(...masters.errors, ...controls.errors);
+            return { _id: saved?._id ?? new mongoose.Types.ObjectId(), name: input.name, masters: masters.stored, controls: controls.stored };
+        });
+        return { errors, items };
+    } catch (err) {
+        throw err;
+    }
+};
+
+// Everything checked and worked out: { errors } or { doc } (without the
+// number; the items without their images). current: the job order being
+// edited (its items), or null.
 const buildJobOrder = (parts, data, current = null) => {
     try {
-        const previous = new Map();
-        for (const master of current?.masters || []) {
-            for (const value of master.values) previous.set(String(value.valueId), value);
-        }
-        const masters = pickMasters(parts.masters, data.masters, parts.workers, previous, parts.settings);
-        const controls = answerControls(parts.controls, data.controls);
+        const items = buildItems(parts, data.items, current);
         const customer = customerOf(parts, data.customer);
 
         const countryId = customer.stored.countryId ? String(customer.stored.countryId) : (parts.countries.length === 1 ? String(parts.countries[0]._id) : null);
         const taxCountry = countryId ? parts.countries.find((c) => String(c._id) === countryId) : null;
-        const prices = controls.stored.filter((c) => c.isPrice).map((c) => ({ amount: c.amount, isTaxed: c.isPriceIncludedInTax }));
+        // Every price of every item.
+        const prices = items.items.flatMap((item) => item.controls).filter((c) => c.isPrice).map((c) => ({ amount: c.amount, isTaxed: c.isPriceIncludedInTax }));
         const money = workOutMoney({ parts, prices, taxCountry, customerStateId: idOf(customer.stored.stateId), taxId: data.taxId });
 
-        const errors = [...masters.errors, ...controls.errors, ...customer.errors, ...money.errors];
+        const errors = [...items.errors, ...customer.errors, ...money.errors];
         if (errors.length > 0) return { errors };
-        return { doc: { customer: customer.stored, masters: masters.stored, controls: controls.stored, ...money.stored } };
+        return { doc: { customer: customer.stored, items: items.items, ...money.stored } };
     } catch (err) {
         throw err;
     }
@@ -526,18 +598,22 @@ const createJobOrder = async ({ userId, data, files = [], ...vendorData }) => {
         const rules = imageRulesOf(websiteMasterData, companyMasterData);
         const { errors, doc } = buildJobOrder(parts, data);
         const numberError = !isAuto && !data.jobOrderNumber ? [{ field: 'jobOrderNumber', message: 'Enter the job order number' }] : [];
-        const imageErrors = checkImages({ rules, files, keptCount: 0, companyMasterData });
+        // A new job order has no images of its own to keep.
+        const plan = planImages({ items: data.items.map((item) => ({ ...item, keepImageIds: [] })), fileCount: files.length });
+        const imageErrors = plan.errors || checkImages({ rules, files, fileItems: plan.fileItems, keptCount: 0, companyMasterData });
         if (numberError.length > 0 || errors || imageErrors.length > 0) return invalid([...numberError, ...(errors || []), ...imageErrors]);
 
         const stored = files.length > 0 ? await storeImages({ vendorId, userId, files, rules, companyMasterData, websiteMasterData }) : { images: [] };
         if (stored.failure) return stored.failure;
+        const images = imagesByItem({ plan, storedImages: stored.images });
+        doc.items.forEach((item, index) => { item.images = images[index]; });
 
         doc.customerId = await savedCustomerIdOf({ vendorId, userId, parts, customer: doc.customer });
         let jobOrder;
         let jobOrderNumber = data.jobOrderNumber;
         try {
             if (isAuto) jobOrderNumber = await nextJobOrderNumber(vendorId);
-            jobOrder = await JobOrder.create({ vendorId, jobOrderNumber, ...doc, images: stored.images });
+            jobOrder = await JobOrder.create({ vendorId, jobOrderNumber, ...doc });
         } catch (err) {
             await removeImages({ vendorId, userId, images: stored.images });
             const duplicate = duplicateResult(err, jobOrderNumber);
@@ -545,7 +621,7 @@ const createJobOrder = async ({ userId, data, files = [], ...vendorData }) => {
             throw err;
         }
         notificationService.inBackground('Announcing a new job order failed', () => notificationService.announceJobOrderSaved({
-            vendorId, jobOrderId: jobOrder._id, jobOrderNumber, after: doc.masters
+            vendorId, jobOrderId: jobOrder._id, jobOrderNumber, after: doc.items
         }));
         return common.returnResult(true, 201, `Job order ${jobOrderNumber} created.`, { jobOrder: { _id: jobOrder._id, jobOrderNumber } });
     } catch (err) {
@@ -559,25 +635,25 @@ const updateJobOrder = async ({ userId, id, data, files = [], ...vendorData }) =
     try {
         const { vendorId, websiteMasterData, companyMasterData } = vendorData;
         const [current, parts] = await Promise.all([
-            JobOrder.findOne({ _id: id, vendorId, status: LIVE }).select('jobOrderNumber images masters').lean(),
+            JobOrder.findOne({ _id: id, vendorId, status: LIVE }).select('jobOrderNumber items').lean(),
             loadFormParts(vendorData)
         ]);
         if (!current) return common.returnResult(false, 404, 'Job order not found.');
 
-        // Images not listed in keepImageIds are taken off (also while the feature is off).
-        const keep = new Set(data.keepImageIds);
-        const kept = current.images.filter((image) => keep.has(String(image.imageId)));
-        const removed = current.images.filter((image) => !keep.has(String(image.imageId)));
+        // Images no item keeps are taken off (also while the feature is off).
+        const plan = planImages({ items: data.items, currentImages: current.items.flatMap((item) => item.images), fileCount: files.length });
 
         const isAuto = parts.settings.isJobOrderNumberAutoGenerated;
         const rules = imageRulesOf(websiteMasterData, companyMasterData);
         const { errors, doc } = buildJobOrder(parts, data, current);
         const numberError = !isAuto && !data.jobOrderNumber ? [{ field: 'jobOrderNumber', message: 'Enter the job order number' }] : [];
-        const imageErrors = checkImages({ rules, files, keptCount: kept.length, companyMasterData });
+        const imageErrors = plan.errors || checkImages({ rules, files, fileItems: plan.fileItems, keptCount: plan.keptCount, companyMasterData });
         if (numberError.length > 0 || errors || imageErrors.length > 0) return invalid([...numberError, ...(errors || []), ...imageErrors]);
 
         const stored = files.length > 0 ? await storeImages({ vendorId, userId, files, rules, companyMasterData, websiteMasterData }) : { images: [] };
         if (stored.failure) return stored.failure;
+        const images = imagesByItem({ plan, storedImages: stored.images });
+        doc.items.forEach((item, index) => { item.images = images[index]; });
 
         doc.customerId = await savedCustomerIdOf({ vendorId, userId, parts, customer: doc.customer });
         const jobOrderNumber = isAuto ? current.jobOrderNumber : data.jobOrderNumber;
@@ -585,7 +661,7 @@ const updateJobOrder = async ({ userId, id, data, files = [], ...vendorData }) =
         try {
             jobOrder = await JobOrder.findOneAndUpdate(
                 { _id: id, vendorId, status: LIVE },
-                { $set: { jobOrderNumber, ...doc, images: [...kept, ...stored.images] } },
+                { $set: { jobOrderNumber, ...doc } },
                 { returnDocument: 'after', runValidators: true, auditUserId: userId, projection: { _id: 1, jobOrderNumber: 1 } }
             ).lean();
         } catch (err) {
@@ -598,9 +674,9 @@ const updateJobOrder = async ({ userId, id, data, files = [], ...vendorData }) =
             await removeImages({ vendorId, userId, images: stored.images });
             return common.returnResult(false, 404, 'Job order not found.');
         }
-        if (removed.length > 0) await removeImages({ vendorId, userId, images: removed });
+        if (plan.removed.length > 0) await removeImages({ vendorId, userId, images: plan.removed });
         notificationService.inBackground('Announcing a saved job order failed', () => notificationService.announceJobOrderSaved({
-            vendorId, jobOrderId: jobOrder._id, jobOrderNumber, before: current.masters, after: doc.masters
+            vendorId, jobOrderId: jobOrder._id, jobOrderNumber, before: current.items, after: doc.items
         }));
         return common.returnResult(true, 200, `Job order ${jobOrderNumber} saved.`, { jobOrder });
     } catch (err) {
@@ -609,12 +685,12 @@ const updateJobOrder = async ({ userId, id, data, files = [], ...vendorData }) =
 };
 
 // How the work given on a job order is going, for the list: how many people
-// were given work, how many completed it, are on hold or have started
-// (null when nobody was given any).
-const workSummaryOf = (masters = []) => {
+// were given work (on every item), how many completed it, are on hold or
+// have started (null when nobody was given any).
+const workSummaryOf = (items = []) => {
     try {
         const summary = { people: 0, completed: 0, onHold: 0, started: 0 };
-        for (const master of masters) {
+        for (const master of items.flatMap((item) => item.masters || [])) {
             for (const value of master.values || []) {
                 for (const person of value.assignedTo || []) {
                     summary.people++;
@@ -631,22 +707,26 @@ const workSummaryOf = (masters = []) => {
     }
 };
 
-// GET /api/job-orders - newest first; search by number, customer name /
-// phone / email or place;
-// each with how its work is going (workSummaryOf).
+// GET /api/job-orders - newest first; search by number, job name, customer
+// name / phone / email or place; each with its items' job names (each once)
+// and how its work is going (workSummaryOf).
 const listJobOrders = async ({ vendorId, search, page, limit }) => {
     try {
         const filter = { vendorId, status: 'A' };
         if (search) {
             const pattern = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-            filter.$or = [{ jobOrderNumber: pattern }, { 'customer.name': pattern }, { 'customer.phone': pattern }, { 'customer.email': pattern }, { 'customer.cityName': pattern }, { 'customer.stateName': pattern }, { 'customer.countryName': pattern }];
+            filter.$or = [{ jobOrderNumber: pattern }, { 'items.name': pattern }, { 'customer.name': pattern }, { 'customer.phone': pattern }, { 'customer.email': pattern }, { 'customer.cityName': pattern }, { 'customer.stateName': pattern }, { 'customer.countryName': pattern }];
         }
         const [total, jobOrders] = await Promise.all([
             JobOrder.countDocuments(filter),
             JobOrder.find(filter).select(LIST_FIELDS).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean()
         ]);
         return common.returnResult(true, 200, 'Job orders fetched successfully.', {
-            jobOrders: jobOrders.map(({ masters, ...jobOrder }) => ({ ...jobOrder, work: workSummaryOf(masters) })),
+            jobOrders: jobOrders.map(({ items = [], ...jobOrder }) => ({
+                ...jobOrder,
+                jobNames: [...new Set(items.map((item) => item.name).filter(Boolean))],
+                work: workSummaryOf(items)
+            })),
             pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
         });
     } catch (err) {
@@ -672,9 +752,9 @@ const cancelJobOrder = async ({ vendorId, userId, id }) => {
     try {
         const result = await common.softDelete(JobOrder, id, userId, vendorId);
         if (!result.isSuccess) return result.statusCode === 404 ? common.returnResult(false, 404, 'Job order not found.') : result;
-        const { _id: jobOrderId, jobOrderNumber, masters } = result.meta.document;
+        const { _id: jobOrderId, jobOrderNumber, items } = result.meta.document;
         notificationService.inBackground('Announcing a cancelled job order failed', () => notificationService.announceJobOrderSaved({
-            vendorId, jobOrderId, jobOrderNumber, before: masters, isCancelled: true
+            vendorId, jobOrderId, jobOrderNumber, before: items, isCancelled: true
         }));
         return common.returnResult(true, 200, `Job order ${jobOrderNumber} cancelled.`);
     } catch (err) {

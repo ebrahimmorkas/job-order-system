@@ -1,12 +1,13 @@
 import { formatMoney } from '../jobOrderTotals';
 
 /**
- * The summary under a job order: every master and control filled in, then
+ * The summary under a job order: every master and control filled in (item
+ * after item, each under its heading when there are several), then
  * the prices, subtotal, tax (with its split) and total. Used by the form
  * (live, as the owner types) and by the saved job order's view.
  *
  * @param {Object} props
- * @param {Array<{ key: string, label: string, value?: string, isPrice?: boolean, amount?: number, isTaxed?: boolean }>} props.rows
+ * @param {Array<{ key: string, label?: string, heading?: string, value?: string, isPrice?: boolean, amount?: number, isTaxed?: boolean }>} props.rows
  * @param {Object|null} props.currency - { code, symbol, decimalPlaces }
  * @param {number} props.subtotal
  * @param {{ isApplied, reason, name, components: Array<{ label, rate, amount }>, taxableAmount, amount }} props.tax
@@ -22,12 +23,16 @@ const JobOrderSummary = ({ rows, currency, subtotal, tax, total, showAmounts = t
     <div className="space-y-4">
       {details.length > 0 ? (
         <dl className="divide-y divide-gray-100 rounded-lg border border-gray-200">
-          {details.map((row) => (
+          {details.map((row) => (row.heading ? (
+            <div key={row.key} className="bg-gray-50 px-4 py-2 first:rounded-t-lg">
+              <dt className="text-sm font-semibold text-gray-800 break-words">{row.heading}</dt>
+            </div>
+          ) : (
             <div key={row.key} className="grid grid-cols-1 gap-1 px-4 py-2.5 sm:grid-cols-3 sm:gap-4">
               <dt className="text-sm text-gray-500 break-words">{row.label}</dt>
               <dd className="text-sm text-gray-900 break-words sm:col-span-2 whitespace-pre-line">{row.value}</dd>
             </div>
-          ))}
+          )))}
         </dl>
       ) : (
         <p className="text-sm text-gray-400">Nothing filled in yet.</p>

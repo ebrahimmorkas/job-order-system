@@ -82,6 +82,7 @@ const OwnerDashboard = () => {
       render: (item) => (
         <span className="break-words">
           <span className="text-gray-900">{item.valueName}</span> <span className="text-xs text-gray-500">{item.masterName}</span>
+          {item.itemLabel && <> <span className="text-xs text-indigo-600">{item.itemLabel}</span></>}
         </span>
       ),
     },
@@ -122,7 +123,7 @@ const OwnerDashboard = () => {
         <Table
           columns={columns}
           data={data.working}
-          getRowKey={(item) => `${item.jobOrderId}-${item.valueId}-${item.userId}`}
+          getRowKey={(item) => `${item.jobOrderId}-${item.itemId}-${item.valueId}-${item.userId}`}
           pageSize={null}
           hoverable
           emptyComponent={<EmptyState title="Nobody has open work" description="Work given on job orders shows here until it is completed." size="sm" />}
@@ -143,7 +144,7 @@ const OwnerDashboard = () => {
                 <span className="mt-0.5 shrink-0"><StepBadge step={entry.step} /></span>
                 <div className="min-w-0 text-sm">
                   <p className="text-gray-900 break-words">
-                    <span className="font-medium">{entry.userName}</span> · {entry.valueName} on {openJobOrder
+                    <span className="font-medium">{entry.userName}</span> · {entry.valueName}{entry.itemLabel && ` (${entry.itemLabel})`} on {openJobOrder
                       ? <button type="button" onClick={() => openJobOrder(entry.jobOrderId)} className="font-medium text-indigo-600 hover:text-indigo-800 cursor-pointer">{entry.jobOrderNumber}</button>
                       : entry.jobOrderNumber}
                   </p>

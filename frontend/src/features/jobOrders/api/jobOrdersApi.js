@@ -35,14 +35,15 @@ const withImages = (data, files) => {
 };
 
 /**
- * data: { jobOrderNumber?, customer: { countryId, stateId, cityId, postalCode, address },
- * masters: [{ masterId, valueIds }], controls: [{ controlId, text?, checked?, optionId? }], taxId }
- * files: new images (File[])
+ * data: { jobOrderNumber?, customer: { name, phone, email, countryId, stateId, cityId, postalCode, address },
+ * items: [{ itemId?, name, masters: [{ masterId, valueIds, assignments }], controls: [{ controlId, text?, checked?, optionId? }],
+ * keepImageIds, newImageCount }], taxId }
+ * files: new images (File[]), item after item (each item's newImageCount says how many are its own)
  * @returns {Promise<{ jobOrder: { _id, jobOrderNumber } }>}
  */
 export const createJobOrder = (data, files = []) => apiRequest(BASE, { method: 'POST', body: withImages(data, files) });
 
-/** Same as createJobOrder, plus data.keepImageIds: the saved images to keep (the rest are removed). */
+/** Same as createJobOrder; each item's keepImageIds lists the saved images it keeps (the rest are removed). */
 export const updateJobOrder = (id, data, files = []) => apiRequest(`${BASE}/${id}`, { method: 'PUT', body: withImages(data, files) });
 
 export const cancelJobOrder = (id) => apiRequest(`${BASE}/${id}`, { method: 'DELETE' });

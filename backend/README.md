@@ -70,6 +70,9 @@ it (`GET /api/feature-access`). The flags are listed in
 | Steps of assigned work | `isStepFeatureOn` | `steps` and optional limit `numberOfStepsAllowed` (see Steps of assigned work) |
 | Customers | `isCustomersFeatureOn` (WebsiteMaster default on, CompanyMaster default off) | nothing (see Customers) |
 
+Not a switch: `numberOfItemsAllowedToAddInJobOrder` (CompanyMaster, default
+1, at most 50) - how many items one job order may have (see Job orders).
+
 `CompanyMaster.fetchMastersEvenWhenBitIsOff` (default false) only matters while
 the vendor's `isMasterModuleFeatureOn` is off: the Masters page stays hidden and
 every master action stays blocked, except `GET /api/masters/for-job-order`, so
@@ -283,8 +286,8 @@ progress...). Set by the platform owner in CompanyMaster (no screens):
   (`services/stepService.js`).
 - Each person has their own step (any step, any time), `startedAt` (their
   first step change) and `history` (newest last, at most 100), saved on
-  `masters.values.assignedTo`. An edit of the job order keeps everyone's
-  progress; someone given the work again starts fresh.
+  `items.masters.values.assignedTo`. An edit of the job order keeps everyone's
+  progress (an item keeps its `_id`); someone given the work again starts fresh.
 - When the completion time starts - Company Settings `workTimeStartsOn`
   (only while steps are on; otherwise always when given): `onAssign` - when
   the work is given (one `dueAt` on the value); `onFirstStep` - from each
@@ -351,10 +354,26 @@ whose roles give Job Orders permissions, creates, edits and cancels them.
   default rate and business state, and the job order settings.
 - Saved: `jobOrderNumber`, the customer (name, phone and email while
   Customers is on; the address while it is asked) and `customerId` (the saved
-  customer, see Customers), every master picked and
-  control answered, `currency`, `subtotal`, `tax` (`isApplied`, `reason` when
-  not, rate, `components`, `taxableAmount`, `amount`) and `total`. Names are
-  copied in, so an old job order still shows what was picked that day.
+  customer, see Customers), the `items`, `currency`, `subtotal`, `tax`
+  (`isApplied`, `reason` when not, rate, `components`, `taxableAmount`,
+  `amount`) and `total`. Names are copied in, so an old job order still shows
+  what was picked that day.
+- Items: one customer, several things to do - e.g. one glass cut round and
+  one cut square. Each item (`items: [{ _id, name, masters, controls, images }]`)
+  has its own optional job name (at most 100 characters), masters picked,
+  controls answered, images and work. At least one; at most CompanyMaster
+  `numberOfItemsAllowedToAddInJobOrder` (default 1; form data
+  `settings.maxItems`). A saved job order keeps its items when the limit is
+  lowered, but can't get more. The subtotal, tax and total add up the prices
+  of every item. An item keeps its `_id` on edit (sent back as `itemId`), so
+  the work on it keeps its progress; an item left out is removed (its work
+  taken away). My work, steps, notifications and the dashboard name the item
+  when there are several ("Cut (Item 2 · Square glass)", `utils/jobOrderItems.js`).
+  Print shows the first item for now.
+- Job orders made before items: `node scripts/migrateJobOrderItems.js`
+  (shows what changes), then with `--apply` - each one's masters, controls
+  and images become its one item, and the work indexes are swapped. Run it
+  once, with the server stopped.
 - Assigning work (`services/workAssignmentService.js`): each picked value of
   a master ticked "Role will be provided" can be given to any number of
   people (optional, at most 20). Offered (form data: `workers`, each value's
@@ -400,11 +419,13 @@ whose roles give Job Orders permissions, creates, edits and cancels them.
     vendor's CompanyMaster.
   - CompanyMaster limits (null = no limit of the vendor's own; the server
     still takes at most 50 images per job order and 20 MB per image):
-    `numberOfImageUploadAllowed` (per job order), `maxImageUploadSizeMB` (the
+    `numberOfImageUploadAllowed` (per job order, all items together), `maxImageUploadSizeMB` (the
     same limit as the logo) and `imageFormatsAllowed` (some of `jpeg`, `png`,
     `webp`, `gif`; checked by the file's real content).
   - Sent with Create / Save as multipart: the job order JSON in `data`, new
-    files in `images`; on edit `keepImageIds` lists the saved images to keep.
+    files in `images`, item after item (each item's `newImageCount` says how
+    many are its own); on edit each item's `keepImageIds` lists the saved
+    images it keeps (an image may move to another item).
     Every file is checked before any is stored; if storing or saving fails,
     what was stored is removed again. Images taken off are deleted from the
     storage after the save. With the feature off, saved images can still be
@@ -576,7 +597,7 @@ too (see Users logging in) - except Layout Master, which stays owner only.
 | GET | `/api/my-work/summary` | user, RBAC on - their own dashboard: totals and what is due next |
 | GET | `/api/dashboard` | owner (users: Dashboard) - the company dashboard (see Dashboard) |
 | GET | `/api/my-work/:id` | user, RBAC on - one of them, read only, without money, with their work, history and the vendor's `steps` |
-| PATCH | `/api/my-work/:id/step` | user, RBAC and steps on - `{ valueId, stepKey, percent (In progress), holdReason (Hold) }` |
+| PATCH | `/api/my-work/:id/step` | user, RBAC and steps on - `{ itemId, valueId, stepKey, percent (In progress), holdReason (Hold) }` |
 | GET | `/api/masters/for-job-order` | logged in - active masters with their active values and default, for the job order form |
 | GET / POST | `/api/masters` | owner - list (search, status, page, limit) / create with values |
 | GET / PUT / DELETE | `/api/masters/:id` | owner - one master with its values / save details and the full values list / delete |
@@ -617,17 +638,19 @@ too (see Users logging in) - except Layout Master, which stays owner only.
 | GET / PUT / DELETE | `/api/customers/:id` | owner (users: Details / Edit / Delete), Customers on - one customer / save `{ name, phone, email, address: { countryId, stateId, cityId, postalCode, address } }` / delete |
 | POST | `/api/customers/bulk` | owner (users: Customers Delete), Customers on - `{ action: delete, ids }` |
 | GET | `/api/job-orders/form-data` | owner (users: Create or Edit) - everything the job order form needs (see Job orders) |
-| GET / POST | `/api/job-orders` | owner - list, newest first (search number, customer name / phone / email or place, page, limit) / create |
+| GET / POST | `/api/job-orders` | owner - list, newest first (search number, job name, customer name / phone / email or place, page, limit), each with `jobNames` / create |
 | GET / PUT / DELETE | `/api/job-orders/:id` | owner - one job order / save it (worked out again) / cancel it |
 
 `POST` / `PUT /api/job-orders` take `{ jobOrderNumber, customer: { name, phone,
-email, countryId, stateId, cityId, postalCode, address }, masters: [{ masterId, valueIds,
-assignments: [{ valueId, userIds, completeIn: { amount, unit } | null }] }],
-controls: [{ controlId, text | checked | optionId }], taxId, keepImageIds }`
-(`taxId` null = the vendor's default rate) as JSON, or as multipart with that
-JSON in `data` and new images in `images`. Field errors are named
-`jobOrderNumber`, `customer.<field>`, `masters.<id>`, `controls.<id>`, `taxId`
-and `images`.
+email, countryId, stateId, cityId, postalCode, address }, items: [{ itemId, name,
+masters: [{ masterId, valueIds, assignments: [{ valueId, userIds, completeIn: { amount, unit } | null }] }],
+controls: [{ controlId, text | checked | optionId }], keepImageIds, newImageCount }], taxId }`
+(`itemId` null = a new item; `taxId` null = the vendor's default rate) as JSON,
+or as multipart with that JSON in `data` and new images in `images`. Field
+errors are named `jobOrderNumber`, `customer.<field>`, `items`,
+`items.<index>.name`, `items.<index>.masters.<id>`, `items.<index>.controls.<id>`,
+`items.<index>.images` and `taxId`. `PATCH /api/my-work/:id/step` takes
+`{ itemId, valueId, stepKey, percent, holdReason }`.
 
 `POST` / `PUT /api/layouts` take `{ name, paper: { size, orientation } | { size:
 'custom', widthMm, heightMm }, labelDefault, elements }`. Field errors are

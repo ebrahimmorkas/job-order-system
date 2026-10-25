@@ -112,6 +112,16 @@ const JobOrdersListPage = ({ onCreate, onView, onEdit, onPrint }) => {
       )),
     },
     {
+      key: 'jobNames',
+      label: 'Job name',
+      // Each item's job name on its own line (a name used twice shows once).
+      render: ({ jobNames }) => (jobNames?.length > 0 ? (
+        <div className="min-w-0 break-words text-gray-900">
+          {jobNames.map((name) => <p key={name}>{name}</p>)}
+        </div>
+      ) : <span className="text-gray-400">-</span>),
+    },
+    {
       key: 'customer',
       label: 'Customer',
       render: ({ customer }) => {
@@ -193,7 +203,7 @@ const JobOrdersListPage = ({ onCreate, onView, onEdit, onPrint }) => {
       <SearchInput
         value={search}
         onChange={setSearch}
-        placeholder="Search by number, customer or place"
+        placeholder="Search by number, job name, customer or place"
         ariaLabel="Search job orders"
         className="!mb-0"
       />

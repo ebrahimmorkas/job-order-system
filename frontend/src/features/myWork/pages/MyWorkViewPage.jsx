@@ -11,6 +11,8 @@ import { summaryRowsOf } from '../../jobOrders/summaryRows';
 import WorkItem from '../components/WorkItem';
 import StepChanger from '../components/StepChanger';
 import StepHistory from '../../jobOrders/components/StepHistory';
+import ImageGrid from '../../jobOrders/components/ImageGrid';
+import { itemLabelOf } from '../../jobOrders/jobOrderItems';
 import * as myWorkApi from '../api/myWorkApi';
 
 const formatDateTime = (value) => new Date(value).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -54,6 +56,7 @@ const MyWorkViewPage = ({ jobOrderId, onBack }) => {
   if (!data) return <div className="py-24 flex justify-center"><Spinner size="lg" /></div>;
 
   const { jobOrder, work, steps } = data;
+  const itemCount = jobOrder.items.length;
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -66,7 +69,7 @@ const MyWorkViewPage = ({ jobOrderId, onBack }) => {
       <Card variant="outlined" title="Your work">
         <ul className="divide-y divide-gray-100">
           {work.map((item) => (
-            <li key={item.valueId} className="py-4 first:pt-0 last:pb-0 space-y-3">
+            <li key={`${item.itemId}-${item.valueId}`} className="py-4 first:pt-0 last:pb-0 space-y-3">
               <WorkItem work={item} now={now} />
               {steps.length > 0 && (
                 <StepChanger key={item.step?.at || 'none'} jobOrderId={jobOrder._id} work={item} steps={steps} onChanged={() => setReloadKey((n) => n + 1)} />
@@ -77,17 +80,16 @@ const MyWorkViewPage = ({ jobOrderId, onBack }) => {
         </ul>
       </Card>
 
-      {jobOrder.images?.length > 0 && (
+      {jobOrder.items.some((item) => item.images.length > 0) && (
         <Card variant="outlined" title="Images">
-          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4" aria-label="Job order images">
-            {jobOrder.images.map((image, index) => (
-              <li key={image.imageId} className="aspect-square overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
-                <a href={image.url} target="_blank" rel="noopener noreferrer" title="Open full size" className="block h-full w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
-                  <img src={image.url} alt={`Image ${index + 1} of job order ${jobOrder.jobOrderNumber}`} loading="lazy" className="h-full w-full object-cover transition-transform hover:scale-105" />
-                </a>
-              </li>
+          <div className="space-y-4">
+            {jobOrder.items.map((item, itemIndex) => item.images.length > 0 && (
+              <div key={item._id} className="space-y-2">
+                {itemCount > 1 && <p className="text-sm font-medium text-gray-700 break-words">{itemLabelOf(item, itemIndex, itemCount)}</p>}
+                <ImageGrid images={item.images} altOf={(index) => `Image ${index + 1} of ${itemCount > 1 ? `item ${itemIndex + 1} of ` : ''}job order ${jobOrder.jobOrderNumber}`} />
+              </div>
             ))}
-          </ul>
+          </div>
         </Card>
       )}
 

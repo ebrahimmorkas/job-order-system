@@ -3,30 +3,35 @@ const JobOrder = require('../models/JobOrder');
 const common = require('../utils/common');
 const stepService = require('./stepService');
 const notificationService = require('./notificationService');
+const { mastersOfItems, withItemLabel } = require('../utils/jobOrderItems');
 const { addDuration } = require('../utils/days');
 const { FIXED_STEPS, WORK_TIME_STARTS, STEP_HISTORY_MAX } = require('../constants/stepConstants');
 
 // "My work": the job orders where the logged-in user was given a master
-// value's work (JobOrder masters.values.assignedTo). Read only, and without
+// value's work on an item (JobOrder items.masters.values.assignedTo). Read only, and without
 // any money - prices, the subtotal, tax and total are left out. With the
 // steps feature on, the user moves their own work through the vendor's steps.
 
 const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const idOf = (value) => String(value);
 
-const LIST_FIELDS = '_id jobOrderNumber customer.countryName customer.stateName customer.cityName masters createdAt';
-const VIEW_FIELDS = '_id jobOrderNumber customer masters controls images createdAt updatedAt';
+const MY_WORK = 'items.masters.values.assignedTo.userId';
+const LIST_FIELDS = '_id jobOrderNumber customer.countryName customer.stateName customer.cityName items._id items.name items.masters createdAt';
+const VIEW_FIELDS = '_id jobOrderNumber customer items createdAt updatedAt';
 
-// The values of a job order given to the user, each with who else does it,
-// when it is due and the user's step (withHistory: every step so far).
-const workOf = (masters, userId, { withHistory = false } = {}) => {
+// The values of a job order's items given to the user, each with its item,
+// who else does it, when it is due and the user's step (withHistory: every
+// step so far).
+const workOf = (items, userId, { withHistory = false } = {}) => {
     try {
         const work = [];
-        for (const master of masters) {
+        for (const { itemId, itemLabel, master } of mastersOfItems(items)) {
             for (const value of master.values) {
                 const me = value.assignedTo.find((person) => idOf(person.userId) === userId);
                 if (!me) continue;
                 work.push({
+                    itemId,
+                    itemLabel,
                     valueId: value.valueId,
                     masterName: master.name,
                     valueName: value.name,
@@ -48,14 +53,14 @@ const workOf = (masters, userId, { withHistory = false } = {}) => {
     }
 };
 
-// GET /api/my-work - newest first; search by number or customer place. With
+// GET /api/my-work - newest first; search by number, job name or customer place. With
 // the vendor's steps, so the list can move work too (none while steps are off).
 const listMyWork = async ({ vendorId, userId, search, page, limit, websiteMasterData, companyMasterData }) => {
     try {
-        const filter = { vendorId, 'masters.values.assignedTo.userId': userId, status: 'A' };
+        const filter = { vendorId, [MY_WORK]: userId, status: 'A' };
         if (search) {
             const pattern = new RegExp(escapeRegex(search), 'i');
-            filter.$or = [{ jobOrderNumber: pattern }, { 'customer.cityName': pattern }, { 'customer.stateName': pattern }, { 'customer.countryName': pattern }];
+            filter.$or = [{ jobOrderNumber: pattern }, { 'items.name': pattern }, { 'customer.cityName': pattern }, { 'customer.stateName': pattern }, { 'customer.countryName': pattern }];
         }
         const [total, jobOrders] = await Promise.all([
             JobOrder.countDocuments(filter),
@@ -63,7 +68,7 @@ const listMyWork = async ({ vendorId, userId, search, page, limit, websiteMaster
         ]);
         const me = idOf(userId);
         return common.returnResult(true, 200, 'Your work fetched successfully.', {
-            jobOrders: jobOrders.map(({ masters, ...jobOrder }) => ({ ...jobOrder, work: workOf(masters, me) })),
+            jobOrders: jobOrders.map(({ items, ...jobOrder }) => ({ ...jobOrder, work: workOf(items, me) })),
             pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
             steps: stepService.stepsOf(websiteMasterData, companyMasterData)
         });
@@ -76,21 +81,24 @@ const listMyWork = async ({ vendorId, userId, search, page, limit, websiteMaster
 // vendor's steps to move the work through (none while steps are off).
 const getMyWorkJobOrder = async ({ vendorId, userId, id, websiteMasterData, companyMasterData }) => {
     try {
-        const jobOrder = await JobOrder.findOne({ _id: id, vendorId, 'masters.values.assignedTo.userId': userId, status: 'A' })
+        const jobOrder = await JobOrder.findOne({ _id: id, vendorId, [MY_WORK]: userId, status: 'A' })
             .select(VIEW_FIELDS).lean();
         if (!jobOrder) return common.returnResult(false, 404, 'Job order not found.');
         return common.returnResult(true, 200, 'Job order fetched successfully.', {
             jobOrder: {
                 ...jobOrder,
-                controls: jobOrder.controls.filter((control) => !control.isPrice)
-                    .map(({ isPrice, isPriceIncludedInTax, amount, ...control }) => control),
-                // Other people's steps are theirs only.
-                masters: jobOrder.masters.map((master) => ({
-                    ...master,
-                    values: master.values.map((value) => ({ ...value, assignedTo: value.assignedTo.map(({ userId: personId, name }) => ({ userId: personId, name })) }))
+                items: jobOrder.items.map((item) => ({
+                    ...item,
+                    controls: item.controls.filter((control) => !control.isPrice)
+                        .map(({ isPrice, isPriceIncludedInTax, amount, ...control }) => control),
+                    // Other people's steps are theirs only.
+                    masters: item.masters.map((master) => ({
+                        ...master,
+                        values: master.values.map((value) => ({ ...value, assignedTo: value.assignedTo.map(({ userId: personId, name }) => ({ userId: personId, name })) }))
+                    }))
                 }))
             },
-            work: workOf(jobOrder.masters, idOf(userId), { withHistory: true }),
+            work: workOf(jobOrder.items, idOf(userId), { withHistory: true }),
             steps: stepService.stepsOf(websiteMasterData, companyMasterData)
         });
     } catch (err) {
@@ -98,7 +106,7 @@ const getMyWorkJobOrder = async ({ vendorId, userId, id, websiteMasterData, comp
     }
 };
 
-// PATCH /api/my-work/:id/step - the user moves their work on one value to a
+// PATCH /api/my-work/:id/step - the user moves their work on one value of an item to a
 // step (any step, any time). In progress takes a % (optional), Hold a reason
 // (optional). The first change is their start; when the time starts on the
 // first step, it also sets when they are due.
@@ -107,15 +115,16 @@ const setMyStep = async ({ vendorId, userId, id, data, websiteMasterData, compan
         const step = stepService.stepsOf(websiteMasterData, companyMasterData).find((entry) => entry.key === data.stepKey);
         if (!step) return common.returnResult(false, 400, 'This step is no longer available. Please reload the page.', { errors: [{ field: 'stepKey', message: 'This step is no longer available' }] });
 
-        const jobOrder = await JobOrder.findOne({ _id: id, vendorId, 'masters.values.assignedTo.userId': userId, status: 'A' })
-            .select('jobOrderNumber masters.masterId masters.values.valueId masters.values.name masters.values.completeIn masters.values.timeStartsOn masters.values.assignedTo.userId masters.values.assignedTo.name masters.values.assignedTo.startedAt')
+        const jobOrder = await JobOrder.findOne({ _id: id, vendorId, [MY_WORK]: userId, status: 'A' })
+            .select('jobOrderNumber items._id items.name items.masters.masterId items.masters.values.valueId items.masters.values.name items.masters.values.completeIn items.masters.values.timeStartsOn items.masters.values.assignedTo.userId items.masters.values.assignedTo.name items.masters.values.assignedTo.startedAt')
             .lean();
         const me = idOf(userId);
         let found = null;
-        for (const master of jobOrder?.masters || []) {
+        for (const { itemId, itemLabel, master } of mastersOfItems(jobOrder?.items)) {
+            if (idOf(itemId) !== data.itemId) continue;
             const value = master.values.find((entry) => idOf(entry.valueId) === data.valueId);
             const person = value?.assignedTo.find((entry) => idOf(entry.userId) === me);
-            if (person) found = { master, value, person };
+            if (person) found = { itemLabel, master, value, person };
         }
         if (!found) return common.returnResult(false, 404, 'This work is no longer given to you.');
 
@@ -128,7 +137,7 @@ const setMyStep = async ({ vendorId, userId, id, data, websiteMasterData, compan
             holdReason: step.fixedStep === FIXED_STEPS.HOLD ? data.holdReason ?? null : null,
             at: now
         };
-        const path = 'masters.$[m].values.$[v].assignedTo.$[p]';
+        const path = 'items.$[i].masters.$[m].values.$[v].assignedTo.$[p]';
         const set = { [`${path}.step`]: entry };
         if (!found.person.startedAt) {
             set[`${path}.startedAt`] = now;
@@ -141,6 +150,7 @@ const setMyStep = async ({ vendorId, userId, id, data, websiteMasterData, compan
             { $set: set, $push: { [`${path}.history`]: { $each: [entry], $slice: -STEP_HISTORY_MAX } } },
             {
                 arrayFilters: [
+                    { 'i._id': new mongoose.Types.ObjectId(data.itemId) },
                     { 'm.masterId': found.master.masterId },
                     { 'v.valueId': new mongoose.Types.ObjectId(data.valueId) },
                     { 'p.userId': new mongoose.Types.ObjectId(me) }
@@ -152,7 +162,7 @@ const setMyStep = async ({ vendorId, userId, id, data, websiteMasterData, compan
         );
         if (result.matchedCount === 0) return common.returnResult(false, 404, 'This work is no longer given to you.');
         notificationService.inBackground('Announcing a step change failed', () => notificationService.announceStep({
-            vendorId, jobOrderId: jobOrder._id, jobOrderNumber: jobOrder.jobOrderNumber, valueName: found.value.name, workerId: me, workerName: found.person.name, step: entry
+            vendorId, jobOrderId: jobOrder._id, jobOrderNumber: jobOrder.jobOrderNumber, valueName: withItemLabel(found.value.name, found.itemLabel), workerId: me, workerName: found.person.name, step: entry
         }));
         return common.returnResult(true, 200, `Moved to ${step.name}.`, { step: entry });
     } catch (err) {

@@ -56,7 +56,8 @@ const JobOrderPrintPage = ({ jobOrderId, onBack, backLabel = 'Back to the job or
       layoutsApi.listLayoutsForPrint({ signal: controller.signal }),
     ])
       .then(([order, list]) => {
-        setJobOrder(order.jobOrder);
+        // Print shows the first item for now (items on layouts come later).
+        setJobOrder({ ...order.jobOrder, ...order.jobOrder.items[0] });
         setLayouts(list.layouts);
         // The default comes first.
         setLayoutId(list.layouts[0]?._id || '');

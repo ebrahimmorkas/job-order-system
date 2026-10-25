@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const auditPlugin = require('./plugins/auditPlugin');
 const { CASE_INSENSITIVE_COLLATION, LIVE_STATUSES } = require('../constants/masterConstants');
-const { JOB_ORDER_NUMBER_MAX_LENGTH, DURATION_UNITS } = require('../constants/jobOrderConstants');
+const { JOB_ORDER_NUMBER_MAX_LENGTH, JOB_NAME_MAX_LENGTH, DURATION_UNITS } = require('../constants/jobOrderConstants');
 const { FIXED_STEP_VALUES, WORK_TIME_START_VALUES, WORK_TIME_STARTS } = require('../constants/stepConstants');
 const { CONTROL_TYPE_VALUES } = require('../constants/controlConstants');
 
@@ -85,6 +85,20 @@ const answeredControlSchema = new mongoose.Schema({
     amount: { type: Number, default: null }
 }, { _id: false });
 
+// One thing the customer wants done, e.g. a glass cut round: its job name,
+// the masters picked, the controls answered, its photos and the work given
+// on it. Its _id stays the same on edit, so the work keeps its progress.
+const itemSchema = new mongoose.Schema({
+    name: { type: String, trim: true, maxlength: JOB_NAME_MAX_LENGTH, default: null },
+    masters: { type: [pickedMasterSchema], default: [] },
+    controls: { type: [answeredControlSchema], default: [] },
+    // Photos added to the item (ImageAsset ids, with their address).
+    images: {
+        type: [{ _id: false, imageId: { type: mongoose.Types.ObjectId, required: true }, url: { type: String, required: true } }],
+        default: []
+    }
+});
+
 // The vendor's job orders. Any logged-in user of the vendor makes them.
 // status: 'A' = active, 'D' = cancelled (kept, hidden from the list).
 const jobOrderSchema = new mongoose.Schema({
@@ -114,15 +128,15 @@ const jobOrderSchema = new mongoose.Schema({
     },
     // The saved customer (models/Customer.js) with this phone / email, or null.
     customerId: { type: mongoose.Types.ObjectId, default: null },
-    masters: { type: [pickedMasterSchema], default: [] },
-    controls: { type: [answeredControlSchema], default: [] },
+    // At least one; at most CompanyMaster.numberOfItemsAllowedToAddInJobOrder.
+    items: { type: [itemSchema], default: [] },
     // The currency of the tax country (null when there is none).
     currency: {
         code: { type: String, default: null },
         symbol: { type: String, default: null },
         decimalPlaces: { type: Number, default: 2 }
     },
-    // The sum of every price.
+    // The sum of every price, of all items.
     subtotal: { type: Number, default: 0 },
     tax: {
         // Charged on this job order; when not, reason says why (null = no price to tax).
@@ -142,12 +156,7 @@ const jobOrderSchema = new mongoose.Schema({
         taxableAmount: { type: Number, default: 0 },
         amount: { type: Number, default: 0 }
     },
-    total: { type: Number, default: 0 },
-    // Photos added to the job order (ImageAsset ids, with their address).
-    images: {
-        type: [{ _id: false, imageId: { type: mongoose.Types.ObjectId, required: true }, url: { type: String, required: true } }],
-        default: []
-    }
+    total: { type: Number, default: 0 }
 }, {
     timestamps: true
 });
@@ -160,10 +169,10 @@ jobOrderSchema.index({ vendorId: 1, jobOrderNumber: 1 }, {
 // The list, newest first.
 jobOrderSchema.index({ vendorId: 1, status: 1, createdAt: -1 });
 // My work: the job orders a user was given work on, newest first.
-jobOrderSchema.index({ vendorId: 1, 'masters.values.assignedTo.userId': 1, status: 1, createdAt: -1 });
+jobOrderSchema.index({ vendorId: 1, 'items.masters.values.assignedTo.userId': 1, status: 1, createdAt: -1 });
 // Work that just went past its due time (services/overdueWatcher.js).
-jobOrderSchema.index({ status: 1, 'masters.values.dueAt': 1 });
-jobOrderSchema.index({ status: 1, 'masters.values.assignedTo.dueAt': 1 });
+jobOrderSchema.index({ status: 1, 'items.masters.values.dueAt': 1 });
+jobOrderSchema.index({ status: 1, 'items.masters.values.assignedTo.dueAt': 1 });
 
 jobOrderSchema.plugin(auditPlugin);
 

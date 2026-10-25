@@ -10,13 +10,13 @@ import * as myWorkApi from '../api/myWorkApi';
 const HOLD_REASON_MAX_LENGTH = 500;
 
 /**
- * Moves the user's work on one value to a step - any step, in the vendor's
+ * Moves the user's work on one value of an item to a step - any step, in the vendor's
  * order. In progress asks how much is done (%, optional); Hold asks why
  * (optional). Saved with "Update step".
  *
  * @param {Object} props
  * @param {string} props.jobOrderId
- * @param {{ valueId: string, valueName: string, step: Object|null }} props.work
+ * @param {{ itemId: string, valueId: string, valueName: string, step: Object|null }} props.work
  * @param {Array<{ key: string, fixedStep: string|null, name: string }>} props.steps
  * @param {() => void} props.onChanged - After a step is saved
  */
@@ -37,6 +37,7 @@ const StepChanger = ({ jobOrderId, work, steps, onChanged }) => {
     setIsSaving(true);
     try {
       const result = await myWorkApi.setMyStep(jobOrderId, {
+        itemId: work.itemId,
         valueId: work.valueId,
         stepKey,
         percent: picked.fixedStep === 'inProgress' ? percent : null,
@@ -57,7 +58,7 @@ const StepChanger = ({ jobOrderId, work, steps, onChanged }) => {
         <div className="w-48">
           <Dropdown
             label="Step"
-            name={`step-${work.valueId}`}
+            name={`step-${work.itemId}-${work.valueId}`}
             options={steps.map((step) => ({ value: step.key, label: step.name }))}
             value={stepKey}
             onChange={setStepKey}
@@ -86,7 +87,7 @@ const StepChanger = ({ jobOrderId, work, steps, onChanged }) => {
       {picked?.fixedStep === 'hold' && (
         <TextArea
           label="Why is it on hold? (optional)"
-          name={`hold-${work.valueId}`}
+          name={`hold-${work.itemId}-${work.valueId}`}
           value={holdReason}
           onChange={(e) => setHoldReason(e.target.value)}
           maxLength={HOLD_REASON_MAX_LENGTH}

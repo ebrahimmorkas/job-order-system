@@ -67,10 +67,10 @@ const WorkerDashboard = () => {
           {next.map((item) => {
             const status = timeStatusOf(item, now);
             return (
-              <li key={`${item.jobOrderId}-${item.valueId}`}>
+              <li key={`${item.jobOrderId}-${item.itemId}-${item.valueId}`}>
                 <button type="button" onClick={() => navigate(`/my-work/${item.jobOrderId}`)} className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 py-3 text-left hover:bg-gray-50 cursor-pointer">
                   <span className="min-w-0 flex-1">
-                    <span className="block font-medium text-gray-900 break-words">{item.valueName} <span className="text-xs font-normal text-gray-500">{item.masterName}</span></span>
+                    <span className="block font-medium text-gray-900 break-words">{item.valueName} <span className="text-xs font-normal text-gray-500">{item.masterName}</span>{item.itemLabel && <> <span className="text-xs font-normal text-indigo-600">{item.itemLabel}</span></>}</span>
                     <span className="block text-xs text-gray-500">{item.jobOrderNumber}{item.dueAt ? ` · due ${formatDueAt(item.dueAt)}` : ''}</span>
                   </span>
                   <StepBadge step={item.step} />

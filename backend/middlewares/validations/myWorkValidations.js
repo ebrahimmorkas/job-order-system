@@ -6,6 +6,9 @@ const { HOLD_REASON_MAX_LENGTH } = require('../../constants/stepConstants');
 
 // PATCH /api/my-work/:id/step
 const stepSchema = Joi.object({
+    // The item of the job order the work is on.
+    itemId: Joi.string().hex().length(24).required().label('Item')
+        .messages({ 'string.hex': 'Item is invalid', 'string.length': 'Item is invalid' }),
     valueId: Joi.string().hex().length(24).required().label('Value')
         .messages({ 'string.hex': 'Value is invalid', 'string.length': 'Value is invalid' }),
     stepKey: Joi.string().max(100).required().label('Step'),

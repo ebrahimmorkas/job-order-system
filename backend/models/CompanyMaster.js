@@ -14,6 +14,7 @@ const cacheInvalidationPlugin = require('./plugins/cacheInvalidationPlugin');
 const redisKeys = require('../utils/redisKeys');
 const { VALID_STORAGE_PROVIDERS, ACCOUNT_NOTES_MAX_LENGTH, IMAGE_FORMAT_VALUES, MAX_IMAGE_UPLOAD_MB } = require('../constants/storageConstants');
 const { SERVICE_MESSAGE_MAX_LENGTH } = require('../constants/serviceStatusConstants');
+const { JOB_ORDER_ITEMS_MAX, DEFAULT_ITEMS_ALLOWED } = require('../constants/jobOrderConstants');
 
 // The vendor's own storage accounts (storageCredentials below). Secrets are
 // encrypted with common.encryptSecret and only ever decrypted inside
@@ -257,6 +258,17 @@ const companyMasterSchema = new mongoose.Schema({
         default: false
     },
 
+    // ---- Items on job orders ---------------------------------------------
+    // How many items one job order may have (each with its own job name,
+    // masters, controls, images and work). 1 = a job order is for one thing.
+    numberOfItemsAllowedToAddInJobOrder: {
+        type: Number,
+        min: 1,
+        max: JOB_ORDER_ITEMS_MAX,
+        validate: { validator: Number.isInteger, message: 'numberOfItemsAllowedToAddInJobOrder must be a whole number' },
+        default: DEFAULT_ITEMS_ALLOWED
+    },
+
     // ---- Steps of assigned work ----------------------------------------------
     // A user given work moves it through steps (Start, In progress...). Off
     // until the platform owner switches it on for this vendor (also needs
@@ -283,7 +295,7 @@ const companyMasterSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
-    // Most images on one job order. null = no limit of the vendor's own
+    // Most images on one job order (all its items together). null = no limit of the vendor's own
     // (the server still takes at most MAX_IMAGES_PER_REQUEST).
     numberOfImageUploadAllowed: wholeNumberOrNull('numberOfImageUploadAllowed', 1),
     // Which formats may be uploaded: some of jpeg, png, webp, gif.
