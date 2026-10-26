@@ -7,7 +7,9 @@ const CONTROL_TYPES = {
     TEXTFIELD: 'textfield',
     TEXTAREA: 'textarea',
     CHECKBOX: 'checkbox',
-    RADIO: 'radio'
+    RADIO: 'radio',
+    // One choice from a list; with per unit pricing it can be the unit dropdown.
+    DROPDOWN: 'dropdown'
 };
 const CONTROL_TYPE_VALUES = Object.values(CONTROL_TYPES);
 // Controls the job order user types into (they have a placeholder and a default text).
@@ -26,6 +28,8 @@ const QUANTITY_PATTERN = /^[1-9]\d{0,5}$/;
 
 // A radio group needs at least two choices.
 const MIN_RADIO_OPTIONS = 2;
+// Controls whose answer is one of their choices.
+const CHOICE_CONTROL_TYPES = [CONTROL_TYPES.RADIO, CONTROL_TYPES.DROPDOWN];
 
 // Largest page the controls list returns.
 const CONTROL_LIST_MAX_PAGE_SIZE = 100;
@@ -38,5 +42,6 @@ module.exports = {
     PRICE_PATTERN,
     QUANTITY_PATTERN,
     MIN_RADIO_OPTIONS,
+    CHOICE_CONTROL_TYPES,
     CONTROL_LIST_MAX_PAGE_SIZE
 };

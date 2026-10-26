@@ -4,6 +4,7 @@ const { CASE_INSENSITIVE_COLLATION, LIVE_STATUSES } = require('../constants/mast
 const { JOB_ORDER_NUMBER_MAX_LENGTH, JOB_NAME_MAX_LENGTH, DURATION_UNITS, PRICE_CALCULATION_VALUES, PRICE_CALCULATIONS } = require('../constants/jobOrderConstants');
 const { FIXED_STEP_VALUES, WORK_TIME_START_VALUES, WORK_TIME_STARTS } = require('../constants/stepConstants');
 const { CONTROL_TYPE_VALUES } = require('../constants/controlConstants');
+const { CHARGE_BY, CHARGE_BY_VALUES, PRICE_CHARGED_VALUES, MEASURED_AS_VALUES, DISCOUNT_TYPE_VALUES } = require('../constants/pricingConstants');
 
 // Names are copied in (not only ids), so a job order keeps showing what was
 // picked that day even after a master, value, control, country or rate is
@@ -90,7 +91,7 @@ const answeredControlSchema = new mongoose.Schema({
     text: { type: String, default: null },
     // Checkbox: ticked.
     checked: { type: Boolean, default: null },
-    // Radio: the choice picked.
+    // Radio / dropdown: the choice picked.
     optionId: { type: mongoose.Types.ObjectId, default: null },
     optionName: { type: String, default: null },
     // A price text field: its amount (added to the total) and whether tax is charged on it.
@@ -103,7 +104,27 @@ const answeredControlSchema = new mongoose.Schema({
     rate: { type: Number, default: null },
     isAmountEdited: { type: Boolean, default: false },
     // The quantity text field (text is the number).
-    isQuantity: { type: Boolean, default: false }
+    isQuantity: { type: Boolean, default: false },
+    // A price on a per unit item: how it was charged (PRICE_CHARGED), and
+    // what the rate was multiplied by besides the quantity (the chargeable
+    // size, the edge length, or 1 per piece).
+    chargedBy: { type: String, enum: [...PRICE_CHARGED_VALUES, null], default: null },
+    factor: { type: Number, default: null },
+    // The unit dropdown (the choice picked is the item's unit).
+    isUnit: { type: Boolean, default: false }
+}, { _id: false });
+
+// The unit a per unit item is charged in (a choice of the unit dropdown, as
+// it was that day): how it is measured, its rate then and its size rules.
+const unitSchema = new mongoose.Schema({
+    controlId: { type: mongoose.Types.ObjectId, required: true },
+    optionId: { type: mongoose.Types.ObjectId, required: true },
+    name: { type: String, required: true },
+    measuredAs: { type: String, enum: MEASURED_AS_VALUES, required: true },
+    rate: { type: Number, default: null },
+    roundUpTo: { type: Number, default: null },
+    minimumSize: { type: Number, default: null },
+    wastagePercent: { type: Number, default: null }
 }, { _id: false });
 
 // One thing the customer wants done, e.g. a glass cut round: its job name,
@@ -113,6 +134,21 @@ const itemSchema = new mongoose.Schema({
     name: { type: String, trim: true, maxlength: JOB_NAME_MAX_LENGTH, default: null },
     // The answer of the quantity control (1 when there is none or it is empty).
     quantity: { type: Number, default: 1 },
+    // How it is charged: per piece, or per unit of its size (per unit pricing).
+    chargeBy: { type: String, enum: CHARGE_BY_VALUES, default: CHARGE_BY.PIECE },
+    // Per unit only: the unit, what was measured (as typed; an empty one
+    // counts as 1), the size of one piece as measured, the size charged
+    // (rounded up, wastage added, at least the minimum) and, for an area,
+    // the edge length (2 x (length + width) of the rounded measurements).
+    unit: { type: unitSchema, default: null },
+    measurements: {
+        length: { type: Number, default: null },
+        width: { type: Number, default: null },
+        height: { type: Number, default: null }
+    },
+    size: { type: Number, default: null },
+    chargeableSize: { type: Number, default: null },
+    edgeLength: { type: Number, default: null },
     masters: { type: [pickedMasterSchema], default: [] },
     controls: { type: [answeredControlSchema], default: [] },
     // Photos added to the item (ImageAsset ids, with their address).
@@ -166,8 +202,20 @@ const jobOrderSchema = new mongoose.Schema({
         symbol: { type: String, default: null },
         decimalPlaces: { type: Number, default: 2 }
     },
+    // When the customer gets it (CompanySettings.askDeliveryDate; null = not set).
+    deliveryAt: { type: Date, default: null },
     // The sum of every price, of all items.
     subtotal: { type: Number, default: 0 },
+    // Taken off the subtotal before tax (CompanySettings.allowDiscount): an
+    // amount or a % (value), and the amount it came to. null = none.
+    discount: {
+        type: new mongoose.Schema({
+            type: { type: String, enum: DISCOUNT_TYPE_VALUES, required: true },
+            value: { type: Number, required: true },
+            amount: { type: Number, required: true }
+        }, { _id: false }),
+        default: null
+    },
     tax: {
         // Charged on this job order; when not, reason says why (null = no price to tax).
         isApplied: { type: Boolean, default: false },
@@ -186,7 +234,13 @@ const jobOrderSchema = new mongoose.Schema({
         taxableAmount: { type: Number, default: 0 },
         amount: { type: Number, default: 0 }
     },
-    total: { type: Number, default: 0 }
+    // The total rounded off (CompanySettings.roundTotalTo): what was added (+) or taken off (-).
+    roundOff: { type: Number, default: 0 },
+    total: { type: Number, default: 0 },
+    // Received with the job order (CompanySettings.askAdvance; null = none),
+    // and what is left to pay.
+    advance: { type: Number, default: null },
+    balance: { type: Number, default: null }
 }, {
     timestamps: true
 });

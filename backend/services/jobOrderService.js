@@ -4,7 +4,7 @@ const User = require('../models/User');
 const Counter = require('../models/Counter');
 const common = require('../utils/common');
 const logger = require('../utils/logger');
-const { computeTotals, roundTo } = require('../utils/jobOrderTotals');
+const { computeTotals, roundTo, sizeOf } = require('../utils/jobOrderTotals');
 const masterService = require('./masterService');
 const controlService = require('./controlService');
 const featureAccessService = require('./featureAccessService');
@@ -17,7 +17,8 @@ const customerService = require('./customerService');
 const { jobOrderSettingsOf } = require('./companySettingsService');
 const { assignedCountryIdsOf, isTaxOn, taxReadyCountryIds, loadCountries, detailsByCountry } = require('./taxSettingsService');
 const { LIVE_STATUSES, CASE_INSENSITIVE_COLLATION } = require('../constants/masterConstants');
-const { CONTROL_TYPES, PRICE_PATTERN, QUANTITY_PATTERN } = require('../constants/controlConstants');
+const { CONTROL_TYPES, CHOICE_CONTROL_TYPES, PRICE_PATTERN, QUANTITY_PATTERN } = require('../constants/controlConstants');
+const { CHARGE_BY, PRICE_CHARGED, MEASURED_AS, MEASUREMENTS_OF, DISCOUNT_TYPES } = require('../constants/pricingConstants');
 const { SHORT_NAME_PLACES, AUTO_NUMBER_PREFIX, AUTO_NUMBER_DIGITS, ANSWER_MAX_LENGTH, DEFAULT_ITEMS_ALLOWED, PRICE_CALCULATIONS } = require('../constants/jobOrderConstants');
 const { addDuration } = require('../utils/days');
 const { WORK_TIME_STARTS, WORK_TIME_CHANGE_FROM, FIXED_STEPS, STEP_HISTORY_MAX } = require('../constants/stepConstants');
@@ -47,7 +48,7 @@ const { IMAGE_FORMATS, IMAGE_FORMAT_VALUES, IMAGE_MODULES, MAX_IMAGES_PER_REQUES
 // its _id (so its work keeps its progress).
 
 const LIVE = { $in: LIVE_STATUSES };
-const LIST_FIELDS = '_id jobOrderNumber customer.name customer.phone customer.countryName customer.stateName customer.cityName currency subtotal tax.isApplied tax.amount total createdAt updatedAt items.name items.masters.values.assignedTo.step.fixedStep step.key step.name step.fixedStep step.percent';
+const LIST_FIELDS = '_id jobOrderNumber customer.name customer.phone customer.countryName customer.stateName customer.cityName currency subtotal tax.isApplied tax.amount total createdAt updatedAt items.name items.masters.values.assignedTo.step.fixedStep step.key step.name step.fixedStep step.percent deliveryAt advance balance';
 const COUNTER_KEY = 'jobOrder';
 
 const idOf = (value) => (value ? String(value) : null);
@@ -175,7 +176,7 @@ const loadFormParts = async ({ vendorId, websiteMasterData, companyMasterData, c
         const access = featureAccessService.getFeatureAccess(websiteMasterData, companyMasterData).meta.featureAccess;
         const [mastersResult, controlsResult, countries] = await Promise.all([
             access.canFetchMastersForJobOrder ? masterService.getMastersForJobOrder({ vendorId }) : null,
-            access.canFetchControlsForJobOrder ? controlService.getControlsForJobOrder({ vendorId, companyMasterData }) : null,
+            access.canFetchControlsForJobOrder ? controlService.getControlsForJobOrder({ vendorId, companyMasterData, websiteMasterData }) : null,
             loadCountries(assignedCountryIdsOf(companyMasterData))
         ]);
 
@@ -198,7 +199,11 @@ const loadFormParts = async ({ vendorId, websiteMasterData, companyMasterData, c
                 // Name, phone and email asked (and the customer saved): the Customers feature.
                 askCustomerContact: access[FEATURE_FLAGS.CUSTOMERS] === true,
                 // What newly given work's time starts on (steps off = when given).
-                workTimeStartsOn: stepService.workTimeStartsOnOf(websiteMasterData, companyMasterData, companySettingsData)
+                workTimeStartsOn: stepService.workTimeStartsOnOf(websiteMasterData, companyMasterData, companySettingsData),
+                // Per unit pricing: the unit dropdown, sizes, each item charged
+                // per piece or per unit (off = always per piece).
+                isPerRatePricingOn: controlService.isPerRatePricingOn(websiteMasterData, companyMasterData),
+                chargeBy: controlService.isPerRatePricingOn(websiteMasterData, companyMasterData) ? settings.chargeBy : CHARGE_BY.PIECE
             },
             // Each value of a role master lists who can be given its work.
             masters: masters.map((master) => (master.isRoleProvided
@@ -385,15 +390,36 @@ const quantityOf = (controls, answers) => {
     }
 };
 
+// How a price is charged on the item: per piece items -> nothing more than
+// the quantity (chargedBy null). Per unit items -> the price's own way
+// (Control.chargedBy, missing = per unit; the edge only for an area unit,
+// otherwise per unit) and what the rate is multiplied by besides the quantity.
+const chargeOf = (control, pricing) => {
+    try {
+        if (!pricing?.size) return { chargedBy: null, factor: 1 };
+        let chargedBy = control.chargedBy || PRICE_CHARGED.UNIT;
+        if (chargedBy === PRICE_CHARGED.EDGE && pricing.size.edgeLength === null) chargedBy = PRICE_CHARGED.UNIT;
+        const factor = chargedBy === PRICE_CHARGED.PIECE ? 1 : chargedBy === PRICE_CHARGED.EDGE ? pricing.size.edgeLength : pricing.size.chargeableSize;
+        return { chargedBy, factor };
+    } catch (err) {
+        throw err;
+    }
+};
+
 // A price: { error } or what to store. isRateTimesQuantity: text is the rate
-// of one piece and the amount is rate x quantity, unless a total was typed.
-const priceOf = ({ control, text, total, quantity, isRateTimesQuantity }) => {
+// and the amount is rate x (size / edge on a per unit item) x quantity,
+// unless a total was typed. Otherwise text is the amount itself.
+const priceOf = ({ control, text, total, quantity, isRateTimesQuantity, pricing }) => {
     try {
         if (!PRICE_PATTERN.test(text)) return { error: AMOUNT_MESSAGE };
-        const stored = { text, isPrice: true, isPriceIncludedInTax: control.isPriceIncludedInTax === true };
+        const charge = chargeOf(control, pricing);
+        const stored = {
+            text, isPrice: true, isPriceIncludedInTax: control.isPriceIncludedInTax === true,
+            ...(charge.chargedBy && { chargedBy: charge.chargedBy, factor: charge.factor })
+        };
         if (!isRateTimesQuantity) return { stored: { ...stored, amount: Number(text) } };
         if (total !== null && !PRICE_PATTERN.test(total)) return { error: `Total: ${AMOUNT_MESSAGE}` };
-        const worked = roundTo(Number(text) * quantity, 2);
+        const worked = roundTo(Number(text) * charge.factor * quantity, 2);
         const amount = total === null ? worked : Number(total);
         return { stored: { ...stored, rate: Number(text), amount, isAmountEdited: amount !== worked } };
     } catch (err) {
@@ -401,9 +427,40 @@ const priceOf = ({ control, text, total, quantity, isRateTimesQuantity }) => {
     }
 };
 
+// How a per unit item is charged: { errors, stored, size }. stored: what the
+// item keeps (chargeBy, unit, measurements, sizes); size: null per piece.
+// The unit is the choice of the unit dropdown; the measurements the unit
+// takes (an empty one counts as 1), the others dropped.
+const itemPricingOf = (controls, input, answers, prefix, { isPerRatePricingOn }) => {
+    try {
+        const pieceOnly = { errors: [], size: null, stored: { chargeBy: CHARGE_BY.PIECE, unit: null, measurements: { length: null, width: null, height: null }, size: null, chargeableSize: null, edgeLength: null } };
+        if (!isPerRatePricingOn || input.chargeBy !== CHARGE_BY.UNIT) return pieceOnly;
+        const unitControl = controls.find((control) => control.type === CONTROL_TYPES.DROPDOWN && control.isUnit);
+        if (!unitControl) return { ...pieceOnly, errors: [{ field: `${prefix}chargeBy`, message: 'Add a unit dropdown in Controls to charge per unit.' }] };
+        const optionId = answers.get(String(unitControl._id))?.optionId;
+        const option = optionId ? unitControl.options.find((entry) => String(entry._id) === optionId) : null;
+        if (!option) return { ...pieceOnly, errors: [{ field: `${prefix}controls.${unitControl._id}`, message: 'Pick the unit' }] };
+
+        const names = MEASUREMENTS_OF[option.measuredAs] || MEASUREMENTS_OF[MEASURED_AS.NUMBER];
+        const measurements = Object.fromEntries(['length', 'width', 'height'].map((name) => {
+            const text = names.includes(name) ? input.measurements?.[name] : null;
+            return [name, text === null || text === undefined ? null : Number(text)];
+        }));
+        const unit = {
+            controlId: unitControl._id, optionId: option._id, name: option.name, measuredAs: option.measuredAs || MEASURED_AS.NUMBER,
+            rate: option.rate ?? null, roundUpTo: option.roundUpTo ?? null, minimumSize: option.minimumSize ?? null, wastagePercent: option.wastagePercent ?? null
+        };
+        const size = sizeOf(unit, measurements);
+        return { errors: [], size, stored: { chargeBy: CHARGE_BY.UNIT, unit, measurements, ...size } };
+    } catch (err) {
+        throw err;
+    }
+};
+
 // The controls answered on one item: field errors by control ("<prefix>controls.<id>"),
-// what to store and the item's quantity. isRateTimesQuantity: prices are rate x quantity.
-const answerControls = (controls, input, prefix, { isRateTimesQuantity = false } = {}) => {
+// what to store, the item's quantity and how it is charged (itemPricingOf).
+// isRateTimesQuantity: prices are rate x (size) x quantity.
+const answerControls = (controls, input, prefix, { isRateTimesQuantity = false, isPerRatePricingOn = false, item = {} } = {}) => {
     try {
         const errors = [];
         const answers = new Map(input.map((entry) => [entry.controlId, entry]));
@@ -412,6 +469,9 @@ const answerControls = (controls, input, prefix, { isRateTimesQuantity = false }
             if (!known.has(controlId)) errors.push({ field: `${prefix}controls.${controlId}`, message: 'This field is no longer available. Please reload the page.' });
         }
         const quantity = quantityOf(controls, answers);
+        const pricing = itemPricingOf(controls, item, answers, prefix, { isPerRatePricingOn });
+        errors.push(...pricing.errors);
+        const hasError = (field) => errors.some((error) => error.field === field);
 
         const stored = [];
         for (const control of controls) {
@@ -426,11 +486,14 @@ const answerControls = (controls, input, prefix, { isRateTimesQuantity = false }
                 stored.push({ ...base, checked });
                 continue;
             }
-            if (control.type === CONTROL_TYPES.RADIO) {
+            if (CHOICE_CONTROL_TYPES.includes(control.type)) {
+                // The unit dropdown isn't asked on a per piece item.
+                if (isPerRatePricingOn && control.isUnit && pricing.stored.chargeBy !== CHARGE_BY.UNIT) continue;
                 const option = answer.optionId ? control.options.find((o) => String(o._id) === answer.optionId) : null;
-                if (answer.optionId && !option) errors.push({ field, message: 'This choice is no longer available. Please pick again.' });
-                else if (control.isRequired && !option) errors.push({ field, message: 'Pick one' });
-                if (option) stored.push({ ...base, optionId: option._id, optionName: option.name });
+                if (answer.optionId && !option) {
+                    if (!hasError(field)) errors.push({ field, message: 'This choice is no longer available. Please pick again.' });
+                } else if (control.isRequired && !option && !hasError(field)) errors.push({ field, message: 'Pick one' });
+                if (option) stored.push({ ...base, optionId: option._id, optionName: option.name, ...(control.isUnit && { isUnit: true }) });
                 continue;
             }
 
@@ -447,7 +510,7 @@ const answerControls = (controls, input, prefix, { isRateTimesQuantity = false }
                 continue;
             }
             if (control.isPrice) {
-                const price = priceOf({ control, text, total: answer.total ?? null, quantity, isRateTimesQuantity });
+                const price = priceOf({ control, text, total: answer.total ?? null, quantity, isRateTimesQuantity, pricing });
                 if (price.error) errors.push({ field, message: price.error });
                 else stored.push({ ...base, ...price.stored });
                 continue;
@@ -459,7 +522,7 @@ const answerControls = (controls, input, prefix, { isRateTimesQuantity = false }
             }
             stored.push({ ...base, text });
         }
-        return { errors, stored, quantity };
+        return { errors, stored, quantity, pricing: pricing.stored };
     } catch (err) {
         throw err;
     }
@@ -490,8 +553,9 @@ const savedCustomerIdOf = async ({ vendorId, userId, parts, customer }) => {
     }
 };
 
-// The tax and totals of the prices, for the tax country.
-const workOutMoney = ({ parts, prices, taxCountry, customerStateId, taxId }) => {
+// The tax and totals of the prices, for the tax country, after the discount
+// and with the total rounded off the way the vendor chose.
+const workOutMoney = ({ parts, prices, taxCountry, customerStateId, taxId, discount = null }) => {
     try {
         const errors = [];
         const hasTaxedPrice = prices.some((price) => price.isTaxed);
@@ -520,7 +584,9 @@ const workOutMoney = ({ parts, prices, taxCountry, customerStateId, taxId }) => 
             prices: prices.map((price) => ({ amount: price.amount, isTaxed: price.isTaxed })),
             tax: rate,
             decimals: taxCountry?.currency?.decimalPlaces ?? 2,
-            interStateLabel: isInterState ? taxCountry.interStateTaxLabel : null
+            interStateLabel: isInterState ? taxCountry.interStateTaxLabel : null,
+            discount,
+            rounding: parts.settings.roundTotalTo ? { step: parts.settings.roundTotalTo, direction: parts.settings.roundTotalDirection } : null
         });
         if (rate) {
             Object.assign(tax, {
@@ -533,10 +599,35 @@ const workOutMoney = ({ parts, prices, taxCountry, customerStateId, taxId }) => 
             stored: {
                 currency: taxCountry?.currency ? { ...taxCountry.currency } : { code: null, symbol: null, decimalPlaces: 2 },
                 subtotal: totals.subtotal,
+                discount: discount ? { ...discount, amount: totals.discountAmount } : null,
                 tax,
+                roundOff: totals.roundOff,
                 total: totals.total
             }
         };
+    } catch (err) {
+        throw err;
+    }
+};
+
+// The delivery date, discount and advance - each as sent while Company
+// Settings asks it; while it doesn't, an edited job order keeps its own.
+const extrasOf = (parts, data, current) => {
+    try {
+        const { askDeliveryDate, allowDiscount, askAdvance } = parts.settings;
+        const errors = [];
+        const deliveryAt = askDeliveryDate ? data.deliveryAt ?? null : current?.deliveryAt ?? null;
+        let discount = null;
+        if (!allowDiscount) {
+            discount = current?.discount ? { type: current.discount.type, value: current.discount.value } : null;
+        } else if (data.discount?.value) {
+            discount = { type: data.discount.type, value: Number(data.discount.value) };
+            if (discount.type === DISCOUNT_TYPES.PERCENT && discount.value > 100) errors.push({ field: 'discount.value', message: 'A discount can be at most 100%' });
+            if (discount.value === 0) discount = null;
+        }
+        const advanceText = askAdvance ? data.advance : (current?.advance ?? null);
+        const advance = advanceText === null || advanceText === undefined || Number(advanceText) === 0 ? null : Number(advanceText);
+        return { errors, deliveryAt, discount, advance };
     } catch (err) {
         throw err;
     }
@@ -547,6 +638,7 @@ const workOutMoney = ({ parts, prices, taxCountry, customerStateId, taxId }) => 
 // work on it can be told apart before it is saved.
 const buildItems = (parts, inputs, current, { isRateTimesQuantity }) => {
     try {
+        const { isPerRatePricingOn } = parts.settings;
         const errors = [];
         const limit = Math.max(parts.settings.maxItems, current?.items.length || 0);
         if (inputs.length > limit) {
@@ -562,9 +654,9 @@ const buildItems = (parts, inputs, current, { isRateTimesQuantity }) => {
                 for (const value of master.values) previous.set(String(value.valueId), value);
             }
             const masters = pickMasters(parts.masters, input.masters, parts.workers, previous, parts.settings, prefix);
-            const controls = answerControls(parts.controls, input.controls, prefix, { isRateTimesQuantity });
+            const controls = answerControls(parts.controls, input.controls, prefix, { isRateTimesQuantity, isPerRatePricingOn, item: input });
             errors.push(...masters.errors, ...controls.errors);
-            return { _id: saved?._id ?? new mongoose.Types.ObjectId(), name: input.name, quantity: controls.quantity, masters: masters.stored, controls: controls.stored };
+            return { _id: saved?._id ?? new mongoose.Types.ObjectId(), name: input.name, quantity: controls.quantity, ...controls.pricing, masters: masters.stored, controls: controls.stored };
         });
         return { errors, items };
     } catch (err) {
@@ -587,11 +679,24 @@ const buildJobOrder = (parts, data, current = null) => {
         const taxCountry = countryId ? parts.countries.find((c) => String(c._id) === countryId) : null;
         // Every price of every item.
         const prices = items.items.flatMap((item) => item.controls).filter((c) => c.isPrice).map((c) => ({ amount: c.amount, isTaxed: c.isPriceIncludedInTax }));
-        const money = workOutMoney({ parts, prices, taxCountry, customerStateId: idOf(customer.stored.stateId), taxId: data.taxId });
+        const extras = extrasOf(parts, data, current);
+        const subtotal = roundTo(prices.reduce((sum, price) => sum + price.amount, 0), taxCountry?.currency?.decimalPlaces ?? 2);
+        if (extras.discount?.type === DISCOUNT_TYPES.AMOUNT && extras.discount.value > subtotal) {
+            extras.errors.push({ field: 'discount.value', message: 'The discount can\'t be more than the subtotal' });
+        }
+        const money = workOutMoney({ parts, prices, taxCountry, customerStateId: idOf(customer.stored.stateId), taxId: data.taxId, discount: extras.discount });
+        if (extras.advance !== null && extras.advance > money.stored.total) {
+            extras.errors.push({ field: 'advance', message: 'The advance can\'t be more than the total' });
+        }
 
-        const errors = [...items.errors, ...customer.errors, ...money.errors];
+        const errors = [...items.errors, ...customer.errors, ...extras.errors, ...money.errors];
         if (errors.length > 0) return { errors };
-        return { doc: { customer: customer.stored, items: items.items, priceCalculation, ...money.stored } };
+        return {
+            doc: {
+                customer: customer.stored, items: items.items, priceCalculation, deliveryAt: extras.deliveryAt, ...money.stored,
+                advance: extras.advance, balance: extras.advance === null ? null : roundTo(money.stored.total - extras.advance, 2)
+            }
+        };
     } catch (err) {
         throw err;
     }
@@ -676,7 +781,7 @@ const updateJobOrder = async ({ userId, id, data, files = [], ...vendorData }) =
     try {
         const { vendorId, websiteMasterData, companyMasterData } = vendorData;
         const [current, parts] = await Promise.all([
-            JobOrder.findOne({ _id: id, vendorId, status: LIVE }).select('jobOrderNumber items priceCalculation').lean(),
+            JobOrder.findOne({ _id: id, vendorId, status: LIVE }).select('jobOrderNumber items priceCalculation deliveryAt discount advance').lean(),
             loadFormParts(vendorData)
         ]);
         if (!current) return common.returnResult(false, 404, 'Job order not found.');

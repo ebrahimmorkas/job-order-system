@@ -15,7 +15,10 @@ const FEATURE_FLAGS = {
     STEPS: 'isStepFeatureOn',
     // Customers: saved from job orders (name, phone, email, address), the
     // Customers module and the customer search on the job order form.
-    CUSTOMERS: 'isCustomersFeatureOn'
+    CUSTOMERS: 'isCustomersFeatureOn',
+    // Per unit pricing: items charged per meter, sq ft... (the unit dropdown
+    // of Controls, sizes on the job order, Company Settings "How you charge").
+    PER_RATE_PRICING: 'isPerRatePricingFeatureOn'
 };
 
 // CompanyMaster-only switches that keep ONE read action of a feature

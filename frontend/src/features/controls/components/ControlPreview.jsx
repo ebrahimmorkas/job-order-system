@@ -1,5 +1,5 @@
 // How the control will look on the job order form (not interactive).
-const ControlPreview = ({ type, label, isRequired, placeholder, defaultText, isPrice, isPriceIncludedInTax, isQuantity, defaultChecked, options }) => {
+const ControlPreview = ({ type, label, isRequired, placeholder, defaultText, isPrice, isPriceIncludedInTax, isQuantity, isUnit, defaultChecked, options }) => {
   const title = label.trim() || (type === 'checkbox' ? 'Checkbox text' : 'Label');
   const required = isRequired && <span className="text-red-500"> *</span>;
   const box = 'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400';
@@ -22,6 +22,13 @@ const ControlPreview = ({ type, label, isRequired, placeholder, defaultText, isP
         <p className="mt-1 text-xs text-gray-500">{isPriceIncludedInTax ? 'Price - tax is charged on it' : 'Price - no tax on it'}</p>
       )}
       {type === 'textarea' && <textarea className={box} rows={3} value={defaultText} placeholder={placeholder} readOnly tabIndex={-1} />}
+      {type === 'dropdown' && (
+        <select className={box} value={options.find((option) => option.isDefault)?.key || ''} disabled tabIndex={-1} aria-label={title}>
+          <option value="">{options.length === 0 ? 'Add choices below' : 'Choose one'}</option>
+          {options.map((option) => <option key={option.key} value={option.key}>{option.name}</option>)}
+        </select>
+      )}
+      {type === 'dropdown' && isUnit && <p className="mt-1 text-xs text-gray-500">Pricing unit - on a per unit item it asks the size and fills in the rate</p>}
       {type === 'radio' && (
         <div className="flex flex-wrap gap-x-5 gap-y-2">
           {options.length === 0 && <span className="text-sm text-gray-400">Add choices below</span>}

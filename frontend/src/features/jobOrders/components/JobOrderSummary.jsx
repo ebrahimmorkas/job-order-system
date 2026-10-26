@@ -3,7 +3,8 @@ import { formatMoney } from '../jobOrderTotals';
 /**
  * The summary under a job order: every master and control filled in (item
  * after item, each under its heading when there are several), then
- * the prices, subtotal, tax (with its split) and total. Used by the form
+ * the prices, subtotal, discount, tax (with its split), round off, total,
+ * advance and balance due. Used by the form
  * (live, as the owner types) and by the saved job order's view.
  *
  * @param {Object} props
@@ -12,10 +13,16 @@ import { formatMoney } from '../jobOrderTotals';
  * @param {number} props.subtotal
  * @param {{ isApplied, reason, name, components: Array<{ label, rate, amount }>, taxableAmount, amount }} props.tax
  * @param {number} props.total
+ * @param {{ type: 'amount'|'percent', value: number, amount: number }|null} [props.discount]
+ * @param {number} [props.roundOff]
+ * @param {number|null} [props.advance]
+ * @param {number|null} [props.balance]
  * @param {boolean} [props.showAmounts] - false: the details only (My work shows no money)
  */
-const JobOrderSummary = ({ rows, currency, subtotal, tax, total, showAmounts = true }) => {
+const JobOrderSummary = ({ rows, currency, subtotal, tax, total, discount = null, roundOff = 0, advance = null, balance = null, showAmounts = true }) => {
   const money = (amount) => formatMoney(amount, currency);
+  // "+ 0.40" / "- 0.40"
+  const signed = (amount) => `${amount < 0 ? '-' : '+'} ${money(Math.abs(amount))}`;
   const details = rows.filter((row) => !row.isPrice);
   const prices = rows.filter((row) => row.isPrice);
 
@@ -54,6 +61,12 @@ const JobOrderSummary = ({ rows, currency, subtotal, tax, total, showAmounts = t
             <td className="py-2 pr-3 font-medium text-gray-900">Subtotal</td>
             <td className="py-2 text-right font-medium text-gray-900 tabular-nums whitespace-nowrap">{money(subtotal)}</td>
           </tr>
+          {discount?.amount > 0 && (
+            <tr>
+              <td className="py-2 pr-3 text-gray-700">Discount{discount.type === 'percent' && ` ${discount.value}%`}</td>
+              <td className="py-2 text-right text-gray-900 tabular-nums whitespace-nowrap">- {money(discount.amount)}</td>
+            </tr>
+          )}
           {tax.isApplied && (tax.components.length > 0 ? tax.components : [{ label: tax.name, rate: null, amount: tax.amount }]).map((component) => (
             <tr key={component.label}>
               <td className="py-2 pr-3 text-gray-700">
@@ -63,10 +76,26 @@ const JobOrderSummary = ({ rows, currency, subtotal, tax, total, showAmounts = t
               <td className="py-2 text-right text-gray-900 tabular-nums whitespace-nowrap">{money(component.amount)}</td>
             </tr>
           ))}
+          {roundOff !== 0 && roundOff !== null && roundOff !== undefined && (
+            <tr>
+              <td className="py-2 pr-3 text-gray-700">Round off</td>
+              <td className="py-2 text-right text-gray-900 tabular-nums whitespace-nowrap">{signed(roundOff)}</td>
+            </tr>
+          )}
           <tr className="border-t-2 border-gray-200">
             <td className="py-2.5 pr-3 text-base font-semibold text-gray-900">Total</td>
             <td className="py-2.5 text-right text-base font-semibold text-gray-900 tabular-nums whitespace-nowrap">{money(total)}</td>
           </tr>
+          {advance !== null && advance !== undefined && (<>
+            <tr>
+              <td className="py-2 pr-3 text-gray-700">Advance received</td>
+              <td className="py-2 text-right text-gray-900 tabular-nums whitespace-nowrap">- {money(advance)}</td>
+            </tr>
+            <tr>
+              <td className="py-2 pr-3 font-semibold text-indigo-700">Balance due</td>
+              <td className="py-2 text-right font-semibold text-indigo-700 tabular-nums whitespace-nowrap">{money(balance ?? total - advance)}</td>
+            </tr>
+          </>)}
         </tbody>
       </table>
       {!tax.isApplied && tax.reason && <p className="text-xs text-amber-700" role="note">{tax.reason}</p>}

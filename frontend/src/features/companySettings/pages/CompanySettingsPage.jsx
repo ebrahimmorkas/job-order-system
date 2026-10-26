@@ -97,6 +97,7 @@ const CompanySettingsPage = ({ featureAccess, basePath, segments }) => {
             onDirtyChange={handleDirtyChange}
             showWorkTime={featureAccess?.isStepFeatureOn === true}
             showPrintWork={featureAccess?.isLayoutMasterFeatureOn === true && featureAccess?.isRBACFeatureOn === true}
+            showPerRate={featureAccess?.isPerRatePricingFeatureOn === true}
           />
         )}
       </div>

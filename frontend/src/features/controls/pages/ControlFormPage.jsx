@@ -10,13 +10,23 @@ import Spinner from '../../../components/common/Spinner';
 import ListItemsEditor, { checkItemName } from '../../../components/common/ListItemsEditor';
 import { BackIcon } from '../../../components/common/ActionIcons';
 import { useUnsavedChanges } from '../../../components/common/UnsavedChanges';
+import { Radio } from '../../../components/common/Radio';
 import ControlPreview from '../components/ControlPreview';
-import { CONTROL_TYPES, TEXT_TYPES, MIN_RADIO_OPTIONS, PRICE_PATTERN, QUANTITY_PATTERN, isTypeFull } from '../controlTypes';
+import UnitOptionsEditor from '../components/UnitOptionsEditor';
+import {
+  CONTROL_TYPES, TEXT_TYPES, CHOICE_TYPES, MIN_RADIO_OPTIONS, PRICE_PATTERN, QUANTITY_PATTERN, MEASUREMENT_PATTERN, WASTAGE_PATTERN, PRICE_CHARGED, isTypeFull,
+} from '../controlTypes';
 import * as controlsApi from '../api/controlsApi';
 
 const COPY_SUFFIX = ' (Copy)';
-const OPTION_NOUN = { singular: 'choice', plural: 'choices', owner: 'radio group' };
-const EMPTY_FIELDS = { label: '', isRequired: false, placeholder: '', defaultText: '', isPrice: false, isPriceIncludedInTax: false, isQuantity: false, defaultChecked: false };
+const OPTION_NOUNS = {
+  radio: { singular: 'choice', plural: 'choices', owner: 'radio group' },
+  dropdown: { singular: 'choice', plural: 'choices', owner: 'dropdown' },
+};
+const EMPTY_FIELDS = { label: '', isRequired: false, placeholder: '', defaultText: '', isPrice: false, isPriceIncludedInTax: false, isQuantity: false, chargedBy: 'unit', isUnit: false, defaultChecked: false };
+// A unit's settings as typed ('' = not set).
+const UNIT_FIELDS = ['measuredAs', 'rate', 'roundUpTo', 'minimumSize', 'wastagePercent'];
+const textOf = (value) => (value === null || value === undefined ? '' : String(value));
 
 const toFields = (control) => ({
   label: control.label,
@@ -26,13 +36,15 @@ const toFields = (control) => ({
   isPrice: !!control.isPrice,
   isPriceIncludedInTax: !!control.isPriceIncludedInTax,
   isQuantity: !!control.isQuantity,
+  chargedBy: control.chargedBy || 'unit',
+  isUnit: !!control.isUnit,
   defaultChecked: !!control.defaultChecked,
 });
 
 // What gets saved, as one string - compared with the loaded one to know
 // whether anything changed.
 const toSnapshot = (type, fields, options) =>
-  JSON.stringify([type, fields, options.map(({ _id, name, isDefault }) => [_id, name, isDefault])]);
+  JSON.stringify([type, fields, options.map(({ _id, name, isDefault, ...unit }) => [_id, name, isDefault, ...UNIT_FIELDS.map((field) => textOf(unit[field]))])]);
 
 // The server's field errors ({ field, message }) by field; errors on one
 // choice ("options.1.name") count as errors of the choices.
@@ -114,14 +126,17 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
         setLimits(loadedLimits);
         setStatus(control.status);
         const loadedFields = toFields(control);
-        let loadedOptions = (control.options || []).map(({ _id, name }) => ({
+        let loadedOptions = (control.options || []).map(({ _id, name, ...unit }) => ({
           key: _id, _id, name, isDefault: _id === control.defaultOptionId,
+          measuredAs: unit.measuredAs || 'number', rate: textOf(unit.rate), roundUpTo: textOf(unit.roundUpTo), minimumSize: textOf(unit.minimumSize), wastagePercent: textOf(unit.wastagePercent),
         }));
         if (mode === 'clone') {
           // A new control with the same settings; the label must differ.
           const max = loadedLimits.maxLabelLength[control.type] ?? Infinity;
           loadedFields.label = `${control.label.slice(0, Math.max(0, max - COPY_SUFFIX.length))}${COPY_SUFFIX}`;
-          loadedOptions = loadedOptions.map(({ name, isDefault }) => ({ key: `new-${nextKey.current++}`, name, isDefault }));
+          loadedOptions = loadedOptions.map(({ _id, ...option }) => ({ ...option, key: `new-${nextKey.current++}` }));
+          // Only one unit dropdown: the copy is a plain dropdown.
+          loadedFields.isUnit = false;
         }
         setType(control.type);
         setFields(loadedFields);
@@ -142,6 +157,11 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
   const isText = TEXT_TYPES.includes(type);
   const isCheckbox = type === 'checkbox';
   const isRadio = type === 'radio';
+  const isDropdown = type === 'dropdown';
+  const isChoice = CHOICE_TYPES.includes(type);
+  // Per unit pricing on: the unit dropdown and how a price is charged per unit.
+  const isPerRateOn = limits?.isPerRatePricingOn === true;
+  const isUnit = isDropdown && isPerRateOn && fields.isUnit;
   const isPrice = type === 'textfield' && fields.isPrice;
   const isQuantity = type === 'textfield' && !fields.isPrice && fields.isQuantity;
   // Only with the tax feature on and the tax details of a country filled in.
@@ -150,8 +170,9 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
   const labelMax = limits?.maxLabelLength[type] ?? null;
   const placeholderMax = isText ? (limits?.maxPlaceholderLength[type] ?? null) : null;
   const textMax = isText ? (limits?.maxLength[type] ?? null) : null;
-  const optionMax = limits?.maxLength.radioOption ?? null;
-  const optionsAllowed = limits?.optionsAllowed ?? null;
+  const optionMax = (isDropdown ? limits?.maxLength.dropdownOption : limits?.maxLength.radioOption) ?? null;
+  const optionsAllowed = (isDropdown ? limits?.dropdownOptionsAllowed : limits?.optionsAllowed) ?? null;
+  const optionNoun = OPTION_NOUNS[type] || OPTION_NOUNS.radio;
 
   const clearError = (field) => {
     if (fieldErrors[field]) setFieldErrors((prev) => ({ ...prev, [field]: '' }));
@@ -168,16 +189,22 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
     clearError('options');
   };
 
+  // A unit's settings changed (the unit dropdown).
+  const setUnit = (key, changes) => {
+    setOptions((prev) => prev.map((option) => (option.key === key ? { ...option, ...changes } : option)));
+    Object.keys(changes).forEach((field) => clearError(`${key}.${field}`));
+  };
+
   // The choices to save, including one typed but not added yet; null when
   // that typed choice can't be added (its error is shown).
   const collectOptions = () => {
-    if (!isRadio || !newOption.trim()) return options;
-    const failure = checkItemName(options, newOption, { itemsAllowed: optionsAllowed, maxLength: optionMax, noun: OPTION_NOUN });
+    if (!isChoice || !newOption.trim()) return options;
+    const failure = checkItemName(options, newOption, { itemsAllowed: optionsAllowed, maxLength: optionMax, noun: optionNoun });
     if (failure) {
       setAddError(failure);
       return null;
     }
-    const next = [...options, { key: createKey(), name: newOption.trim(), isDefault: false }];
+    const next = [...options, { key: createKey(), name: newOption.trim(), isDefault: false, measuredAs: 'number', rate: '', roundUpTo: '', minimumSize: '', wastagePercent: '' }];
     setOptions(next);
     setNewOption('');
     return next;
@@ -194,6 +221,17 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
     else if (isPrice && fields.defaultText.trim() && !PRICE_PATTERN.test(fields.defaultText.trim())) errors.defaultText = 'Enter an amount with at most 2 decimals, e.g. 150 or 150.50';
     else if (isQuantity && fields.defaultText.trim() && !QUANTITY_PATTERN.test(fields.defaultText.trim())) errors.defaultText = 'Enter a whole number from 1 to 999999';
     if (isRadio && optionsToSave.length < MIN_RADIO_OPTIONS) errors.options = `Add at least ${MIN_RADIO_OPTIONS} choices`;
+    if (isDropdown && optionsToSave.length < 1) errors.options = 'Add at least 1 choice';
+    if (isUnit) {
+      for (const option of optionsToSave) {
+        const rate = textOf(option.rate).trim();
+        const minimum = textOf(option.minimumSize).trim();
+        const wastage = textOf(option.wastagePercent).trim();
+        if (rate && !PRICE_PATTERN.test(rate)) errors[`${option.key}.rate`] = 'Enter an amount with at most 2 decimals, e.g. 100';
+        if (minimum && !MEASUREMENT_PATTERN.test(minimum)) errors[`${option.key}.minimumSize`] = 'Enter a number with at most 3 decimals, e.g. 1';
+        if (wastage && (!WASTAGE_PATTERN.test(wastage) || Number(wastage) > 100)) errors[`${option.key}.wastagePercent`] = 'Enter a % from 0 to 100';
+      }
+    }
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -207,9 +245,22 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
     const payload = { type, label: fields.label.trim(), isRequired: fields.isRequired };
     if (isText) Object.assign(payload, { placeholder: fields.placeholder.trim() || null, defaultText: (isPrice || isQuantity ? fields.defaultText.trim() : fields.defaultText) || null });
     if (type === 'textfield') Object.assign(payload, { isPrice: fields.isPrice, isPriceIncludedInTax: isPrice && isTaxAvailable && fields.isPriceIncludedInTax, isQuantity });
+    if (isPrice && isPerRateOn) payload.chargedBy = fields.chargedBy;
     if (isCheckbox) payload.defaultChecked = fields.defaultChecked;
-    if (isRadio) {
-      payload.options = optionsToSave.map(({ _id, name, isDefault }) => (_id ? { _id, name, isDefault } : { name, isDefault }));
+    if (isDropdown && isPerRateOn) payload.isUnit = fields.isUnit;
+    if (isChoice) {
+      payload.options = optionsToSave.map(({ _id, name, isDefault, ...unit }) => ({
+        ...(_id && { _id }),
+        name,
+        isDefault,
+        ...(isUnit && {
+          measuredAs: unit.measuredAs || 'number',
+          rate: textOf(unit.rate).trim() || null,
+          roundUpTo: unit.roundUpTo ? Number(unit.roundUpTo) : null,
+          minimumSize: textOf(unit.minimumSize).trim() || null,
+          wastagePercent: textOf(unit.wastagePercent).trim() ? Number(unit.wastagePercent) : null,
+        }),
+      }));
     }
 
     setIsSaving(true);
@@ -226,7 +277,7 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
       const errors = toFieldErrors(err.errors);
       setFieldErrors(errors);
       // A message not tied to one field (e.g. the limit) goes on top.
-      if (!['label', 'placeholder', 'defaultText', 'options'].some((field) => errors[field])) setFormError(err.message);
+      if (!['label', 'placeholder', 'defaultText', 'options', 'isQuantity', 'isUnit'].some((field) => errors[field])) setFormError(err.message);
       setIsSaving(false);
     }
   };
@@ -294,7 +345,7 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
                   <InputField
                     label={isCheckbox ? 'Checkbox text' : 'Label'}
                     name="label"
-                    placeholder={isCheckbox ? 'e.g. Urgent delivery' : isRadio ? 'e.g. Are you married?' : 'e.g. Vehicle number'}
+                    placeholder={isCheckbox ? 'e.g. Urgent delivery' : isRadio ? 'e.g. Are you married?' : isDropdown ? 'e.g. Colour, or Unit' : 'e.g. Vehicle number'}
                     value={fields.label}
                     onChange={(e) => setField('label', e.target.value)}
                     error={fieldErrors.label}
@@ -388,7 +439,39 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
                           />
                         </div>
                       )}
+                      {isPrice && isPerRateOn && (
+                        <fieldset className="pl-7 min-w-0">
+                          <legend className="mb-2 text-sm font-medium text-gray-700">On an item charged per unit (meter, sq ft...), this price is charged</legend>
+                          <div className="space-y-2">
+                            {PRICE_CHARGED.map((way) => (
+                              <Radio
+                                key={way.value}
+                                name="chargedBy"
+                                value={way.value}
+                                label={way.label}
+                                description={way.description}
+                                checked={fields.chargedBy === way.value}
+                                onChange={() => setField('chargedBy', way.value)}
+                                disabled={isLocked}
+                              />
+                            ))}
+                          </div>
+                          <p className="mt-2 text-xs text-gray-500">On an item charged per piece it is always rate × quantity.</p>
+                        </fieldset>
+                      )}
                     </div>
+                  )}
+
+                  {isDropdown && isPerRateOn && (
+                    <Checkbox
+                      name="isUnit"
+                      label="Use this dropdown to pick the pricing unit"
+                      description="Its choices are the units an item can be charged in (e.g. sq ft, meter, cm), each with its own rate and size rules. On an item charged per unit, picking one asks the size and fills in the rate. Only one dropdown can be the pricing unit."
+                      checked={fields.isUnit}
+                      onChange={(e) => setField('isUnit', e.target.checked)}
+                      error={fieldErrors.isUnit}
+                      disabled={isLocked}
+                    />
                   )}
 
                   {isCheckbox && (
@@ -413,17 +496,17 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
                 </div>
               </Card>
 
-              {isRadio && (
-                <Card variant="outlined" title="Choices" subtitle="In the order shown. The default one is picked in advance on a new job order.">
+              {isChoice && (
+                <Card variant="outlined" title={isUnit ? 'Units' : 'Choices'} subtitle={isUnit ? 'The units, e.g. sq ft, meter, cm. The default one is picked in advance on a new job order.' : 'In the order shown. The default one is picked in advance on a new job order.'}>
                   <ListItemsEditor
                     items={options}
                     onChange={handleOptionsChange}
                     createKey={createKey}
                     itemsAllowed={optionsAllowed}
                     maxLength={optionMax}
-                    noun={OPTION_NOUN}
+                    noun={optionNoun}
                     hasStatus={false}
-                    addPlaceholder="Add a choice, e.g. Yes"
+                    addPlaceholder={isUnit ? 'Add a unit, e.g. sq ft' : 'Add a choice, e.g. Yes'}
                     newName={newOption}
                     onNewNameChange={setNewOption}
                     addError={addError}
@@ -434,8 +517,14 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
                 </Card>
               )}
 
+              {isUnit && (
+                <Card variant="outlined" title="Unit settings" subtitle="How each unit is measured, its rate and how its size is charged.">
+                  <UnitOptionsEditor options={options} onChange={setUnit} errors={fieldErrors} disabled={isLocked} />
+                </Card>
+              )}
+
               <Card variant="outlined" title="Preview" subtitle="How it will look on the job order.">
-                <ControlPreview type={type} options={options} {...fields} isPriceIncludedInTax={isTaxAvailable && fields.isPriceIncludedInTax} />
+                <ControlPreview type={type} options={options} {...fields} isUnit={isUnit} isPriceIncludedInTax={isTaxAvailable && fields.isPriceIncludedInTax} />
               </Card>
             </>
           )}

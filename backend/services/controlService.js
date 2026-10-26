@@ -3,7 +3,9 @@ const Control = require('../models/Control');
 const common = require('../utils/common');
 const { taxReadyCountryIds } = require('./taxSettingsService');
 const { LIVE_STATUSES } = require('../constants/masterConstants');
-const { CONTROL_TYPES, CONTROL_TYPE_VALUES, TEXT_CONTROL_TYPES } = require('../constants/controlConstants');
+const { CONTROL_TYPES, CONTROL_TYPE_VALUES, TEXT_CONTROL_TYPES, CHOICE_CONTROL_TYPES } = require('../constants/controlConstants');
+const { MEASURED_AS, PRICE_CHARGED } = require('../constants/pricingConstants');
+const { FEATURE_FLAGS } = require('../constants/featureConstants');
 
 // The vendor's controls (fields on the job order form). Every function is
 // scoped by vendorId, and only sees the control types assigned to the vendor
@@ -13,14 +15,19 @@ const { CONTROL_TYPES, CONTROL_TYPE_VALUES, TEXT_CONTROL_TYPES } = require('../c
 // Every limit comes from CompanyMaster, and null there means no limit.
 
 const LIVE = { $in: LIVE_STATUSES };
-const CONTROL_FIELDS = '_id type label isRequired placeholder defaultText isPrice isPriceIncludedInTax isQuantity defaultChecked options defaultOptionId precedence status updatedAt';
+const CONTROL_FIELDS = '_id type label isRequired placeholder defaultText isPrice isPriceIncludedInTax isQuantity chargedBy isUnit defaultChecked options defaultOptionId precedence status updatedAt';
 
 const TYPE_NAMES = {
     [CONTROL_TYPES.TEXTFIELD]: 'text field',
     [CONTROL_TYPES.TEXTAREA]: 'text area',
     [CONTROL_TYPES.CHECKBOX]: 'checkbox',
-    [CONTROL_TYPES.RADIO]: 'radio group'
+    [CONTROL_TYPES.RADIO]: 'radio group',
+    [CONTROL_TYPES.DROPDOWN]: 'dropdown'
 };
+
+/** Per unit pricing is on: in WebsiteMaster and the vendor's CompanyMaster. */
+const isPerRatePricingOn = (websiteMasterData, companyMasterData) =>
+    websiteMasterData?.[FEATURE_FLAGS.PER_RATE_PRICING] === true && companyMasterData?.[FEATURE_FLAGS.PER_RATE_PRICING] === true;
 
 // The control types the vendor may use: null in CompanyMaster = all of them.
 const assignedTypesOf = (companyMasterData) => {
@@ -36,25 +43,30 @@ const limitsOf = ({ companyMasterData, websiteMasterData, companySettingsData })
     return {
         assignedTypes: assignedTypesOf(companyMasterData),
         isTaxAvailable: taxReadyCountryIds(websiteMasterData, companyMasterData, companySettingsData).length > 0,
+        // The unit dropdown and how a price is charged per unit.
+        isPerRatePricingOn: isPerRatePricingOn(websiteMasterData, companyMasterData),
         controlsAllowed: Object.fromEntries(CONTROL_TYPE_VALUES.map((type) => [type, allowed[type] ?? null])),
         // Typed on the job order (and the default text), one radio choice.
         maxLength: {
             [CONTROL_TYPES.TEXTFIELD]: companyMasterData?.maxLengthOfTextfieldControl ?? null,
             [CONTROL_TYPES.TEXTAREA]: companyMasterData?.maxLengthOfTextareaControl ?? null,
-            radioOption: companyMasterData?.maxLengthOfRadioButtonText ?? null
+            radioOption: companyMasterData?.maxLengthOfRadioButtonText ?? null,
+            dropdownOption: companyMasterData?.maxLengthOfDropdownOptionText ?? null
         },
         // The label of each type (a checkbox's label is its text).
         maxLabelLength: {
             [CONTROL_TYPES.TEXTFIELD]: companyMasterData?.maxTextForLabelInTextfieldControl ?? null,
             [CONTROL_TYPES.TEXTAREA]: companyMasterData?.maxTextForLabelInTextareaControl ?? null,
             [CONTROL_TYPES.CHECKBOX]: companyMasterData?.maxLengthOfCheckboxText ?? null,
-            [CONTROL_TYPES.RADIO]: companyMasterData?.maxTextForLabelInRadioButtonControl ?? null
+            [CONTROL_TYPES.RADIO]: companyMasterData?.maxTextForLabelInRadioButtonControl ?? null,
+            [CONTROL_TYPES.DROPDOWN]: companyMasterData?.maxTextForLabelInDropdownControl ?? null
         },
         maxPlaceholderLength: {
             [CONTROL_TYPES.TEXTFIELD]: companyMasterData?.maxTextForPlaceholderInTextfieldControl ?? null,
             [CONTROL_TYPES.TEXTAREA]: companyMasterData?.maxTextForPlaceholderInTextareaControl ?? null
         },
-        optionsAllowed: companyMasterData?.numberOfRadioButtonsAllowedInGroup ?? null
+        optionsAllowed: companyMasterData?.numberOfRadioButtonsAllowedInGroup ?? null,
+        dropdownOptionsAllowed: companyMasterData?.numberOfOptionsAllowedInDropdown ?? null
     };
 };
 
@@ -87,6 +99,13 @@ const checkVendorLimits = (data, limits) => {
             const longOption = data.options.find((option) => tooLong(option.name, maxLength.radioOption));
             if (longOption) errors.push({ field: 'options', message: `A choice can be at most ${maxLength.radioOption} characters` });
         }
+        if (data.type === CONTROL_TYPES.DROPDOWN) {
+            if (limits.dropdownOptionsAllowed !== null && data.options.length > limits.dropdownOptionsAllowed) {
+                errors.push({ field: 'options', message: `A dropdown can have at most ${limits.dropdownOptionsAllowed} choices` });
+            }
+            const longOption = data.options.find((option) => tooLong(option.name, maxLength.dropdownOption));
+            if (longOption) errors.push({ field: 'options', message: `A choice can be at most ${maxLength.dropdownOption} characters` });
+        }
         return errors;
     } catch (err) {
         throw err;
@@ -111,6 +130,30 @@ const quantityTakenResult = async ({ vendorId, data, exceptId = null }) => {
     }
 };
 
+// Only one unit dropdown per vendor (among controls not deleted), like the quantity.
+const unitTakenResult = async ({ vendorId, isUnit, exceptId = null }) => {
+    try {
+        if (!isUnit) return null;
+        const other = await Control.findOne({ vendorId, isUnit: true, status: LIVE, ...(exceptId && { _id: { $ne: exceptId } }) }).select('label').lean();
+        if (!other) return null;
+        const message = `"${other.label}" is already the unit dropdown. Only one dropdown can pick the pricing unit.`;
+        return common.returnResult(false, 409, message, { errors: [{ field: 'isUnit', message }] });
+    } catch (err) {
+        throw err;
+    }
+};
+
+const numberOrNull = (text) => (text === null || text === undefined ? null : Number(text));
+
+// A unit choice as stored: how it is measured, its rate and size rules.
+const unitOf = (option) => ({
+    measuredAs: option.measuredAs || MEASURED_AS.NUMBER,
+    rate: numberOrNull(option.rate),
+    roundUpTo: option.roundUpTo ?? null,
+    minimumSize: numberOrNull(option.minimumSize),
+    wastagePercent: option.wastagePercent ?? null
+});
+
 // A unique index refused the write (the label) -> 409 for the label field.
 const duplicateResult = (err, data) => {
     try {
@@ -122,11 +165,18 @@ const duplicateResult = (err, data) => {
     }
 };
 
-// The fields to store for the control's type. Radio choices keep their _id
-// (new ones get one here, so the default can point at it).
-// keepTaxOf: while tax isn't available the tick is hidden, so a control
-// being edited keeps the one it had (null on create = not included).
-const toStored = (data, { isTaxAvailable, keepTaxOf = null }) => {
+// Whether the control is the unit dropdown: as sent while per unit pricing
+// is on; while it is off the tick is hidden, so it keeps what it had.
+const isUnitOf = (data, { isPerRatePricingOn: isOn, keepTaxOf: current = null }) =>
+    data.type === CONTROL_TYPES.DROPDOWN && (isOn ? data.isUnit === true : current?.isUnit === true);
+
+// The fields to store for the control's type. Choices keep their _id (new
+// ones get one here, so the default can point at it).
+// keepTaxOf: the control being edited (null on create). While tax isn't
+// available its tax tick is hidden, so it keeps the one it had; while per
+// unit pricing is off, so do how a price is charged, the unit dropdown tick
+// and the units' rates and size rules.
+const toStored = (data, { isTaxAvailable, isPerRatePricingOn: isOn = false, keepTaxOf = null }) => {
     try {
         const stored = { label: data.label, isRequired: data.isRequired };
         if (TEXT_CONTROL_TYPES.includes(data.type)) {
@@ -138,10 +188,17 @@ const toStored = (data, { isTaxAvailable, keepTaxOf = null }) => {
             const includedInTax = isTaxAvailable ? data.isPriceIncludedInTax : keepTaxOf?.isPriceIncludedInTax === true;
             stored.isPriceIncludedInTax = data.isPrice && includedInTax;
             stored.isQuantity = !data.isPrice && data.isQuantity === true;
+            if (data.isPrice) stored.chargedBy = isOn ? data.chargedBy : keepTaxOf?.chargedBy || PRICE_CHARGED.UNIT;
         }
         if (data.type === CONTROL_TYPES.CHECKBOX) stored.defaultChecked = data.defaultChecked;
-        if (data.type === CONTROL_TYPES.RADIO) {
-            stored.options = data.options.map((option) => ({ _id: option._id || new mongoose.Types.ObjectId(), name: option.name }));
+        if (data.type === CONTROL_TYPES.DROPDOWN) stored.isUnit = isUnitOf(data, { isPerRatePricingOn: isOn, keepTaxOf });
+        if (CHOICE_CONTROL_TYPES.includes(data.type)) {
+            const keptOf = new Map((keepTaxOf?.options || []).map((option) => [String(option._id), option]));
+            stored.options = data.options.map((option) => {
+                const choice = { _id: option._id || new mongoose.Types.ObjectId(), name: option.name };
+                if (!stored.isUnit) return choice;
+                return { ...choice, ...unitOf(isOn ? option : keptOf.get(String(option._id)) || {}) };
+            });
             const defaultIndex = data.options.findIndex((option) => option.isDefault);
             stored.defaultOptionId = defaultIndex === -1 ? null : stored.options[defaultIndex]._id;
         }
@@ -211,6 +268,8 @@ const createControl = async ({ vendorId, userId, data, companyMasterData, websit
         }
         const quantityTaken = await quantityTakenResult({ vendorId, data });
         if (quantityTaken) return quantityTaken;
+        const unitTaken = await unitTakenResult({ vendorId, isUnit: isUnitOf(data, limits) });
+        if (unitTaken) return unitTaken;
 
         let control;
         try {
@@ -230,13 +289,13 @@ const createControl = async ({ vendorId, userId, data, companyMasterData, websit
 const updateControl = async ({ vendorId, userId, id, data, companyMasterData, websiteMasterData, companySettingsData }) => {
     try {
         const limits = limitsOf({ companyMasterData, websiteMasterData, companySettingsData });
-        const current = await Control.findOne({ _id: id, vendorId, type: { $in: limits.assignedTypes }, status: LIVE }).select('type options isPriceIncludedInTax').lean();
+        const current = await Control.findOne({ _id: id, vendorId, type: { $in: limits.assignedTypes }, status: LIVE }).select('type options isPriceIncludedInTax chargedBy isUnit').lean();
         if (!current) return common.returnResult(false, 404, 'Control not found.');
         if (current.type !== data.type) return common.returnResult(false, 400, 'The type of a control cannot be changed.');
         const errors = checkVendorLimits(data, limits);
         if (errors.length > 0) return invalid(errors);
 
-        if (data.type === CONTROL_TYPES.RADIO) {
+        if (CHOICE_CONTROL_TYPES.includes(data.type)) {
             const currentIds = new Set(current.options.map((option) => String(option._id)));
             if (data.options.some((option) => option._id && !currentIds.has(option._id))) {
                 return common.returnResult(false, 409, 'This control was changed meanwhile. Please reload it and make your changes again.');
@@ -244,12 +303,14 @@ const updateControl = async ({ vendorId, userId, id, data, companyMasterData, we
         }
         const quantityTaken = await quantityTakenResult({ vendorId, data, exceptId: id });
         if (quantityTaken) return quantityTaken;
+        const unitTaken = await unitTakenResult({ vendorId, isUnit: isUnitOf(data, { ...limits, keepTaxOf: current }), exceptId: id });
+        if (unitTaken) return unitTaken;
 
         let control;
         try {
             control = await Control.findOneAndUpdate(
                 { _id: id, vendorId, status: LIVE },
-                { $set: toStored(data, { isTaxAvailable: limits.isTaxAvailable, keepTaxOf: current }) },
+                { $set: toStored(data, { ...limits, keepTaxOf: current }) },
                 { returnDocument: 'after', runValidators: true, auditUserId: userId, projection: CONTROL_FIELDS }
             ).lean();
         } catch (err) {
@@ -323,29 +384,37 @@ const moveControl = async ({ vendorId, userId, id, direction, companyMasterData 
 // types, in order, with what the form needs: the longest text allowed
 // (null = no limit) and the defaults. A text field also says whether it is a
 // price (an amount added to the total), whether tax is charged on it and
-// whether it is the quantity.
-const getControlsForJobOrder = async ({ vendorId, companyMasterData }) => {
+// whether it is the quantity. With per unit pricing on, a price says how it
+// is charged on a per unit item and the unit dropdown's choices are units.
+const getControlsForJobOrder = async ({ vendorId, companyMasterData, websiteMasterData }) => {
     try {
-        const limits = limitsOf({ companyMasterData });
+        const limits = limitsOf({ companyMasterData, websiteMasterData });
+        const isOn = limits.isPerRatePricingOn;
         const controls = limits.assignedTypes.length === 0 ? [] : await Control.find({ vendorId, type: { $in: limits.assignedTypes }, status: 'A' })
-            .select('_id type label isRequired placeholder defaultText isPrice isPriceIncludedInTax isQuantity defaultChecked options defaultOptionId').sort({ precedence: 1 }).lean();
+            .select('_id type label isRequired placeholder defaultText isPrice isPriceIncludedInTax isQuantity chargedBy isUnit defaultChecked options defaultOptionId').sort({ precedence: 1 }).lean();
 
         return common.returnResult(true, 200, 'Controls fetched successfully.', {
             controls: controls.map((control) => {
                 if (control.type === CONTROL_TYPES.TEXTFIELD) {
-                    const { defaultChecked, options, defaultOptionId, ...text } = control;
-                    return { ...text, isPrice: !!text.isPrice, isPriceIncludedInTax: !!text.isPriceIncludedInTax, isQuantity: !!text.isQuantity, maxLength: limits.maxLength[control.type] };
+                    const { defaultChecked, options, defaultOptionId, isUnit, chargedBy, ...text } = control;
+                    return {
+                        ...text, isPrice: !!text.isPrice, isPriceIncludedInTax: !!text.isPriceIncludedInTax, isQuantity: !!text.isQuantity,
+                        ...(text.isPrice && isOn && { chargedBy: chargedBy || PRICE_CHARGED.UNIT }),
+                        maxLength: limits.maxLength[control.type]
+                    };
                 }
                 if (control.type === CONTROL_TYPES.TEXTAREA) {
-                    const { isPrice, isPriceIncludedInTax, isQuantity, defaultChecked, options, defaultOptionId, ...text } = control;
+                    const { isPrice, isPriceIncludedInTax, isQuantity, chargedBy, isUnit, defaultChecked, options, defaultOptionId, ...text } = control;
                     return { ...text, maxLength: limits.maxLength[control.type] };
                 }
                 if (control.type === CONTROL_TYPES.CHECKBOX) {
-                    const { placeholder, defaultText, isPrice, isPriceIncludedInTax, isQuantity, options, defaultOptionId, ...checkbox } = control;
+                    const { placeholder, defaultText, isPrice, isPriceIncludedInTax, isQuantity, chargedBy, isUnit, options, defaultOptionId, ...checkbox } = control;
                     return checkbox;
                 }
-                const { placeholder, defaultText, isPrice, isPriceIncludedInTax, isQuantity, defaultChecked, ...radio } = control;
-                return radio;
+                const { placeholder, defaultText, isPrice, isPriceIncludedInTax, isQuantity, chargedBy, isUnit, defaultChecked, options, ...choice } = control;
+                // The unit dropdown only while per unit pricing is on (else a plain dropdown).
+                if (control.type === CONTROL_TYPES.DROPDOWN && isUnit && isOn) return { ...choice, isUnit: true, options: options.map((option) => ({ _id: option._id, name: option.name, ...unitOf(option) })) };
+                return { ...choice, ...(control.type === CONTROL_TYPES.DROPDOWN && { isUnit: false }), options: options.map((option) => ({ _id: option._id, name: option.name })) };
             })
         });
     } catch (err) {
@@ -355,6 +424,7 @@ const getControlsForJobOrder = async ({ vendorId, companyMasterData }) => {
 
 module.exports = {
     assignedTypesOf,
+    isPerRatePricingOn,
     getControlsForJobOrder,
     listControls,
     getControl,

@@ -117,13 +117,19 @@ Each section's code is downloaded the first time it is opened
   module, the All in the header every option of every module); a master role adds role
   masters, each "Whole master" or some of its values.
 - **Controls** - fields the vendor adds to the job order (text field, text
-  area, checkbox, radio buttons), only the types assigned to the vendor: the
+  area, checkbox, radio buttons, dropdown), only the types assigned to the vendor: the
   same list as Masters plus a type filter and a usage pill per limited type;
   create (pick the type), copy and edit with a live preview; radio choices
   with a default. "Include this price in tax" shows only while tax is
   available (the tax feature on and one country's tax details filled in).
   A text field that isn't a price can be ticked "This is a quantity field"
   (whole numbers only; one per vendor; a "Quantity" badge in the list).
+  With per unit pricing on, one dropdown can be ticked "Use this dropdown to
+  pick the pricing unit" (a "Pricing unit" badge): each choice is a unit
+  with how it is measured (one number / length x width / length x width x
+  height), a rate, rounding of each measurement, a minimum size and
+  wastage %. A price then says how it is charged: per unit, per running
+  length of the edge, or per piece.
 - **Job Orders** - the list (newest first, search by number, job name,
   customer or place; the Job name column shows each item's job name on its
   own line; the Customer column shows name, phone and place; view / print /
@@ -147,11 +153,21 @@ Each section's code is downloaded the first time it is opened
   (rate x the item's quantity, still editable; emptying it goes back to rate
   x quantity); changing the quantity or a rate while a total was typed by
   hand asks "Keep my totals" or "Recalculate" (a job order keeps the way it
-  was made). Then the tax rate,
+  was made). With per unit pricing each item has "Charged: Per piece / Per
+  unit"; per unit it asks the unit (its rate fills the first per unit price
+  while that rate is empty or still the previous unit's) and the size
+  (Length / Width / Height as the unit takes), shows "Size 9.43 sq ft ·
+  charged 11.25 sq ft · edge 14" and the rates read "Rate per sq ft" / "Rate
+  per running length" / "Rate per piece"; changing the unit or size with a
+  typed total asks again. Then the tax rate, "Delivery and payment" (the
+  delivery date, a discount as an amount or %, the advance received - each
+  as Company Settings asks; one no longer asked but saved on the job order
+  shows, locked),
   and a summary beside it that updates as you type - every answer (item
   after item under its heading when there are several), the prices of all items,
-  subtotal, tax split (CGST + SGST, or IGST for another Indian state) and
-  total in the country's currency, or why no tax is charged. Images (only
+  subtotal, discount, tax split (CGST + SGST, or IGST for another Indian
+  state), round off, total, advance and balance due in the country's
+  currency, or why no tax is charged. Images (only
   with the image feature on, per item): thumbnails with add / remove, checked for
   format, size and count (the limit counts all items together), uploaded
   with Create / Save; the view shows them by item (click for full size). With
@@ -195,7 +211,9 @@ Each section's code is downloaded the first time it is opened
   the menu and browser tab update at once), Job Orders (automatic numbers,
   ask the customer address, where to use master short names, price on a job
   order - "I enter the price" or "Software calculates the price" (rate x
-  quantity) - when the work
+  quantity) - how you charge (per piece / per unit, with per unit pricing),
+  also ask on a job order (delivery date, discount, advance), round off the
+  total (to 1 / 5 / 10; nearest / always up / always down) - when the work
   time starts with steps on, and - with Layout Master and RBAC on - what the
   printed "Work given" field shows: who does it, start date, due time, step
   and %, hold reason), Shop (the owner only: close and open the shop) and

@@ -19,6 +19,7 @@ import { formatDueAt } from '../workTime';
 import * as jobOrdersApi from '../api/jobOrdersApi';
 
 const formatDateTime = (value) => new Date(value).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const formatDate = (value) => new Date(value).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 
 /**
  * A saved job order, as it was saved (names copied in at the time).
@@ -84,6 +85,7 @@ const JobOrderViewPage = ({ jobOrderId, onBack, onEdit, onPrint, canChangeStep }
         <p className="mt-1 text-sm text-gray-500">
           Created {formatDateTime(jobOrder.createdAt)}{wasEdited && ` · last changed ${formatDateTime(jobOrder.updatedAt)}`}
         </p>
+        {jobOrder.deliveryAt && <p className="mt-1 text-sm font-medium text-indigo-700">Delivery {formatDate(jobOrder.deliveryAt)}</p>}
       </div>
 
       {hasImages && (
@@ -136,6 +138,10 @@ const JobOrderViewPage = ({ jobOrderId, onBack, onEdit, onPrint, canChangeStep }
           subtotal={jobOrder.subtotal}
           tax={jobOrder.tax}
           total={jobOrder.total}
+          discount={jobOrder.discount}
+          roundOff={jobOrder.roundOff}
+          advance={jobOrder.advance}
+          balance={jobOrder.balance}
         />
       </Card>
     </div>

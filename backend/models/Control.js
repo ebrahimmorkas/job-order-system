@@ -2,19 +2,32 @@ const mongoose = require('mongoose');
 const auditPlugin = require('./plugins/auditPlugin');
 const { CASE_INSENSITIVE_COLLATION, LIVE_STATUSES } = require('../constants/masterConstants');
 const { CONTROL_TYPE_VALUES } = require('../constants/controlConstants');
+const { MEASURED_AS_VALUES, PRICE_CHARGED_VALUES } = require('../constants/pricingConstants');
 
-// One choice of a radio group. Its own _id, so a job order can point at it.
+// One choice of a radio group or dropdown. Its own _id, so a job order can
+// point at it. A choice of the unit dropdown (isUnit) is a unit (sq ft,
+// meter...): how it is measured, its default rate and how its size is
+// worked out (rounded up, wastage, minimum).
 const optionSchema = new mongoose.Schema({
     name: {
         type: String,
         required: true,
         trim: true,
         minlength: 1
-    }
+    },
+    measuredAs: { type: String, enum: MEASURED_AS_VALUES, default: undefined },
+    // Filled in as the rate of a new price (null = none).
+    rate: { type: Number, min: 0, default: undefined },
+    // Each measurement rounded up to this step (ROUND_UP_STEPS; null = not rounded).
+    roundUpTo: { type: Number, default: undefined },
+    // The smallest size charged for one piece (null = none).
+    minimumSize: { type: Number, min: 0, default: undefined },
+    // Added to the size, in % (null = none).
+    wastagePercent: { type: Number, min: 0, default: undefined }
 });
 
 // A field the vendor adds to the job order form: a textfield, textarea,
-// checkbox or radio group. Feature: isControlsFeatureOn; which types a
+// checkbox, radio group or dropdown. Feature: isControlsFeatureOn; which types a
 // vendor may use: CompanyMaster.assignedControls. Lengths and counts are
 // limited by CompanyMaster (checked in services/controlService.js).
 const controlSchema = new mongoose.Schema({
@@ -66,17 +79,32 @@ const controlSchema = new mongoose.Schema({
         type: Boolean,
         default: undefined
     },
+    // Textfield price, per unit pricing: how it is charged on a per unit item
+    // (PRICE_CHARGED: per piece, per unit of size, per running length of the
+    // edge). Missing = per unit.
+    chargedBy: {
+        type: String,
+        enum: PRICE_CHARGED_VALUES,
+        default: undefined
+    },
+    // Dropdown only, per unit pricing: its choices are the units (sq ft,
+    // meter...) a per unit item is charged in. At most one per vendor among
+    // controls not deleted.
+    isUnit: {
+        type: Boolean,
+        default: undefined
+    },
     // Checkbox only: ticked on a new job order.
     defaultChecked: {
         type: Boolean,
         default: false
     },
-    // Radio only: the choices, in order.
+    // Radio / dropdown only: the choices, in order.
     options: {
         type: [optionSchema],
         default: undefined
     },
-    // Radio only: the choice picked on a new job order (one of options), or null.
+    // Radio / dropdown only: the choice picked on a new job order (one of options), or null.
     defaultOptionId: {
         type: mongoose.Types.ObjectId,
         default: null

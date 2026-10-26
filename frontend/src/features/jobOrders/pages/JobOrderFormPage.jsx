@@ -6,14 +6,19 @@ import Card from '../../../components/common/Card';
 import Alert from '../../../components/common/Alert';
 import Spinner from '../../../components/common/Spinner';
 import ConfirmDialog from '../../../components/common/ConfirmDialog';
+import DatePicker from '../../../components/common/DatePicker';
+import { Radio } from '../../../components/common/Radio';
+import { toDayString } from '../../../components/common/DateRangeFields';
 import { BackIcon } from '../../../components/common/ActionIcons';
 import { useUnsavedChanges } from '../../../components/common/UnsavedChanges';
 import JobOrderSummary from '../components/JobOrderSummary';
 import JobOrderItemFields from '../components/JobOrderItemFields';
-import { computeTotals } from '../jobOrderTotals';
+import { computeTotals, measurementsOf, roundTo } from '../jobOrderTotals';
 import { summaryRowsOf } from '../summaryRows';
-import { PRICE_PATTERN, QUANTITY_PATTERN } from '../../controls/controlTypes';
-import { RATE_TIMES_QUANTITY, quantityOf, priceAmountOf, workedTotalOf } from '../jobOrderItems';
+import { PRICE_PATTERN, QUANTITY_PATTERN, MEASUREMENT_PATTERN, CHOICE_TYPES } from '../../controls/controlTypes';
+import {
+  RATE_TIMES_QUANTITY, quantityOf, priceAmountOf, workedTotalOf, unitControlOf, itemPricingOf, chargeOf,
+} from '../jobOrderItems';
 import { taxLabel } from '../../companySettings/taxRules';
 import * as jobOrdersApi from '../api/jobOrdersApi';
 import CustomerSearch from '../components/CustomerSearch';
@@ -31,17 +36,29 @@ const NO_COUNTRY_REASON = 'No tax is charged: you have more than one country and
 
 const idOf = (value) => (value ? String(value) : '');
 
+const MEASUREMENT_NAMES = ['length', 'width', 'height'];
+const AMOUNT_MESSAGE = 'Enter an amount with at most 2 decimals, e.g. 150 or 150.50';
+
+// A typed amount as a number, or null when empty, 0 or not an amount.
+const amountOf = (text) => (PRICE_PATTERN.test(text.trim()) && Number(text) > 0 ? Number(text) : null);
+
+// A typed measurement as a number, or null when empty or not a number (counted as 1).
+const measurementOf = (text) => (MEASUREMENT_PATTERN.test(text.trim()) && Number(text) > 0 ? Number(text) : null);
+
 // "<itemId>|<valueId>": the work on one value of one saved item.
 const workKeyOf = (itemId, valueId) => `${idOf(itemId)}|${idOf(valueId)}`;
 
 // A new item: each master's default value, each control's default answer.
-const freshItem = ({ masters, controls }, key) => ({
+const freshItem = ({ masters, controls, settings }, key) => ({
   key,
   // The saved item this is ('' = a new item).
   itemId: '',
   name: '',
   // "Same as above" ticked (the name was copied from the item above once).
   sameAsAbove: false,
+  // Per unit pricing: charged per piece or per unit, and the size typed.
+  chargeBy: settings.chargeBy || 'piece',
+  measurements: { length: '', width: '', height: '' },
   picks: Object.fromEntries(masters.map((master) => [master._id, master.defaultValueId ? [master.defaultValueId] : []])),
   answers: Object.fromEntries(controls.map((control) => [control._id, {
     text: control.defaultText || '',
@@ -70,6 +87,11 @@ const savedItem = ({ masters, controls }, item, key) => {
     itemId: idOf(item._id),
     name: item.name || '',
     sameAsAbove: false,
+    chargeBy: item.chargeBy === 'unit' ? 'unit' : 'piece',
+    measurements: Object.fromEntries(MEASUREMENT_NAMES.map((name) => {
+      const value = item.measurements?.[name];
+      return [name, value === null || value === undefined ? '' : String(value)];
+    })),
     picks: Object.fromEntries(masters.map((master) => {
       const known = new Set(master.values.map((value) => value._id));
       return [master._id, (savedMasters.get(master._id) || []).filter((id) => known.has(id))];
@@ -97,6 +119,10 @@ const freshForm = (parts) => ({
   customer: { ...EMPTY_CUSTOMER, countryId: parts.countries.length === 1 ? parts.countries[0]._id : '' },
   taxId: '',
   items: [freshItem(parts, 'item-0')],
+  // 'YYYY-MM-DD' ('' = none)
+  deliveryAt: '',
+  discount: { type: 'amount', value: '' },
+  advance: '',
 });
 
 const savedForm = (parts, jobOrder) => ({
@@ -104,6 +130,9 @@ const savedForm = (parts, jobOrder) => ({
   customer: formCustomerOf(parts.countries, jobOrder.customer || {}),
   taxId: idOf(jobOrder.tax?.taxId),
   items: jobOrder.items.map((item, index) => savedItem(parts, item, `item-${index}`)),
+  deliveryAt: jobOrder.deliveryAt ? toDayString(new Date(jobOrder.deliveryAt)) : '',
+  discount: { type: jobOrder.discount?.type || 'amount', value: jobOrder.discount ? String(jobOrder.discount.value) : '' },
+  advance: jobOrder.advance === null || jobOrder.advance === undefined ? '' : String(jobOrder.advance),
 });
 
 // "<itemId>|<valueId>" -> the people a saved job order gave that work to ({ userId, name }).
@@ -114,6 +143,7 @@ const earlierPeopleOf = (jobOrder) => new Map((jobOrder?.items || []).flatMap((i
  * Create or edit a job order: the job order number (when typed by hand),
  * the customer (when asked), one or more items - each with its job name,
  * masters, controls and images (up to the vendor's limit) - the tax rate,
+ * the delivery date, discount and advance (as Company Settings asks them),
  * and a summary that updates as the form is filled in. Everything is
  * checked and worked out again by the backend on Create / Save.
  *
@@ -138,7 +168,7 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
   const [isSaving, setIsSaving] = useState(false);
   // On edit: how the job order's prices are worked out (it keeps its own way).
   const [savedPriceCalculation, setSavedPriceCalculation] = useState('');
-  // The quantity or a rate changed while totals were typed by hand: { index, controlIds }.
+  // The quantity, a rate, the unit or the size changed while totals were typed by hand: { index, controlIds }.
   const [outdatedTotals, setOutdatedTotals] = useState(null);
   // Previews of picked images (object URLs), freed when removed or on leaving.
   const previewUrls = useRef(new Set());
@@ -181,6 +211,7 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
   const maxItems = Math.max(settings?.maxItems ?? 1, savedItemCount);
   // A price is its rate x the item's quantity (still editable by hand).
   const isRateTimesQuantity = (isEdit ? savedPriceCalculation : settings?.priceCalculation) === RATE_TIMES_QUANTITY;
+  const isPerRateOn = settings?.isPerRatePricingOn === true;
 
   // userId -> name, of everyone who can be (or was) given work.
   const personNames = useMemo(() => {
@@ -201,18 +232,24 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
     const taxCountry = (askAddress && country) || (countries.length === 1 ? countries[0] : null);
     const items = form.items.map((item) => {
       const quantity = isRateTimesQuantity ? quantityOf(parts.controls, item.answers) : 1;
+      const pricing = itemPricingOf(parts.controls, item, isPerRateOn);
       const controls = [];
       for (const control of parts.controls) {
         const answer = item.answers[control._id];
         const base = { controlId: control._id, type: control.type, label: control.label };
         if (control.type === 'checkbox') controls.push({ ...base, checked: answer.checked });
-        else if (control.type === 'radio') controls.push({ ...base, optionName: control.options.find((o) => o._id === answer.optionId)?.name || null });
-        else if (control.isPrice) {
-          const amount = priceAmountOf(answer, quantity, isRateTimesQuantity);
+        else if (CHOICE_TYPES.includes(control.type)) {
+          // The unit dropdown isn't asked on a per piece item.
+          if (isPerRateOn && control.isUnit && !pricing) continue;
+          controls.push({ ...base, optionName: control.options.find((o) => o._id === answer.optionId)?.name || null });
+        } else if (control.isPrice) {
+          const charge = chargeOf(control, pricing);
+          const times = quantity * charge.factor;
+          const amount = priceAmountOf(answer, times, isRateTimesQuantity);
           if (amount === null) continue;
           const rate = isRateTimesQuantity ? Number(answer.text.trim()) : null;
-          const isAmountEdited = isRateTimesQuantity && amount !== workedTotalOf(answer.text, quantity);
-          controls.push({ ...base, isPrice: true, isPriceIncludedInTax: control.isPriceIncludedInTax, amount, rate, isAmountEdited });
+          const isAmountEdited = isRateTimesQuantity && amount !== workedTotalOf(answer.text, times);
+          controls.push({ ...base, isPrice: true, isPriceIncludedInTax: control.isPriceIncludedInTax, amount, rate, isAmountEdited, ...charge });
         } else controls.push({ ...base, text: answer.text });
       }
       const masters = parts.masters.map((master) => ({
@@ -223,7 +260,13 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
           .filter((value) => item.picks[master._id].includes(value._id))
           .map((value) => ({ ...value, assignedTo: (item.assign[value._id] || []).map((userId) => ({ userId, name: personNames.get(userId) })) })),
       }));
-      return { name: item.name.trim(), quantity, masters, controls };
+      const sized = pricing?.size ? {
+        chargeBy: 'unit',
+        unit: pricing.unit,
+        measurements: Object.fromEntries(MEASUREMENT_NAMES.map((name) => [name, measurementOf(item.measurements[name] || '')])),
+        ...pricing.size,
+      } : {};
+      return { name: item.name.trim(), quantity, masters, controls, ...sized };
     });
     // Every price of every item.
     const prices = items.flatMap((item) => item.controls).filter((c) => c.isPrice).map((c) => ({ amount: c.amount, isTaxed: c.isPriceIncludedInTax }));
@@ -244,12 +287,19 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
     // Between two states (e.g. IGST in India); an unknown customer state counts as the business's own.
     const businessStateId = taxCountry?.businessStateId || '';
     const isInterState = !!(rate && taxCountry.interStateTaxLabel && askAddress && state && businessStateId && state._id !== businessStateId);
+    // Saved values stay while Company Settings no longer asks them (as the backend keeps them).
+    const discountValue = amountOf(form.discount.value);
+    const discount = discountValue === null ? null : { type: form.discount.type, value: discountValue };
+    const decimals = taxCountry?.currency?.decimalPlaces ?? 2;
     const totals = computeTotals({
       prices,
       tax: rate,
-      decimals: taxCountry?.currency?.decimalPlaces ?? 2,
+      decimals,
       interStateLabel: isInterState ? taxCountry.interStateTaxLabel : null,
+      discount,
+      rounding: settings.roundTotalTo ? { step: settings.roundTotalTo, direction: settings.roundTotalDirection } : null,
     });
+    const advance = amountOf(form.advance);
 
     return {
       country,
@@ -267,14 +317,24 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
       subtotal: totals.subtotal,
       tax: { isApplied: !!rate, reason, name: rate?.name, components: totals.components, taxableAmount: totals.taxableAmount, amount: totals.taxAmount },
       total: totals.total,
+      discount: discount ? { ...discount, amount: totals.discountAmount } : null,
+      roundOff: totals.roundOff,
+      advance,
+      balance: advance === null ? null : roundTo(totals.total - advance, decimals),
     };
-  }, [parts, form, countries, askAddress, askContact, settings, personNames, isRateTimesQuantity]);
+  }, [parts, form, countries, askAddress, askContact, settings, personNames, isRateTimesQuantity, isPerRateOn]);
 
   const clearError = (...fields) => {
     if (fields.some((field) => fieldErrors[field])) {
       setFieldErrors((prev) => ({ ...prev, ...Object.fromEntries(fields.map((field) => [field, ''])) }));
     }
     if (formError) setFormError('');
+  };
+
+  // The delivery date, discount or advance.
+  const setExtra = (changes, ...fields) => {
+    setForm((prev) => ({ ...prev, ...changes }));
+    clearError(...fields);
   };
 
   const setCustomer = (changes, ...fields) => {
@@ -338,7 +398,7 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
     return options;
   };
 
-  // "Recalculate": the totals typed by hand go back to rate x quantity.
+  // "Recalculate": the totals typed by hand go back to the worked out total.
   const recalculateTotals = () => {
     const { index, controlIds } = outdatedTotals;
     updateItem(index, (item) => ({
@@ -374,18 +434,27 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
     }
     const postalError = askAddress ? postalErrorOf(preview.country, form.customer.postalCode) : '';
     if (postalError) errors['customer.postalCode'] = postalError;
+    const unitControl = isPerRateOn ? unitControlOf(parts.controls) : undefined;
     form.items.forEach((item, index) => {
       const prefix = `items.${index}.`;
       for (const master of parts.masters) {
         if (master.isRequired && item.picks[master._id].length === 0) errors[`${prefix}masters.${master._id}`] = `Pick a ${master.name}`;
       }
+      const pricing = itemPricingOf(parts.controls, item, isPerRateOn);
+      for (const name of pricing?.unit ? measurementsOf(pricing.unit.measuredAs) : []) {
+        const text = (item.measurements[name] || '').trim();
+        if (text && measurementOf(text) === null) errors[`${prefix}measurements.${name}`] = 'Enter a number more than 0 with at most 3 decimals, e.g. 2.5';
+      }
       for (const control of parts.controls) {
         const answer = item.answers[control._id];
         const field = `${prefix}controls.${control._id}`;
+        const isUnit = !!unitControl && control._id === unitControl._id;
         if (control.type === 'checkbox') {
           if (control.isRequired && !answer.checked) errors[field] = 'This must be ticked';
-        } else if (control.type === 'radio') {
-          if (control.isRequired && !answer.optionId) errors[field] = 'Pick one';
+        } else if (CHOICE_TYPES.includes(control.type)) {
+          if (isUnit && item.chargeBy !== 'unit') continue;
+          if (isUnit && !answer.optionId) errors[field] = 'Pick the unit';
+          else if (control.isRequired && !answer.optionId) errors[field] = 'Pick one';
         } else {
           const isNumber = control.isPrice || control.isQuantity;
           const text = isNumber ? answer.text.trim() : answer.text;
@@ -400,6 +469,13 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
         }
       }
     });
+    const discountText = form.discount.value.trim();
+    if (discountText && !PRICE_PATTERN.test(discountText)) errors['discount.value'] = AMOUNT_MESSAGE;
+    else if (form.discount.type === 'percent' && Number(discountText) > 100) errors['discount.value'] = 'A discount can be at most 100%';
+    else if (form.discount.type === 'amount' && Number(discountText) > preview.subtotal) errors['discount.value'] = 'The discount can\'t be more than the subtotal';
+    const advanceText = form.advance.trim();
+    if (advanceText && !PRICE_PATTERN.test(advanceText)) errors.advance = AMOUNT_MESSAGE;
+    else if (preview.advance !== null && preview.advance > preview.total) errors.advance = 'The advance can\'t be more than the total';
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -413,33 +489,49 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
     }
 
     const { customer } = form;
+    const unitControl = isPerRateOn ? unitControlOf(parts.controls) : undefined;
     const payload = {
-      items: form.items.map((item) => ({
-        itemId: item.itemId || null,
-        name: item.name,
-        masters: parts.masters.map((master) => {
-          const valueIds = item.picks[master._id];
-          const assignments = master.isRoleProvided
-            ? valueIds.filter((valueId) => item.assign[valueId]?.length > 0).map((valueId) => {
-              const time = item.completeIn[valueId];
-              return { valueId, userIds: item.assign[valueId], completeIn: time?.amount ? { amount: time.amount, unit: time.unit } : null };
-            })
-            : [];
-          return { masterId: master._id, valueIds, assignments };
-        }),
-        controls: parts.controls.map((control) => {
-          const answer = item.answers[control._id];
-          if (control.type === 'checkbox') return { controlId: control._id, checked: answer.checked };
-          if (control.type === 'radio') return { controlId: control._id, optionId: answer.optionId || null };
-          // Rate x quantity: text is the rate; total only when typed by hand.
-          if (control.isPrice && isRateTimesQuantity) return { controlId: control._id, text: answer.text, total: answer.isTotalEdited ? answer.total.trim() : null };
-          return { controlId: control._id, text: answer.text };
-        }),
-        keepImageIds: item.images.filter((image) => image.imageId).map((image) => image.imageId),
-        newImageCount: item.images.filter((image) => image.file).length,
-      })),
+      items: form.items.map((item) => {
+        const pricing = itemPricingOf(parts.controls, item, isPerRateOn);
+        // Only the measurements the unit takes.
+        const asked = pricing?.unit ? measurementsOf(pricing.unit.measuredAs) : [];
+        return {
+          itemId: item.itemId || null,
+          name: item.name,
+          chargeBy: pricing ? 'unit' : 'piece',
+          measurements: Object.fromEntries(MEASUREMENT_NAMES.map((name) => [name, asked.includes(name) ? item.measurements[name].trim() || null : null])),
+          masters: parts.masters.map((master) => {
+            const valueIds = item.picks[master._id];
+            const assignments = master.isRoleProvided
+              ? valueIds.filter((valueId) => item.assign[valueId]?.length > 0).map((valueId) => {
+                const time = item.completeIn[valueId];
+                return { valueId, userIds: item.assign[valueId], completeIn: time?.amount ? { amount: time.amount, unit: time.unit } : null };
+              })
+              : [];
+            return { masterId: master._id, valueIds, assignments };
+          }),
+          controls: parts.controls.map((control) => {
+            const answer = item.answers[control._id];
+            if (control.type === 'checkbox') return { controlId: control._id, checked: answer.checked };
+            if (CHOICE_TYPES.includes(control.type)) {
+              // The unit dropdown isn't asked on a per piece item.
+              const isHidden = !!unitControl && control._id === unitControl._id && !pricing;
+              return { controlId: control._id, optionId: isHidden ? null : answer.optionId || null };
+            }
+            // Rate x quantity: text is the rate; total only when typed by hand.
+            if (control.isPrice && isRateTimesQuantity) return { controlId: control._id, text: answer.text, total: answer.isTotalEdited ? answer.total.trim() : null };
+            return { controlId: control._id, text: answer.text };
+          }),
+          keepImageIds: item.images.filter((image) => image.imageId).map((image) => image.imageId),
+          newImageCount: item.images.filter((image) => image.file).length,
+        };
+      }),
       taxId: preview.canChooseRate && preview.rate ? preview.rate._id : null,
     };
+    // Each only while asked (otherwise the backend keeps what was saved).
+    if (settings.askDeliveryDate) payload.deliveryAt = form.deliveryAt ? new Date(`${form.deliveryAt}T00:00:00`).toISOString() : null;
+    if (settings.allowDiscount) payload.discount = form.discount.value.trim() ? { type: form.discount.type, value: form.discount.value.trim() } : null;
+    if (settings.askAdvance) payload.advance = form.advance.trim() || null;
     // Item after item, as each item's newImageCount says.
     const files = form.items.flatMap((item) => item.images.filter((image) => image.file).map((image) => image.file));
     if (!isAutoNumber) payload.jobOrderNumber = form.jobOrderNumber.trim();
@@ -482,6 +574,12 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
   const imageCount = form.items.reduce((count, item) => count + item.images.length, 0);
   // Several items allowed: each card says which item it is.
   const canHaveSeveral = maxItems > 1;
+  // The delivery date, discount and advance: while asked, or (not asked any
+  // more) when the job order was saved with one - shown, not editable.
+  const showDelivery = settings.askDeliveryDate || !!form.deliveryAt;
+  const showDiscount = settings.allowDiscount || !!form.discount.value;
+  const showAdvance = settings.askAdvance || !!form.advance;
+  const keptNote = <p className="mt-1 text-xs text-gray-500">Not asked any more (Company Settings) - kept as saved.</p>;
 
   return (
     <div className="space-y-6">
@@ -594,11 +692,91 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
               />
             </Card>
           )}
+
+          {(showDelivery || showDiscount || showAdvance) && (
+            <Card variant="outlined" title="Delivery and payment">
+              <div className="grid gap-5 sm:grid-cols-2">
+                {showDelivery && (
+                  <div>
+                    <DatePicker
+                      label="Delivery date (optional)"
+                      name="deliveryAt"
+                      value={form.deliveryAt || null}
+                      onChange={(date) => setExtra({ deliveryAt: toDayString(date) }, 'deliveryAt')}
+                      placeholder="No delivery date"
+                      clearable
+                      error={fieldErrors.deliveryAt}
+                      disabled={isSaving || !settings.askDeliveryDate}
+                    />
+                    {!settings.askDeliveryDate && keptNote}
+                  </div>
+                )}
+                {showDiscount && (
+                  <fieldset className="min-w-0">
+                    <legend className="mb-2 text-sm font-medium text-gray-700">Discount (optional)</legend>
+                    <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                      {[{ value: 'amount', label: `Amount${preview.currency?.symbol ? ` (${preview.currency.symbol})` : ''}` }, { value: 'percent', label: '%' }].map((choice) => (
+                        <Radio
+                          key={choice.value}
+                          name="discountType"
+                          value={choice.value}
+                          label={choice.label}
+                          checked={form.discount.type === choice.value}
+                          onChange={() => setExtra({ discount: { ...form.discount, type: choice.value } }, 'discount.value')}
+                          disabled={isSaving || !settings.allowDiscount}
+                        />
+                      ))}
+                    </div>
+                    <InputField
+                      name="discountValue"
+                      placeholder={form.discount.type === 'percent' ? 'e.g. 10' : 'e.g. 100'}
+                      inputMode="decimal"
+                      value={form.discount.value}
+                      onChange={(e) => setExtra({ discount: { ...form.discount, value: e.target.value } }, 'discount.value')}
+                      error={fieldErrors['discount.value']}
+                      maxLength={30}
+                      disabled={isSaving || !settings.allowDiscount}
+                      aria-label="Discount"
+                      className="mt-2"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">Taken off before tax.</p>
+                    {!settings.allowDiscount && keptNote}
+                  </fieldset>
+                )}
+                {showAdvance && (
+                  <div>
+                    <InputField
+                      label={`Advance received${preview.currency?.symbol ? ` (${preview.currency.symbol})` : ''} (optional)`}
+                      name="advance"
+                      placeholder="e.g. 500"
+                      inputMode="decimal"
+                      value={form.advance}
+                      onChange={(e) => setExtra({ advance: e.target.value }, 'advance')}
+                      error={fieldErrors.advance}
+                      maxLength={30}
+                      disabled={isSaving || !settings.askAdvance}
+                    />
+                    {!settings.askAdvance && keptNote}
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
         </div>
 
         <div className="lg:col-span-2 lg:sticky lg:top-6 space-y-4">
           <Card variant="outlined" title="Summary">
-            <JobOrderSummary rows={preview.rows} currency={preview.currency} subtotal={preview.subtotal} tax={preview.tax} total={preview.total} />
+            <JobOrderSummary
+              rows={preview.rows}
+              currency={preview.currency}
+              subtotal={preview.subtotal}
+              tax={preview.tax}
+              total={preview.total}
+              discount={preview.discount}
+              roundOff={preview.roundOff}
+              advance={preview.advance}
+              balance={preview.balance}
+            />
           </Card>
           <div className="flex justify-end gap-3">
             <Button variant="ghost" onClick={goBack} disabled={isSaving}>Cancel</Button>
@@ -612,7 +790,7 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
       <ConfirmDialog
         isOpen={!!outdatedTotals}
         title="Work out the totals again?"
-        message={`You typed ${outdatedTotals?.controlIds.length === 1 ? 'a total' : 'some totals'} by hand. The quantity or rate changed - work ${outdatedTotals?.controlIds.length === 1 ? 'it' : 'them'} out again as rate × quantity, or keep what you typed?`}
+        message={`You typed ${outdatedTotals?.controlIds.length === 1 ? 'a total' : 'some totals'} by hand. The quantity, rate, unit or size changed - work ${outdatedTotals?.controlIds.length === 1 ? 'it' : 'them'} out again, or keep what you typed?`}
         confirmLabel="Recalculate"
         cancelLabel="Keep my totals"
         variant="primary"

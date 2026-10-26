@@ -235,6 +235,7 @@ const ControlsListPage = ({ onCreate, onView, onEdit, onClone }) => {
           <Badge variant="blue" size="sm">{CONTROL_TYPES[control.type].label}</Badge>
           {control.isPrice && (isTaxed(control) ? <Badge variant="green" size="sm">Price + tax</Badge> : <Badge variant="gray" size="sm">Price</Badge>)}
           {control.isQuantity && <Badge variant="purple" size="sm">Quantity</Badge>}
+          {control.isUnit && <Badge variant="indigo" size="sm">Pricing unit</Badge>}
         </span>
       ),
     },

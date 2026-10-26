@@ -24,7 +24,7 @@ const vendorData = (req) => ({
 // GET /api/controls/for-job-order
 const getControlsForJobOrder = async (req, res) => {
     try {
-        const result = await controlService.getControlsForJobOrder({ vendorId: req.vendorId, companyMasterData: req.companyMasterData });
+        const result = await controlService.getControlsForJobOrder({ vendorId: req.vendorId, companyMasterData: req.companyMasterData, websiteMasterData: req.websiteMasterData });
         return sendResult(res, result);
     } catch (err) {
         logException('Error while fetching controls for the job order', err);

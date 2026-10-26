@@ -147,7 +147,8 @@ const companyMasterSchema = new mongoose.Schema({
         textfield: wholeNumberOrNull('numberOfControlsAllowed.textfield'),
         textarea: wholeNumberOrNull('numberOfControlsAllowed.textarea'),
         checkbox: wholeNumberOrNull('numberOfControlsAllowed.checkbox'),
-        radio: wholeNumberOrNull('numberOfControlsAllowed.radio')
+        radio: wholeNumberOrNull('numberOfControlsAllowed.radio'),
+        dropdown: wholeNumberOrNull('numberOfControlsAllowed.dropdown')
     },
     // Longest text allowed (null = no limit): typed into a textfield /
     // textarea (and its default text), a radio choice, a checkbox's text.
@@ -157,6 +158,10 @@ const companyMasterSchema = new mongoose.Schema({
     maxLengthOfCheckboxText: wholeNumberOrNull('maxLengthOfCheckboxText', 1),
     // Most choices in one radio group (null = no limit).
     numberOfRadioButtonsAllowedInGroup: wholeNumberOrNull('numberOfRadioButtonsAllowedInGroup', 2),
+    // A dropdown: its longest choice, most choices, longest label (null = no limit).
+    maxLengthOfDropdownOptionText: wholeNumberOrNull('maxLengthOfDropdownOptionText', 1),
+    numberOfOptionsAllowedInDropdown: wholeNumberOrNull('numberOfOptionsAllowedInDropdown', 1),
+    maxTextForLabelInDropdownControl: wholeNumberOrNull('maxTextForLabelInDropdownControl', 1),
     // Longest label (the question above the control) and placeholder (grey
     // hint text) the vendor may set (null = no limit). A checkbox's label is
     // its text: maxLengthOfCheckboxText.
@@ -254,6 +259,17 @@ const companyMasterSchema = new mongoose.Schema({
     // platform owner switches it on for this vendor (also needs
     // WebsiteMaster.isCustomersFeatureOn).
     isCustomersFeatureOn: {
+        type: Boolean,
+        default: false
+    },
+
+    // ---- Per unit pricing ------------------------------------------------------
+    // Items charged per unit (meter, sq ft...): a dropdown of Controls picks
+    // the unit, the job order asks the size, Company Settings "How you
+    // charge". Off until the platform owner switches it on for this vendor
+    // (also needs WebsiteMaster.isPerRatePricingFeatureOn). Dropdown controls
+    // themselves work without it.
+    isPerRatePricingFeatureOn: {
         type: Boolean,
         default: false
     },

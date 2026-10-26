@@ -11,7 +11,11 @@ import NumberField from '../../../components/common/NumberField';
 import { TrashIcon } from '../../../components/common/ActionIcons';
 import { masterLabelOf } from '../summaryRows';
 import { DURATION_UNITS, DURATION_AMOUNT_MAX } from '../workTime';
-import { JOB_NAME_MAX_LENGTH, quantityOf, workedTotalOf } from '../jobOrderItems';
+import { JOB_NAME_MAX_LENGTH, quantityOf, workedTotalOf, unitControlOf, itemPricingOf, chargeOf } from '../jobOrderItems';
+import { measurementsOf, formatSize } from '../jobOrderTotals';
+
+const MEASUREMENT_LABELS = { length: 'Length', width: 'Width', height: 'Height' };
+const CHARGE_CHOICES = [{ value: 'piece', label: 'Per piece' }, { value: 'unit', label: 'Per unit' }];
 
 // Same as the backend (constants/jobOrderConstants.js).
 const ANSWER_MAX_LENGTH = 5000;
@@ -26,10 +30,12 @@ const IMAGE_MIME_TYPES = { jpeg: 'image/jpeg', png: 'image/png', webp: 'image/we
  * master (with who does each picked value of a role master, and by when),
  * every control and its images. With prices worked out as rate x quantity,
  * a price shows its rate and its total (rate x the item's quantity, still
- * editable by hand).
+ * editable by hand). With per unit pricing, an item is charged per piece or
+ * per unit: per unit it asks the unit (the unit dropdown) and the size, and
+ * the rate is multiplied by the size too.
  *
  * @param {Object} props
- * @param {Object} props.item - { key, itemId, name, sameAsAbove, picks, answers, images, assign, completeIn }
+ * @param {Object} props.item - { key, itemId, name, sameAsAbove, chargeBy, measurements, picks, answers, images, assign, completeIn }
  * @param {string} props.title - The card's title, e.g. "Item 2"
  * @param {string} props.prefix - Its field error keys start with this, e.g. "items.1."
  * @param {Object} props.parts - The form data: { masters, controls, workers, canAssignWork, settings }
@@ -45,7 +51,7 @@ const IMAGE_MIME_TYPES = { jpeg: 'image/jpeg', png: 'image/png', webp: 'image/we
  * @param {Object|null} props.currency - The tax country's
  * @param {boolean} props.isTaxApplied - Tax is charged on this job order
  * @param {boolean} props.isRateTimesQuantity - Prices are rate x quantity
- * @param {(controlIds: string[]) => void} props.onTotalsOutdated - The quantity or a rate changed while these prices have totals typed by hand
+ * @param {(controlIds: string[]) => void} props.onTotalsOutdated - The quantity, a rate, the unit or the size changed while these prices have totals typed by hand
  * @param {boolean} props.disabled
  */
 const JobOrderItemFields = ({
@@ -59,11 +65,106 @@ const JobOrderItemFields = ({
   // totals typed by hand may need working out again.
   const focusedText = useRef('');
 
-  const checkTotals = (control, text) => {
-    if (!isRateTimesQuantity || text.trim() === focusedText.current.trim()) return;
-    const affected = control.isQuantity ? parts.controls.filter((entry) => entry.isPrice) : [control];
+  // Per unit pricing: the unit dropdown and how this item is charged.
+  const unitControl = settings.isPerRatePricingOn ? unitControlOf(parts.controls) : undefined;
+  const pricing = itemPricingOf(parts.controls, item, settings.isPerRatePricingOn);
+
+  const flagEdited = (affected) => {
+    if (!isRateTimesQuantity) return;
     const edited = affected.filter((entry) => item.answers[entry._id].isTotalEdited).map((entry) => entry._id);
     if (edited.length > 0) onTotalsOutdated(edited);
+  };
+
+  // The prices the size changes (not the ones charged per piece).
+  const sizedPrices = () => parts.controls.filter((entry) => entry.isPrice && entry.chargedBy !== 'piece');
+
+  const checkTotals = (control, text) => {
+    if (!isRateTimesQuantity || text.trim() === focusedText.current.trim()) return;
+    flagEdited(control.isQuantity ? parts.controls.filter((entry) => entry.isPrice) : [control]);
+  };
+
+  const setChargeBy = (chargeBy) => {
+    if (chargeBy === item.chargeBy) return;
+    onChange(() => ({ chargeBy }), `${prefix}chargeBy`);
+    flagEdited(parts.controls.filter((entry) => entry.isPrice));
+  };
+
+  // Picking a unit fills its rate in the first price charged per unit, when
+  // that rate is empty or still the rate of the unit picked before.
+  const setUnit = (optionId) => {
+    onChange((prev) => {
+      const answers = { ...prev.answers, [unitControl._id]: { ...prev.answers[unitControl._id], optionId } };
+      const before = unitControl.options.find((option) => option._id === prev.answers[unitControl._id]?.optionId);
+      const after = unitControl.options.find((option) => option._id === optionId);
+      const ratePrice = isRateTimesQuantity && parts.controls.find((entry) => entry.isPrice && (entry.chargedBy || 'unit') === 'unit');
+      if (ratePrice && after && after.rate !== null && after.rate !== undefined) {
+        const text = prev.answers[ratePrice._id].text.trim();
+        const isBeforeRate = before && before.rate !== null && before.rate !== undefined && Number(text) === Number(before.rate);
+        if (!text || isBeforeRate) answers[ratePrice._id] = { ...answers[ratePrice._id], text: String(after.rate) };
+      }
+      return { answers };
+    }, `${prefix}controls.${unitControl._id}`);
+    if (optionId !== (item.answers[unitControl._id]?.optionId || '')) flagEdited(sizedPrices());
+  };
+
+  const setMeasurement = (name, text) => onChange((prev) => ({ measurements: { ...prev.measurements, [name]: text } }), `${prefix}measurements.${name}`);
+
+  // "Rate per sq ft" / "Rate per running length" / "Rate per piece" on a per unit item.
+  const rateLabelOf = (chargedBy) => {
+    if (chargedBy === 'edge') return 'Rate per running length';
+    if (chargedBy === 'piece') return 'Rate per piece';
+    return pricing?.unit ? `Rate per ${pricing.unit.name}` : 'Rate per unit';
+  };
+
+  // The unit dropdown, the size it asks and the size charged.
+  const renderUnit = (control, error) => {
+    const unit = pricing?.unit || null;
+    const names = unit ? measurementsOf(unit.measuredAs) : [];
+    const size = pricing?.size;
+    return (
+      <div key={control._id} className="space-y-3">
+        <Dropdown
+          label={control.label}
+          name={`control-${item.key}-${control._id}`}
+          options={control.options.map((option) => ({ value: option._id, label: option.name }))}
+          value={item.answers[control._id]?.optionId || ''}
+          onChange={(value) => setUnit(value || '')}
+          placeholder="Pick the unit"
+          required
+          error={error}
+          disabled={disabled}
+          aria-label={control.label}
+        />
+        {unit && (
+          <div className={`grid gap-3 ${names.length === 3 ? 'sm:grid-cols-3' : names.length === 2 ? 'sm:grid-cols-2' : ''}`}>
+            {names.map((name) => (
+              <InputField
+                key={name}
+                label={names.length === 1 ? `Size (${unit.name})` : MEASUREMENT_LABELS[name]}
+                name={`measure-${item.key}-${name}`}
+                placeholder={names.length === 1 ? 'e.g. 2.5' : `${MEASUREMENT_LABELS[name]}, e.g. 2.5`}
+                inputMode="decimal"
+                value={item.measurements[name] || ''}
+                onChange={(e) => setMeasurement(name, e.target.value)}
+                onFocus={() => { focusedText.current = item.measurements[name] || ''; }}
+                onBlur={(e) => { if (e.target.value.trim() !== focusedText.current.trim()) flagEdited(sizedPrices()); }}
+                error={errors[`${prefix}measurements.${name}`]}
+                maxLength={10}
+                disabled={disabled}
+              />
+            ))}
+          </div>
+        )}
+        {size && (
+          <p className="text-xs text-gray-500">
+            Size {formatSize(size.size)} {unit.name}
+            {size.chargeableSize !== size.size && ` · charged ${formatSize(size.chargeableSize)} ${unit.name}`}
+            {size.edgeLength !== null && ` · edge ${formatSize(size.edgeLength)}`}
+            {' '}(per piece)
+          </p>
+        )}
+      </div>
+    );
   };
 
   const setPick = (masterId, valueIds) => onChange((prev) => ({ picks: { ...prev.picks, [masterId]: valueIds } }), `${prefix}masters.${masterId}`);
@@ -116,6 +217,29 @@ const JobOrderItemFields = ({
             />
           )}
         </div>
+
+        {unitControl && (
+          <fieldset className="min-w-0">
+            <legend className="mb-2 text-sm font-medium text-gray-700">Charged</legend>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              {CHARGE_CHOICES.map((choice) => (
+                <Radio
+                  key={choice.value}
+                  name={`chargeBy-${item.key}`}
+                  value={choice.value}
+                  label={choice.label}
+                  checked={item.chargeBy === choice.value}
+                  onChange={() => setChargeBy(choice.value)}
+                  disabled={disabled}
+                />
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-gray-500">
+              {item.chargeBy === 'unit' ? `Pick the ${unitControl.label.toLowerCase()} and the size; the rate is multiplied by the size.` : 'One price per piece, whatever the size.'}
+            </p>
+            {errors[`${prefix}chargeBy`] && <p className="mt-1 text-sm text-red-600" role="alert">{errors[`${prefix}chargeBy`]}</p>}
+          </fieldset>
+        )}
 
         {parts.masters.length > 0 && (
           <div className="grid gap-5 sm:grid-cols-2">
@@ -255,6 +379,27 @@ const JobOrderItemFields = ({
                 );
               }
 
+              if (control.type === 'dropdown') {
+                // The unit dropdown is asked only on a per unit item.
+                if (unitControl && control._id === unitControl._id) return item.chargeBy === 'unit' ? renderUnit(control, error) : null;
+                return (
+                  <Dropdown
+                    key={control._id}
+                    label={control.label}
+                    name={name}
+                    options={control.options.map((option) => ({ value: option._id, label: option.name }))}
+                    value={answer.optionId || ''}
+                    onChange={(value) => setAnswer(control._id, { optionId: value || '' })}
+                    placeholder={`Choose ${control.label}`}
+                    clearable={!control.isRequired}
+                    required={control.isRequired}
+                    error={error}
+                    disabled={disabled}
+                    aria-label={control.label}
+                  />
+                );
+              }
+
               if (control.type === 'textarea') {
                 return (
                   <div key={control._id}>
@@ -278,12 +423,13 @@ const JobOrderItemFields = ({
               const isTaxed = control.isPrice && control.isPriceIncludedInTax && isTaxApplied;
               const symbol = currency?.symbol ? ` (${currency.symbol})` : '';
               const isRate = control.isPrice && isRateTimesQuantity;
+              const charge = control.isPrice ? chargeOf(control, pricing) : { chargedBy: null, factor: 1 };
               const watchChange = isRate || (isRateTimesQuantity && control.isQuantity)
                 ? { onFocus: () => { focusedText.current = answer.text; }, onBlur: (e) => checkTotals(control, e.target.value) }
                 : {};
               const field = (
                 <InputField
-                  label={isRate ? `Rate${symbol}` : control.isPrice ? `${control.label}${symbol}` : control.label}
+                  label={isRate ? `${pricing ? rateLabelOf(charge.chargedBy) : 'Rate'}${symbol}` : control.isPrice ? `${control.label}${symbol}` : control.label}
                   name={name}
                   placeholder={control.placeholder || (control.isPrice ? 'e.g. 150.50' : control.isQuantity ? 'e.g. 5' : '')}
                   inputMode={control.isPrice ? 'decimal' : control.isQuantity ? 'numeric' : undefined}
@@ -305,9 +451,13 @@ const JobOrderItemFields = ({
                 );
               }
 
-              // Rate x quantity: the total shows rate x quantity until typed over;
-              // emptying it goes back to rate x quantity.
-              const worked = workedTotalOf(answer.text, quantity);
+              // Rate x quantity (x the size on a per unit item): the total shows
+              // it worked out until typed over; emptying it goes back to it.
+              const worked = workedTotalOf(answer.text, quantity * charge.factor);
+              let workedHint = `Rate × quantity (${quantity}).`;
+              if (pricing && !pricing.unit) workedHint = 'Pick the unit to work out the size.';
+              else if (charge.chargedBy === 'unit') workedHint = `Rate × ${formatSize(charge.factor)} ${pricing.unit.name} × quantity (${quantity}).`;
+              else if (charge.chargedBy === 'edge') workedHint = `Rate × edge ${formatSize(charge.factor)} × quantity (${quantity}).`;
               return (
                 <fieldset key={control._id} className="min-w-0">
                   <legend className="mb-2 text-sm font-medium text-gray-700 break-words">
@@ -318,7 +468,7 @@ const JobOrderItemFields = ({
                     <InputField
                       label={`Total${symbol}`}
                       name={`total-${item.key}-${control._id}`}
-                      placeholder="Rate × quantity"
+                      placeholder="Worked out"
                       inputMode="decimal"
                       value={answer.isTotalEdited ? answer.total : (worked === null ? '' : String(worked))}
                       onChange={(e) => setAnswer(control._id, e.target.value.trim() ? { total: e.target.value, isTotalEdited: true } : { total: '', isTotalEdited: false })}
@@ -327,7 +477,7 @@ const JobOrderItemFields = ({
                     />
                   </div>
                   <p className="mt-1 text-xs text-gray-500">
-                    {answer.isTotalEdited ? 'Total typed by hand - empty it to go back to rate × quantity.' : `Rate × quantity (${quantity}).`}
+                    {answer.isTotalEdited ? 'Total typed by hand - empty it to go back to the worked out total.' : workedHint}
                     {isTaxed ? ' Tax is added on it.' : ''}
                   </p>
                 </fieldset>

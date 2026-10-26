@@ -69,6 +69,7 @@ it (`GET /api/feature-access`). The flags are listed in
 | Layout Master (print layouts) | `isLayoutMasterFeatureOn` | optional limit `numberOfLayoutsAllowed`; `isControlFeatureInLayoutOn` for text formatting (see Layout Master) |
 | Steps of assigned work | `isStepFeatureOn` | `steps` and optional limit `numberOfStepsAllowed` (see Steps of assigned work) |
 | Customers | `isCustomersFeatureOn` (WebsiteMaster default on, CompanyMaster default off) | nothing (see Customers) |
+| Per unit pricing | `isPerRatePricingFeatureOn` (WebsiteMaster default on, CompanyMaster default off) | nothing (see Per unit pricing) |
 
 Not a switch: `numberOfItemsAllowedToAddInJobOrder` (CompanyMaster, default
 1, at most 50) - how many items one job order may have (see Job orders).
@@ -132,7 +133,8 @@ Services" with the values Polishing, Cutting, Edging.
 ## Controls
 
 Fields the vendor adds to the job order form (`models/Control.js`): a
-`textfield`, `textarea`, `checkbox` (one tick box) or `radio` group.
+`textfield`, `textarea`, `checkbox` (one tick box), `radio` group or
+`dropdown`.
 
 - Every control: `label` (the question; for a checkbox its own text - unique
   per vendor, ignoring capital letters), `isRequired`, `precedence` (order on
@@ -147,22 +149,62 @@ Fields the vendor adds to the job order form (`models/Control.js`): a
   one control not deleted can be the quantity, another one -> 409 on
   `isQuantity`). Checkbox:
   `defaultChecked`. Radio: `options` (at least 2, in order, each with its own
-  `_id`) and `defaultOptionId` (optional). The type never changes.
+  `_id`) and `defaultOptionId` (optional). Dropdown: the same with at least 1
+  choice, plus `isUnit` (see Per unit pricing). A price also has `chargedBy`
+  (per unit pricing). The type never changes.
 - Active / inactive, deleted softly (`status: 'D'`); a deleted label can be used again.
 - CompanyMaster (set by the platform owner; empty = no limit):
   - `assignedControls` - which types the vendor gets: `null` = all, `[]` =
     none (the Controls menu is hidden), otherwise only those listed. Controls
     of a type taken away are hidden everywhere and come back if it is given again.
-  - `numberOfControlsAllowed.{textfield,textarea,checkbox,radio}` - per type
+  - `numberOfControlsAllowed.{textfield,textarea,checkbox,radio,dropdown}` - per type
     (active + inactive).
   - `maxLengthOfTextfieldControl`, `maxLengthOfTextareaControl` - longest text
     typed on the job order (and the default text).
   - `maxLengthOfRadioButtonText` (one choice), `maxLengthOfCheckboxText`,
-    `numberOfRadioButtonsAllowedInGroup`.
+    `numberOfRadioButtonsAllowedInGroup`; a dropdown's
+    `maxLengthOfDropdownOptionText`, `numberOfOptionsAllowedInDropdown`,
+    `maxTextForLabelInDropdownControl`.
   - `maxTextForLabelInTextfieldControl`, `maxTextForPlaceholderInTextfieldControl`,
     `maxTextForLabelInTextareaControl`, `maxTextForPlaceholderInTextareaControl`,
     `maxTextForLabelInRadioButtonControl` - longest label / placeholder the
     vendor may set (a checkbox's label: `maxLengthOfCheckboxText`).
+
+## Per unit pricing
+
+Items charged per unit of size (meter, sq ft...) instead of per piece. Only
+while `isPerRatePricingFeatureOn` is on (WebsiteMaster and CompanyMaster);
+off, every item is per piece and the unit dropdown is a plain dropdown (its
+unit fields are kept, and come back when it is turned on again).
+Constants: `constants/pricingConstants.js`; the maths:
+`utils/jobOrderTotals.js` (`sizeOf`, `computeTotals`).
+
+- The unit dropdown: a dropdown control with `isUnit` (one per vendor not
+  deleted, another one -> 409 on `isUnit`). Each choice is a unit with
+  `measuredAs` (`number` = length, `area` = length x width, `volume` =
+  length x width x height), `rate` (filled in on the job order, still
+  editable), `roundUpTo` (0.25 / 0.5 / 1 / null), `minimumSize` and
+  `wastagePercent`.
+- A price's `chargedBy`: `unit` (default; rate x size), `edge` (rate x
+  2 x (length + width) - only for an area unit, otherwise per unit) or
+  `piece` (rate only, whatever the size).
+- Each item has `chargeBy` (`piece` / `unit`; CompanySettings `chargeBy` is
+  the default for new items). Per unit it needs the unit picked
+  ("Pick the unit") and takes `measurements { length, width, height }` (more
+  than 0, at most 3 decimals; an empty one counts as 1; only those the unit
+  takes are kept). Per piece the unit dropdown is not asked (not required,
+  not kept).
+- Size of one piece: `size` = the measurements multiplied;
+  `chargeableSize` = each measurement rounded up to `roundUpTo`, multiplied,
+  plus the wastage, at least `minimumSize`; `edgeLength` = 2 x (length +
+  width) rounded (area units only). E.g. 2.3 x 4.1 rounded up to 0.5 =
+  2.5 x 4.5 = 11.25 sq ft.
+- With "Software calculates the price" a price's amount is rate x factor x
+  quantity (factor: `chargeableSize`, `edgeLength` or 1); manual: the amount
+  typed. Each price stores `chargedBy` and `factor`; the item stores a
+  snapshot of its `unit`, the `measurements` and the sizes, so a saved job
+  order never changes when the units do. The summary shows
+  "Glass (5 x 11.25 sq ft x 100)" and a "Size (per piece)" row.
 
 ## Tax
 
@@ -431,6 +473,19 @@ whose roles give Job Orders permissions, creates, edits and cancels them.
     `total` sent with a price is kept instead. Stored on the job order
     (`priceCalculation`) when it is created and kept on edit, so changing
     the setting only changes new job orders (older ones without it: manual).
+  - `chargeBy` (`piece` default / `unit`) - per unit pricing, the default for
+    new items.
+  - `roundTotalTo` (null default / 1 / 5 / 10) and `roundTotalDirection`
+    (`nearest` default / `up` / `down`) - the total is rounded, the
+    difference stored as `roundOff`.
+  - `askDeliveryDate`, `allowDiscount`, `askAdvance` (all default on). Left
+    out of the PUT = unchanged. While one is off, an edited job order keeps
+    the value it was saved with and a new one gets none.
+- A job order's money: subtotal, `discount { type: amount | percent, value,
+  amount }` (taken off before tax - taxed prices keep their share; at most
+  100% and never more than the subtotal), tax, `roundOff`, `total`,
+  `advance` (never more than the total) and `balance` (total - advance,
+  null without an advance). `deliveryAt` is the delivery date.
 - Prices worked out as rate x quantity are stored with `rate`, `amount` and
   `isAmountEdited` (the amount isn't rate x quantity); each item keeps its
   `quantity`. The summary shows "Cutting (5 x 200)" while the amount wasn't
@@ -611,7 +666,7 @@ too (see Users logging in) - except Layout Master, which stays owner only.
 | POST | `/api/auth/logout` | the refresh-token cookie |
 | GET | `/api/company-settings` | owner - company name, login tagline, logo, job order settings |
 | PUT | `/api/company-settings/general` | owner - `{ companyName, loginTagline }` |
-| PUT | `/api/company-settings/job-order` | owner - `{ isJobOrderNumberAutoGenerated, askCustomerAddress, useShortNamesOn, workTimeStartsOn, workTimeChangeCountsFrom, priceCalculation, printWork }` |
+| PUT | `/api/company-settings/job-order` | owner - `{ isJobOrderNumberAutoGenerated, askCustomerAddress, useShortNamesOn, workTimeStartsOn, workTimeChangeCountsFrom, priceCalculation, chargeBy, roundTotalTo, roundTotalDirection, askDeliveryDate, allowDiscount, askAdvance, printWork }` |
 | PUT | `/api/company-settings/logo` | owner - multipart, image in the `logo` field |
 | GET | `/api/company-settings/tax` | owner, tax on - every assigned country with its fields, states, cities, current rates, currency and saved details |
 | PUT | `/api/company-settings/tax/:countryId` | owner, tax on - `{ address, isTaxRegistered, taxFieldValues, defaultTaxId }` of one country |
@@ -669,14 +724,17 @@ too (see Users logging in) - except Layout Master, which stays owner only.
 `POST` / `PUT /api/job-orders` take `{ jobOrderNumber, customer: { name, phone,
 email, countryId, stateId, cityId, postalCode, address }, items: [{ itemId, name,
 masters: [{ masterId, valueIds, assignments: [{ valueId, userIds, completeIn: { amount, unit } | null }] }],
-controls: [{ controlId, text | checked | optionId, total }], keepImageIds, newImageCount }], taxId }`
+controls: [{ controlId, text | checked | optionId, total }], chargeBy, measurements: { length, width, height },
+keepImageIds, newImageCount }], taxId, deliveryAt, discount: { type, value }, advance }`
 (`itemId` null = a new item; `taxId` null = the vendor's default rate; `total` -
-a price's amount typed by hand on a rate x quantity job order, null = rate x
-quantity) as JSON,
+a price's amount typed by hand on a rate x quantity job order, null = worked
+out; `deliveryAt` an ISO date; amounts as text) as JSON,
 or as multipart with that JSON in `data` and new images in `images`. Field
 errors are named `jobOrderNumber`, `customer.<field>`, `items`,
 `items.<index>.name`, `items.<index>.masters.<id>`, `items.<index>.controls.<id>`,
-`items.<index>.images` and `taxId`. `PATCH /api/my-work/:id/step` takes
+`items.<index>.images`, `items.<index>.chargeBy`,
+`items.<index>.measurements.<name>`, `taxId`, `deliveryAt`, `discount.value`
+and `advance`. `PATCH /api/my-work/:id/step` takes
 `{ itemId, valueId, stepKey, percent, holdReason }`.
 
 `POST` / `PUT /api/layouts` take `{ name, paper: { size, orientation } | { size:

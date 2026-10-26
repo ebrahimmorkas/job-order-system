@@ -3,6 +3,8 @@ const { JOB_ORDER_NUMBER_MAX_LENGTH, CUSTOMER_ADDRESS_MAX_LENGTH, ANSWER_MAX_LEN
 const { MAX_IMAGES_PER_REQUEST } = require('../../constants/storageConstants');
 const { POSTAL_CODE_MAX_LENGTH } = require('../../constants/taxConstants');
 const { HOLD_REASON_MAX_LENGTH } = require('../../constants/stepConstants');
+const { PRICE_PATTERN } = require('../../constants/controlConstants');
+const { CHARGE_BY, CHARGE_BY_VALUES, MEASUREMENT_PATTERN, DISCOUNT_TYPE_VALUES } = require('../../constants/pricingConstants');
 const { contact } = require('./customerValidations');
 
 // What the vendor's own masters, controls, countries and rates allow is
@@ -13,6 +15,15 @@ const objectId = (label) => Joi.string().hex().length(24).label(label)
 
 // Optional text: '' and null are saved as null.
 const optionalText = (label, max) => Joi.string().trim().max(max).allow('', null).empty(['', null]).default(null).label(label);
+
+// An optional amount (at most 2 decimals), typed as text: '' and null = none.
+const optionalAmount = (label) => Joi.string().trim().pattern(PRICE_PATTERN).allow('', null).empty(['', null]).default(null).label(label)
+    .messages({ 'string.pattern.base': 'Enter an amount with at most 2 decimals, e.g. 150 or 150.50' });
+
+// A measurement of a per unit item: more than 0, at most 3 decimals; empty = 1.
+const measurement = (label) => Joi.string().trim().pattern(MEASUREMENT_PATTERN).allow('', null).empty(['', null]).default(null).label(label)
+    .custom((value, helpers) => (value !== null && Number(value) <= 0 ? helpers.error('measurement.zero') : value))
+    .messages({ 'string.pattern.base': 'Enter a number with at most 3 decimals, e.g. 10 or 2.5', 'measurement.zero': 'Enter a number more than 0' });
 
 const jobOrderIdParamSchema = Joi.object({
     id: objectId('Job order id').required()
@@ -57,6 +68,15 @@ const itemSchema = Joi.object({
         // hand (null = rate x quantity). text is then the rate of one piece.
         total: Joi.string().trim().max(30).allow('', null).empty(['', null]).default(null).label('Total')
     })).unique('controlId').default([]).label('Controls'),
+    // Per unit pricing: how the item is charged (per piece without the
+    // feature) and, per unit, its measurements (which ones the unit takes is
+    // checked in the service).
+    chargeBy: Joi.string().valid(...CHARGE_BY_VALUES).default(CHARGE_BY.PIECE).label('How it is charged'),
+    measurements: Joi.object({
+        length: measurement('Length'),
+        width: measurement('Width'),
+        height: measurement('Height')
+    }).default({ length: null, width: null, height: null }).label('Measurements'),
     // Editing: the job order's images this item keeps (the rest are removed).
     keepImageIds: Joi.array().items(objectId('Image')).unique().default([]).label('Images'),
     // How many of the files in the "images" field of a multipart request
@@ -83,7 +103,16 @@ const jobOrderSchema = Joi.object({
         .unique((a, b) => a.itemId !== null && a.itemId === b.itemId).required().label('Items')
         .messages({ 'array.min': 'Add at least one item', 'array.max': `At most ${JOB_ORDER_ITEMS_MAX} items`, 'array.unique': 'An item is sent twice' }),
     // The rate charged (null = the vendor's default rate of the tax country).
-    taxId: objectId('Tax rate').allow(null).default(null)
+    taxId: objectId('Tax rate').allow(null).default(null),
+    // When the customer gets it (only while CompanySettings.askDeliveryDate is on).
+    deliveryAt: Joi.date().iso().allow(null).default(null).label('Delivery date'),
+    // Taken off before tax (only while CompanySettings.allowDiscount is on).
+    discount: Joi.object({
+        type: Joi.string().valid(...DISCOUNT_TYPE_VALUES).required().label('Discount type'),
+        value: optionalAmount('Discount')
+    }).allow(null).default(null).label('Discount'),
+    // Received with the job order (only while CompanySettings.askAdvance is on).
+    advance: optionalAmount('Advance')
 });
 
 // PATCH /api/job-orders/:id/step - the job order's own step (which steps the

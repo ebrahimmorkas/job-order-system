@@ -146,9 +146,19 @@ const JobOrdersListPage = ({ onCreate, onView, onEdit, onPrint }) => {
         <span className="inline-flex flex-col items-end">
           <span className="font-medium text-gray-900 tabular-nums whitespace-nowrap">{formatMoney(jobOrder.total, jobOrder.currency)}</span>
           {jobOrder.tax?.isApplied && <span className="text-xs text-gray-500 tabular-nums whitespace-nowrap">incl. tax {formatMoney(jobOrder.tax.amount, jobOrder.currency)}</span>}
+          {jobOrder.balance !== null && jobOrder.balance !== undefined && (
+            <span className="text-xs font-medium text-indigo-700 tabular-nums whitespace-nowrap">balance {formatMoney(jobOrder.balance, jobOrder.currency)}</span>
+          )}
         </span>
       ),
     },
+    // Only when some job order on this page has a delivery date.
+    ...(data?.jobOrders?.some((jobOrder) => jobOrder.deliveryAt) ? [{
+      key: 'deliveryAt',
+      label: 'Delivery',
+      width: '130px',
+      render: ({ deliveryAt }) => (deliveryAt ? <span className="whitespace-nowrap text-gray-700">{formatDate(deliveryAt)}</span> : <span className="text-gray-400">-</span>),
+    }] : []),
     // The job order's own step (only while steps are on).
     ...(data?.isStepsOn ? [{
       key: 'step',

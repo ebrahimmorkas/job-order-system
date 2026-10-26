@@ -1,8 +1,8 @@
 // The items of a job order (each with its job name, masters, controls,
 // images and work). Same as the backend (utils/jobOrderItems.js).
 
-import { PRICE_PATTERN, QUANTITY_PATTERN } from '../controls/controlTypes';
-import { roundTo } from './jobOrderTotals';
+import { PRICE_PATTERN, QUANTITY_PATTERN, MEASUREMENT_PATTERN } from '../controls/controlTypes';
+import { roundTo, sizeOf } from './jobOrderTotals';
 
 // Same as the backend (constants/jobOrderConstants.js).
 export const JOB_NAME_MAX_LENGTH = 100;
@@ -27,18 +27,53 @@ export const quantityOf = (controls, answers) => {
   return QUANTITY_PATTERN.test(text) ? Number(text) : 1;
 };
 
-/** Rate x quantity of a typed rate, or null when the rate isn't an amount. */
-export const workedTotalOf = (rateText, quantity) => {
+/**
+ * Rate x what it is multiplied by (the quantity, times the size / edge on a
+ * per unit item) of a typed rate, or null when the rate isn't an amount.
+ */
+export const workedTotalOf = (rateText, times) => {
   const rate = rateText.trim();
-  return PRICE_PATTERN.test(rate) ? roundTo(Number(rate) * quantity, 2) : null;
+  return PRICE_PATTERN.test(rate) ? roundTo(Number(rate) * times, 2) : null;
 };
 
 /**
  * A price's amount on the form, or null when it isn't a valid amount yet.
- * Rate x quantity: the total typed by hand, else rate x quantity.
+ * Rate x quantity (x size): the total typed by hand, else worked out.
  */
-export const priceAmountOf = (answer, quantity, isRateTimesQuantity) => {
+export const priceAmountOf = (answer, times, isRateTimesQuantity) => {
   if (!isRateTimesQuantity) return PRICE_PATTERN.test(answer.text.trim()) ? Number(answer.text.trim()) : null;
   if (answer.isTotalEdited) return PRICE_PATTERN.test(answer.total.trim()) ? Number(answer.total.trim()) : null;
-  return workedTotalOf(answer.text, quantity);
+  return workedTotalOf(answer.text, times);
+};
+
+/** The unit dropdown (per unit pricing on), or undefined. */
+export const unitControlOf = (controls) => controls.find((control) => control.type === 'dropdown' && control.isUnit);
+
+// A typed measurement as a number (empty or not a number yet = 1, as the backend counts an empty one).
+const measurementOf = (text) => (text && MEASUREMENT_PATTERN.test(text.trim()) && Number(text) > 0 ? Number(text) : null);
+
+/**
+ * How an item is charged on the form: null per piece (or without per unit
+ * pricing); per unit: the unit dropdown, the unit picked (null = not yet) and
+ * its size ({ size, chargeableSize, edgeLength }, null without a unit).
+ */
+export const itemPricingOf = (controls, item, isPerRateOn) => {
+  const unitControl = isPerRateOn ? unitControlOf(controls) : undefined;
+  if (!unitControl || item.chargeBy !== 'unit') return null;
+  const unit = unitControl.options.find((option) => option._id === item.answers[unitControl._id]?.optionId) || null;
+  const measurements = Object.fromEntries(Object.entries(item.measurements).map(([name, text]) => [name, measurementOf(text)]));
+  return { unitControl, unit, size: unit ? sizeOf(unit, measurements) : null };
+};
+
+/**
+ * How a price is charged on an item: { chargedBy, factor } - chargedBy null
+ * per piece items; factor: what the rate is multiplied by besides the quantity.
+ * Same as the backend (services/jobOrderService.js chargeOf).
+ */
+export const chargeOf = (control, pricing) => {
+  if (!pricing?.size) return { chargedBy: null, factor: 1 };
+  let chargedBy = control.chargedBy || 'unit';
+  if (chargedBy === 'edge' && pricing.size.edgeLength === null) chargedBy = 'unit';
+  const factor = chargedBy === 'piece' ? 1 : chargedBy === 'edge' ? pricing.size.edgeLength : pricing.size.chargeableSize;
+  return { chargedBy, factor };
 };

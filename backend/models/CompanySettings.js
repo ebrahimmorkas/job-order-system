@@ -6,6 +6,7 @@ const { ADDRESS_LINE_MAX_LENGTH, POSTAL_CODE_MAX_LENGTH, TAX_FIELD_VALUE_MAX_LEN
 const { SHORT_NAME_PLACES, SHORT_NAME_PLACE_VALUES, PRINT_WORK_OPTIONS, PRICE_CALCULATIONS, PRICE_CALCULATION_VALUES } = require('../constants/jobOrderConstants');
 const { WORK_TIME_STARTS, WORK_TIME_START_VALUES, WORK_TIME_CHANGE_FROM, WORK_TIME_CHANGE_FROM_VALUES } = require('../constants/stepConstants');
 const { SERVICE_MESSAGE_MAX_LENGTH } = require('../constants/serviceStatusConstants');
+const { CHARGE_BY, CHARGE_BY_VALUES, ROUND_TOTAL_STEPS, ROUND_TOTAL_DIRECTIONS, ROUND_TOTAL_DIRECTION_VALUES } = require('../constants/pricingConstants');
 
 // The business in one of the vendor's countries (CompanyMaster.assignedCountries):
 // its address there and its tax registration. Company Settings > Tax.
@@ -121,6 +122,31 @@ const companySettingsSchema = new mongoose.Schema({
         enum: PRICE_CALCULATION_VALUES,
         default: PRICE_CALCULATIONS.MANUAL
     },
+    // How a new item is charged (per unit pricing on; each item can change
+    // it): per piece, or per unit of its size (meter, sq ft...).
+    chargeBy: {
+        type: String,
+        enum: CHARGE_BY_VALUES,
+        default: CHARGE_BY.PIECE
+    },
+    // The total rounded off to a step of 1, 5 or 10 (null = not rounded),
+    // to the nearest, up or down. Shown as "Round off" on the job order.
+    roundTotalTo: {
+        type: Number,
+        enum: [...ROUND_TOTAL_STEPS, null],
+        default: null
+    },
+    roundTotalDirection: {
+        type: String,
+        enum: ROUND_TOTAL_DIRECTION_VALUES,
+        default: ROUND_TOTAL_DIRECTIONS.NEAREST
+    },
+    // What a job order asks besides its items: the delivery date (and time),
+    // a discount (amount or %) and the advance received (the balance due is
+    // worked out).
+    askDeliveryDate: { type: Boolean, default: true },
+    allowDiscount: { type: Boolean, default: true },
+    askAdvance: { type: Boolean, default: true },
     // What the "Work given" field of a printed job order shows for each
     // person: their name, start date, due time, step (with %) and hold reason.
     printWork: Object.fromEntries(PRINT_WORK_OPTIONS.map((option) => [option, { type: Boolean, default: true }])),

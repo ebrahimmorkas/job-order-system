@@ -5,6 +5,7 @@
 
 import { formatDueAt } from './workTime';
 import { itemLabelOf } from './jobOrderItems';
+import { measurementsOf, formatSize } from './jobOrderTotals';
 
 /** The customer's address as one line ("" when nothing is filled in). */
 export const customerLineOf = (customer) =>
@@ -25,11 +26,35 @@ const valueTextOf = (value) => {
   return `${value.name} (${value.assignedTo.map((person) => person.name).join(', ')}${due})`;
 };
 
+// "2.3 × 4.1 = 9.43 sq ft (charged 11.25 sq ft)": the size of one piece of
+// a per unit item (an empty measurement counts as 1).
+const sizeTextOf = (item) => {
+  const { unit } = item;
+  const names = measurementsOf(unit.measuredAs);
+  const measured = names.map((name) => formatSize(item.measurements?.[name] ?? 1));
+  const size = `${formatSize(item.size)} ${unit.name}`;
+  const text = names.length > 1 ? `${measured.join(' × ')} = ${size}` : size;
+  return item.chargeableSize !== item.size ? `${text} (charged ${formatSize(item.chargeableSize)} ${unit.name})` : text;
+};
+
+// How a price was worked out: "(5 × 11.25 sq ft × 100)", "(5 × edge 13.5 × 20)",
+// "(5 × 200)"; "" when typed (or typed over).
+const workedTextOf = (control, item) => {
+  if (control.rate === null || control.rate === undefined || control.isAmountEdited) return '';
+  const quantity = item.quantity ?? 1;
+  const parts = quantity > 1 ? [quantity] : [];
+  if (control.chargedBy === 'unit' && item.unit) parts.push(`${formatSize(control.factor)} ${item.unit.name}`);
+  else if (control.chargedBy === 'edge') parts.push(`edge ${formatSize(control.factor)}`);
+  if (parts.length === 0) return '';
+  return ` (${[...parts, control.rate].join(' × ')})`;
+};
+
 /**
  * Several items: each starts with a heading row ("Item 2 · Square glass") and
  * its prices say which item they are of. One item: its job name is a row.
- * A price worked out as rate x quantity says so: "Cutting (5 × 200)".
- * @param {{ customer, items: Array<{ name, quantity?, masters, controls }> }} jobOrder
+ * A price worked out as rate x quantity says so: "Cutting (5 × 200)", per
+ * unit "Glass (5 × 11.25 sq ft × 100)"; a per unit item has a size row.
+ * @param {{ customer, items: Array<{ name, quantity?, chargeBy?, unit?, measurements?, size?, chargeableSize?, masters, controls }> }} jobOrder
  * @param {{ useShortNames?: boolean, showCustomer?: boolean }} options
  * @returns {Array<{ key, label?, heading?, value?, isPrice?, amount?, isTaxed? }>}
  */
@@ -52,17 +77,18 @@ export const summaryRowsOf = ({ customer, items }, { useShortNames = false, show
     for (const control of item.controls) {
       const key = `${at}c-${control.controlId}`;
       if (control.isPrice) {
-        const quantity = item.quantity ?? 1;
-        const worked = control.rate !== null && control.rate !== undefined && quantity > 1 && !control.isAmountEdited ? ` (${quantity} × ${control.rate})` : '';
-        const label = `${control.label}${worked}${isSeveral ? ` (Item ${index + 1})` : ''}`;
+        const label = `${control.label}${workedTextOf(control, item)}${isSeveral ? ` (Item ${index + 1})` : ''}`;
         rows.push({ key, label, isPrice: true, amount: control.amount, isTaxed: control.isPriceIncludedInTax });
       } else if (control.type === 'checkbox') {
         if (control.checked) rows.push({ key, label: control.label, value: 'Yes' });
-      } else if (control.type === 'radio') {
+      } else if (control.type === 'radio' || control.type === 'dropdown') {
         if (control.optionName) rows.push({ key, label: control.label, value: control.optionName });
       } else if (control.text) {
         rows.push({ key, label: control.label, value: control.text });
       }
+    }
+    if (item.chargeBy === 'unit' && item.unit && item.size !== null && item.size !== undefined) {
+      rows.push({ key: `${at}size`, label: 'Size (per piece)', value: sizeTextOf(item) });
     }
   });
   return rows;
