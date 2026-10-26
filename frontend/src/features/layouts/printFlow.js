@@ -1,5 +1,5 @@
 import { fieldText } from './fieldValues';
-import { bandOf, printsOnEveryPage } from './layoutConstants';
+import { bandOf, printsOnEveryPage, repeatedOn } from './layoutConstants';
 
 // How a layout prints a job order on one or more pages.
 //
@@ -15,6 +15,9 @@ import { bandOf, printsOnEveryPage } from './layoutConstants';
 //   a growing table breaks between rows and repeats its rows above the
 //   repeated row (its heading) on the new page; anything else that would be
 //   cut moves to the new page whole (unless it is taller than a page).
+// - Extra pages (layout.pages) print once each after those: page 1's items
+//   printed on every page (except the ones hidden there) and their own
+//   items, where they are placed. A growing table there grows in place.
 //
 // Everything is in millimetres from the page's top-left.
 
@@ -196,4 +199,15 @@ export const flowPages = ({ paper, elements, headerHeightMm = 0, footerHeightMm 
     ...(index === last ? placed.last.map(withRows) : []),
     ...page,
   ].sort((a, b) => order.get(a.id) - order.get(b.id)));
+};
+
+/**
+ * Every page to print: the job order's (flowPages), then the extra pages.
+ * @param {{ paper, elements, headerHeightMm, footerHeightMm, pages }} layout
+ * @param tables - As for flowPages, also with the extra pages' growing tables
+ */
+export const printPages = (layout, tables) => {
+  const withRows = (element) => (tables.has(element.id) ? { ...element, printTable: tablePart(tables.get(element.id), tables.get(element.id).rows) } : element);
+  const extra = (layout.pages || []).map((page) => [...repeatedOn(layout, layout.paper, page), ...page.elements].map(withRows));
+  return [...flowPages(layout, tables), ...extra];
 };

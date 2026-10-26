@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 const Control = require('../models/Control');
+const Master = require('../models/Master');
+const MasterValue = require('../models/MasterValue');
 const common = require('../utils/common');
 const { taxReadyCountryIds } = require('./taxSettingsService');
 const { LIVE_STATUSES } = require('../constants/masterConstants');
@@ -15,7 +17,7 @@ const { FEATURE_FLAGS } = require('../constants/featureConstants');
 // Every limit comes from CompanyMaster, and null there means no limit.
 
 const LIVE = { $in: LIVE_STATUSES };
-const CONTROL_FIELDS = '_id type label isRequired placeholder defaultText isPrice isPriceIncludedInTax isQuantity chargedBy isUnit defaultChecked options defaultOptionId precedence status updatedAt';
+const CONTROL_FIELDS = '_id type label isRequired placeholder defaultText isPrice isPriceIncludedInTax isQuantity chargedBy isUnit showWhen defaultChecked options defaultOptionId precedence status updatedAt';
 
 const TYPE_NAMES = {
     [CONTROL_TYPES.TEXTFIELD]: 'text field',
@@ -143,6 +145,24 @@ const unitTakenResult = async ({ vendorId, isUnit, exceptId = null }) => {
     }
 };
 
+// "Show only when": the master and its values must exist (not deleted). A
+// field error on showWhen, or null.
+const showWhenErrorResult = async ({ vendorId, showWhen }) => {
+    try {
+        if (!showWhen) return null;
+        const [master, values] = await Promise.all([
+            Master.findOne({ _id: showWhen.masterId, vendorId, status: LIVE }).select('_id').lean(),
+            showWhen.valueIds.length === 0 ? [] : MasterValue.find({ _id: { $in: showWhen.valueIds }, vendorId, masterId: showWhen.masterId, status: LIVE }).select('_id').lean()
+        ]);
+        let message = null;
+        if (!master) message = 'This master no longer exists. Please pick another.';
+        else if (values.length !== showWhen.valueIds.length) message = 'A value picked here no longer exists. Please pick again.';
+        return message ? invalid([{ field: 'showWhen', message }]) : null;
+    } catch (err) {
+        throw err;
+    }
+};
+
 const numberOrNull = (text) => (text === null || text === undefined ? null : Number(text));
 
 // A unit choice as stored: how it is measured, its rate and size rules.
@@ -192,6 +212,8 @@ const toStored = (data, { isTaxAvailable, isPerRatePricingOn: isOn = false, keep
         }
         if (data.type === CONTROL_TYPES.CHECKBOX) stored.defaultChecked = data.defaultChecked;
         if (data.type === CONTROL_TYPES.DROPDOWN) stored.isUnit = isUnitOf(data, { isPerRatePricingOn: isOn, keepTaxOf });
+        // The quantity and the unit belong to every item: never only sometimes.
+        stored.showWhen = stored.isQuantity || stored.isUnit || !data.showWhen ? null : data.showWhen;
         if (CHOICE_CONTROL_TYPES.includes(data.type)) {
             const keptOf = new Map((keepTaxOf?.options || []).map((option) => [String(option._id), option]));
             stored.options = data.options.map((option) => {
@@ -270,6 +292,8 @@ const createControl = async ({ vendorId, userId, data, companyMasterData, websit
         if (quantityTaken) return quantityTaken;
         const unitTaken = await unitTakenResult({ vendorId, isUnit: isUnitOf(data, limits) });
         if (unitTaken) return unitTaken;
+        const showWhenError = await showWhenErrorResult({ vendorId, showWhen: toStored(data, limits).showWhen });
+        if (showWhenError) return showWhenError;
 
         let control;
         try {
@@ -305,6 +329,8 @@ const updateControl = async ({ vendorId, userId, id, data, companyMasterData, we
         if (quantityTaken) return quantityTaken;
         const unitTaken = await unitTakenResult({ vendorId, isUnit: isUnitOf(data, { ...limits, keepTaxOf: current }), exceptId: id });
         if (unitTaken) return unitTaken;
+        const showWhenError = await showWhenErrorResult({ vendorId, showWhen: toStored(data, { ...limits, keepTaxOf: current }).showWhen });
+        if (showWhenError) return showWhenError;
 
         let control;
         try {
@@ -378,6 +404,27 @@ const moveControl = async ({ vendorId, userId, id, direction, companyMasterData 
     }
 };
 
+// GET /api/controls/form-data - the masters a control can be shown with
+// ("Show only when"), each with its values, in order; none while masters are
+// off. Inactive ones come too (with their status), for controls already
+// tagged with them.
+const getFormData = async ({ vendorId, companyMasterData, websiteMasterData }) => {
+    try {
+        const isMastersOn = websiteMasterData?.[FEATURE_FLAGS.MASTER_MODULE] === true && companyMasterData?.[FEATURE_FLAGS.MASTER_MODULE] === true;
+        if (!isMastersOn) return common.returnResult(true, 200, 'Control form fetched successfully.', { masters: [] });
+        const masters = await Master.find({ vendorId, status: LIVE }).select('_id name status').sort({ precedence: 1 }).lean();
+        const values = await MasterValue.find({ vendorId, masterId: { $in: masters.map((master) => master._id) }, status: LIVE })
+            .select('_id masterId name status').sort({ precedence: 1 }).lean();
+        const byMaster = new Map(masters.map((master) => [String(master._id), []]));
+        for (const { masterId, ...value } of values) byMaster.get(String(masterId)).push(value);
+        return common.returnResult(true, 200, 'Control form fetched successfully.', {
+            masters: masters.map((master) => ({ ...master, values: byMaster.get(String(master._id)) }))
+        });
+    } catch (err) {
+        throw err;
+    }
+};
+
 // ---- job order --------------------------------------------------------------
 
 // GET /api/controls/for-job-order - the active controls of the assigned
@@ -391,7 +438,7 @@ const getControlsForJobOrder = async ({ vendorId, companyMasterData, websiteMast
         const limits = limitsOf({ companyMasterData, websiteMasterData });
         const isOn = limits.isPerRatePricingOn;
         const controls = limits.assignedTypes.length === 0 ? [] : await Control.find({ vendorId, type: { $in: limits.assignedTypes }, status: 'A' })
-            .select('_id type label isRequired placeholder defaultText isPrice isPriceIncludedInTax isQuantity chargedBy isUnit defaultChecked options defaultOptionId').sort({ precedence: 1 }).lean();
+            .select('_id type label isRequired placeholder defaultText isPrice isPriceIncludedInTax isQuantity chargedBy isUnit showWhen defaultChecked options defaultOptionId').sort({ precedence: 1 }).lean();
 
         return common.returnResult(true, 200, 'Controls fetched successfully.', {
             controls: controls.map((control) => {
@@ -426,6 +473,7 @@ module.exports = {
     assignedTypesOf,
     isPerRatePricingOn,
     getControlsForJobOrder,
+    getFormData,
     listControls,
     getControl,
     createControl,

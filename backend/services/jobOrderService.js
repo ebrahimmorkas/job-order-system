@@ -5,6 +5,7 @@ const Counter = require('../models/Counter');
 const common = require('../utils/common');
 const logger = require('../utils/logger');
 const { computeTotals, roundTo, sizeOf } = require('../utils/jobOrderTotals');
+const { isControlShown } = require('../utils/jobOrderItems');
 const masterService = require('./masterService');
 const controlService = require('./controlService');
 const featureAccessService = require('./featureAccessService');
@@ -460,11 +461,13 @@ const itemPricingOf = (controls, input, answers, prefix, { isPerRatePricingOn })
 // The controls answered on one item: field errors by control ("<prefix>controls.<id>"),
 // what to store, the item's quantity and how it is charged (itemPricingOf).
 // isRateTimesQuantity: prices are rate x (size) x quantity.
-const answerControls = (controls, input, prefix, { isRateTimesQuantity = false, isPerRatePricingOn = false, item = {} } = {}) => {
+const answerControls = (allControls, input, prefix, { isRateTimesQuantity = false, isPerRatePricingOn = false, item = {}, isShown = () => true } = {}) => {
     try {
         const errors = [];
+        const known = new Set(allControls.map((control) => String(control._id)));
+        // Only the controls asked on this item ("Show only when"); answers to others are dropped.
+        const controls = allControls.filter(isShown);
         const answers = new Map(input.map((entry) => [entry.controlId, entry]));
-        const known = new Set(controls.map((control) => String(control._id)));
         for (const controlId of answers.keys()) {
             if (!known.has(controlId)) errors.push({ field: `${prefix}controls.${controlId}`, message: 'This field is no longer available. Please reload the page.' });
         }
@@ -645,6 +648,7 @@ const buildItems = (parts, inputs, current, { isRateTimesQuantity }) => {
             errors.push({ field: 'items', message: `At most ${parts.settings.maxItems} ${parts.settings.maxItems === 1 ? 'item' : 'items'} per job order.` });
         }
         const savedById = new Map((current?.items || []).map((item) => [String(item._id), item]));
+        const offeredMasterIds = new Set(parts.masters.map((master) => String(master._id)));
         const items = inputs.map((input, index) => {
             const prefix = `items.${index}.`;
             const saved = input.itemId ? savedById.get(input.itemId) : null;
@@ -654,7 +658,9 @@ const buildItems = (parts, inputs, current, { isRateTimesQuantity }) => {
                 for (const value of master.values) previous.set(String(value.valueId), value);
             }
             const masters = pickMasters(parts.masters, input.masters, parts.workers, previous, parts.settings, prefix);
-            const controls = answerControls(parts.controls, input.controls, prefix, { isRateTimesQuantity, isPerRatePricingOn, item: input });
+            const picked = new Map((input.masters || []).map((entry) => [entry.masterId, entry.valueIds || []]));
+            const isShown = (control) => isControlShown(control, offeredMasterIds, picked);
+            const controls = answerControls(parts.controls, input.controls, prefix, { isRateTimesQuantity, isPerRatePricingOn, item: input, isShown });
             errors.push(...masters.errors, ...controls.errors);
             return { _id: saved?._id ?? new mongoose.Types.ObjectId(), name: input.name, quantity: controls.quantity, ...controls.pricing, masters: masters.stored, controls: controls.stored };
         });

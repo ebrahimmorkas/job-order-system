@@ -71,10 +71,12 @@ const SYSTEM_FIELDS = {
     itemName: 'Job order name',
     itemQuantity: 'Quantity',
     itemSize: 'Size',
-    itemAmount: 'Item amount'
+    itemAmount: 'Item amount',
+    // The item amount divided by its quantity.
+    itemUnitPrice: 'Price for one'
 };
 const SYSTEM_FIELD_KEYS = Object.keys(SYSTEM_FIELDS);
-const ITEM_FIELD_KEYS = ['itemNumber', 'itemName', 'itemQuantity', 'itemSize', 'itemAmount'];
+const ITEM_FIELD_KEYS = ['itemNumber', 'itemName', 'itemQuantity', 'itemSize', 'itemAmount', 'itemUnitPrice'];
 
 // Which lines a table draws: every cell, only its outside, only across
 // (between rows), or none.
@@ -89,6 +91,8 @@ const FONT_SIZE_MIN = 6;
 const FONT_SIZE_MAX = 72;
 const STROKE_WIDTH_MAX = 10;
 const ELEMENTS_MAX = 300;
+// Pages added after the job order's own (each prints once).
+const EXTRA_PAGES_MAX = 10;
 const TEXT_MAX_LENGTH = 1000;
 const LABEL_MAX_LENGTH = 60;
 const TABLE_ROWS_MAX = 30;
@@ -124,6 +128,7 @@ module.exports = {
     FONT_SIZE_MAX,
     STROKE_WIDTH_MAX,
     ELEMENTS_MAX,
+    EXTRA_PAGES_MAX,
     TEXT_MAX_LENGTH,
     LABEL_MAX_LENGTH,
     TABLE_ROWS_MAX,

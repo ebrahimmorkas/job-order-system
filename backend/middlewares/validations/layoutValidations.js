@@ -3,7 +3,7 @@ const {
     LAYOUT_NAME_MIN_LENGTH, LAYOUT_NAME_MAX_LENGTH, LAYOUT_LIST_MAX_PAGE_SIZE, PAPER_SIZE_VALUES, CUSTOM_PAPER,
     ORIENTATIONS, CUSTOM_PAPER_MIN_MM, CUSTOM_PAPER_MAX_MM, LABEL_DEFAULTS, ELEMENT_TYPES, ELEMENT_TYPE_VALUES, IMAGE_FITS,
     FIELD_SOURCES, FIELD_SOURCE_VALUES, SYSTEM_FIELD_KEYS, FONT_FAMILIES, TEXT_ALIGNS, FONT_SIZE_MIN, FONT_SIZE_MAX,
-    STROKE_WIDTH_MAX, ELEMENTS_MAX, TEXT_MAX_LENGTH, LABEL_MAX_LENGTH, TABLE_ROWS_MAX, TABLE_COLS_MAX,
+    STROKE_WIDTH_MAX, ELEMENTS_MAX, EXTRA_PAGES_MAX, TEXT_MAX_LENGTH, LABEL_MAX_LENGTH, TABLE_ROWS_MAX, TABLE_COLS_MAX,
     COLOR_PATTERN, ELEMENT_ID_PATTERN, TABLE_LINES
 } = require('../../constants/layoutConstants');
 const { MAX_IMAGES_PER_REQUEST } = require('../../constants/storageConstants');
@@ -31,13 +31,15 @@ const style = Joi.object({
 }).label('Text style');
 
 // A master, a control or a job order / company field. showLabel: "xyz: b"
-// instead of "b"; labelText replaces the label shown.
+// instead of "b"; labelText replaces the label shown. perOne: a price
+// control shows its amount divided by the item's quantity.
 const fieldRef = Joi.object({
     source: Joi.string().valid(...FIELD_SOURCE_VALUES).required().label('Field source'),
     refId: objectId('Field').when('source', { is: Joi.valid(FIELD_SOURCES.MASTER, FIELD_SOURCES.CONTROL), then: Joi.required(), otherwise: Joi.forbidden() }),
     key: Joi.string().valid(...SYSTEM_FIELD_KEYS).when('source', { is: FIELD_SOURCES.SYSTEM, then: Joi.required(), otherwise: Joi.forbidden() }).label('Field'),
     showLabel: Joi.boolean().default(false),
-    labelText: Joi.string().trim().max(LABEL_MAX_LENGTH).allow('', null).empty(['', null]).default(null).label('Label text')
+    labelText: Joi.string().trim().max(LABEL_MAX_LENGTH).allow('', null).empty(['', null]).default(null).label('Label text'),
+    perOne: Joi.boolean().when('source', { is: FIELD_SOURCES.CONTROL, then: Joi.optional(), otherwise: Joi.forbidden() }).label('Price for one')
 }).label('Field');
 
 const stroke = Joi.object({
@@ -96,6 +98,17 @@ const element = Joi.object({
     everyPage: Joi.boolean().label('Print on every page')
 }).label('Element');
 
+const elements = Joi.array().items(element).max(ELEMENTS_MAX).default([]).label('Elements')
+    .messages({ 'array.max': `A page can have at most ${ELEMENTS_MAX} items` });
+
+// A page printed once after the job order's pages: page 1's items that print
+// on every page (except hiddenIds) and its own elements.
+const extraPage = Joi.object({
+    id: Joi.string().pattern(ELEMENT_ID_PATTERN).required().label('Page id'),
+    hiddenIds: Joi.array().items(Joi.string().pattern(ELEMENT_ID_PATTERN)).max(ELEMENTS_MAX).unique().default([]).label('Hidden items'),
+    elements
+}).label('Page');
+
 const paper = Joi.object({
     size: Joi.string().valid(...PAPER_SIZE_VALUES).required().label('Paper size'),
     orientation: Joi.string().valid(...ORIENTATIONS).default('portrait').label('Orientation'),
@@ -113,8 +126,9 @@ const layoutBody = {
     // Repeat on every printed page (0 = none).
     headerHeightMm: mm('Header height').default(0),
     footerHeightMm: mm('Footer height').default(0),
-    elements: Joi.array().items(element).max(ELEMENTS_MAX).default([]).label('Elements')
-        .messages({ 'array.max': `A layout can have at most ${ELEMENTS_MAX} items` })
+    elements,
+    pages: Joi.array().items(extraPage).max(EXTRA_PAGES_MAX).unique('id').default([]).label('Pages')
+        .messages({ 'array.max': `A layout can have at most ${EXTRA_PAGES_MAX} extra pages` })
 };
 
 const layoutIdParamSchema = Joi.object({

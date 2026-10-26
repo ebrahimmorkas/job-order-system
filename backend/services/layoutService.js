@@ -25,7 +25,7 @@ const {
 // null = no limit). One active layout is the default for printing.
 
 const LIVE = { $in: LIVE_STATUSES };
-const LAYOUT_FIELDS = '_id name paper labelDefault headerHeightMm footerHeightMm elements isDefault status createdAt updatedAt';
+const LAYOUT_FIELDS = '_id name paper labelDefault headerHeightMm footerHeightMm elements pages isDefault status createdAt updatedAt';
 // An item may touch the page edge (rounding of the designer's millimetres).
 const EDGE_TOLERANCE_MM = 0.01;
 
@@ -62,8 +62,9 @@ const sourcesOf = async (vendorId) => {
     }
 };
 
-// What is saved, or field errors (elements.<id>). Every element must be on
-// the page and every master / control it shows must still exist.
+// What is saved, or field errors (elements.<id>, also for an extra page's
+// elements: ids are unique over every page). Every element must be on the
+// page and every master / control it shows must still exist.
 const checkLayout = ({ data, sources, settings }) => {
     try {
         const errors = [];
@@ -71,12 +72,33 @@ const checkLayout = ({ data, sources, settings }) => {
         const known = new Set([...sources.masters, ...sources.controls].map((doc) => idOf(doc._id)));
         const isKnown = (field) => !field || field.source === FIELD_SOURCES.SYSTEM || known.has(field.refId);
         const ids = new Set();
-        const elements = [];
         if (data.headerHeightMm + data.footerHeightMm > paper.heightMm - BODY_MIN_MM) {
             errors.push({ field: 'headerHeightMm', message: `The header and footer leave too little room: keep at least ${BODY_MIN_MM} mm between them.` });
         }
+        const elements = checkElements({ list: data.elements, paper, isKnown, ids, errors, settings });
+        // An extra page prints once: "Print on every page" means nothing there.
+        // Hidden items no longer on page 1 are dropped.
+        const firstIds = new Set(elements.map((element) => element.id));
+        const pages = (data.pages || []).map((page) => ({
+            id: page.id,
+            hiddenIds: page.hiddenIds.filter((id) => firstIds.has(id)),
+            elements: checkElements({ list: page.elements, paper, isKnown, ids, errors, settings })
+                .map(({ everyPage, ...element }) => element)
+        }));
+        return {
+            errors,
+            doc: { name: data.name, paper, labelDefault: data.labelDefault, headerHeightMm: data.headerHeightMm, footerHeightMm: data.footerHeightMm, elements, pages }
+        };
+    } catch (err) {
+        throw err;
+    }
+};
 
-        for (const source of data.elements) {
+// One page's elements as saved; errors are added to errors and ids to ids.
+const checkElements = ({ list, paper, isKnown, ids, errors, settings }) => {
+    try {
+        const elements = [];
+        for (const source of list) {
             const field = `elements.${source.id}`;
             if (ids.has(source.id)) {
                 errors.push({ field: 'elements', message: 'Two items have the same id. Please reload the page.' });
@@ -98,10 +120,7 @@ const checkLayout = ({ data, sources, settings }) => {
             if (!settings.canFormatText) delete element.style;
             elements.push(element);
         }
-        return {
-            errors,
-            doc: { name: data.name, paper, labelDefault: data.labelDefault, headerHeightMm: data.headerHeightMm, footerHeightMm: data.footerHeightMm, elements }
-        };
+        return elements;
     } catch (err) {
         throw err;
     }

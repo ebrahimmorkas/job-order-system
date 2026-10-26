@@ -11,7 +11,7 @@ import NumberField from '../../../components/common/NumberField';
 import { TrashIcon } from '../../../components/common/ActionIcons';
 import { masterLabelOf } from '../summaryRows';
 import { DURATION_UNITS, DURATION_AMOUNT_MAX } from '../workTime';
-import { JOB_NAME_MAX_LENGTH, quantityOf, workedTotalOf, unitControlOf, itemPricingOf, chargeOf } from '../jobOrderItems';
+import { JOB_NAME_MAX_LENGTH, quantityOf, workedTotalOf, unitControlOf, itemPricingOf, chargeOf, shownControlsOf } from '../jobOrderItems';
 import { measurementsOf, formatSize } from '../jobOrderTotals';
 
 const MEASUREMENT_LABELS = { length: 'Length', width: 'Width', height: 'Height' };
@@ -68,6 +68,8 @@ const JobOrderItemFields = ({
   // Per unit pricing: the unit dropdown and how this item is charged.
   const unitControl = settings.isPerRatePricingOn ? unitControlOf(parts.controls) : undefined;
   const pricing = itemPricingOf(parts.controls, item, settings.isPerRatePricingOn);
+  // The controls asked on this item ("Show only when" a master is picked).
+  const shownControls = shownControlsOf(parts, item);
 
   const flagEdited = (affected) => {
     if (!isRateTimesQuantity) return;
@@ -327,9 +329,9 @@ const JobOrderItemFields = ({
           </div>
         )}
 
-        {parts.controls.length > 0 && (
+        {shownControls.length > 0 && (
           <div className="space-y-5">
-            {parts.controls.map((control) => {
+            {shownControls.map((control) => {
               const answer = item.answers[control._id];
               const error = errors[`${prefix}controls.${control._id}`];
               const max = control.maxLength ?? ANSWER_MAX_LENGTH;

@@ -1,6 +1,7 @@
 const Master = require('../models/Master');
 const MasterValue = require('../models/MasterValue');
 const Role = require('../models/Role');
+const Control = require('../models/Control');
 const User = require('../models/User');
 const { ROLES } = require('../constants/roleConstants');
 const common = require('../utils/common');
@@ -114,6 +115,8 @@ const removeMasterFromRoles = async ({ vendorId, userId, id }) => {
             { $pull: { extraMasters: { masterId: id }, revokedMasters: { masterId: id } } },
             { auditUserId: userId }
         );
+        // Controls shown only with it are shown always.
+        await Control.updateMany({ vendorId, 'showWhen.masterId': id }, { $set: { showWhen: null } }, { auditUserId: userId });
     } catch (err) {
         throw err;
     }
@@ -130,6 +133,15 @@ const removeValuesFromRoles = async ({ vendorId, userId, id, valueIds }) => {
         const userFilter = { vendorId, role: ROLES.USER, status: LIVE, 'extraMasters.masterId': id };
         await User.updateMany(userFilter, { $pull: { 'extraMasters.$[].valueIds': { $in: valueIds } } }, { auditUserId: userId });
         await User.updateMany(userFilter, { $pull: { extraMasters: { masterId: id, isWholeMaster: false, valueIds: { $size: 0 } } } }, { auditUserId: userId });
+        // Controls shown only with some values: those values leave; with none
+        // left the control is shown always (not with every value of the master).
+        const controlFilter = { vendorId, 'showWhen.masterId': id, 'showWhen.valueIds': { $in: valueIds } };
+        const tagged = await Control.find(controlFilter).select('_id showWhen').lean();
+        const gone = new Set(valueIds.map(String));
+        for (const control of tagged) {
+            const left = control.showWhen.valueIds.filter((valueId) => !gone.has(String(valueId)));
+            await Control.updateOne({ _id: control._id }, { $set: { showWhen: left.length > 0 ? { masterId: control.showWhen.masterId, valueIds: left } : null } }, { auditUserId: userId });
+        }
     } catch (err) {
         throw err;
     }

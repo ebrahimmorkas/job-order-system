@@ -7,6 +7,7 @@ import Menu from '../../../components/common/Menu';
 import Dropdown from '../../../components/common/DropDown';
 import InputField from '../../../components/common/InputField';
 import NumberField from '../../../components/common/NumberField';
+import Checkbox from '../../../components/common/Checkbox';
 import Modal from '../../../components/common/Modal';
 import { BackIcon } from '../../../components/common/ActionIcons';
 import { useToast } from '../../../components/common/Toast';
@@ -22,7 +23,8 @@ import { usePrintedPages } from '../usePrintedPages';
 import { placeholderResolver } from '../fieldValues';
 import { EXPORT_FORMATS, exportPage } from '../exportLayout';
 import {
-  BODY_MIN_MM, CUSTOM_PAPER, ELEMENTS_MAX, IMAGE_NUMBER_MAX, NAME_MAX_LENGTH, PX_PER_MM, bandOf, createElement, describePaper, elementName, fitOnPage, newElementId, paperOf,
+  BODY_MIN_MM, CUSTOM_PAPER, ELEMENTS_MAX, EXTRA_PAGES_MAX, IMAGE_NUMBER_MAX, NAME_MAX_LENGTH, PX_PER_MM, bandOf, createElement, describePaper, elementName, fitOnPage,
+  newElementId, paperOf, repeatedOn,
 } from '../layoutConstants';
 import * as layoutsApi from '../api/layoutsApi';
 
@@ -46,7 +48,7 @@ const GRID_COLUMNS = {
   '': 'lg:grid-cols-[2.75rem_minmax(0,1fr)_2.75rem]',
 };
 const COPY_SUFFIX = ' (copy)';
-const NEW_LAYOUT = { name: '', paper: { size: 'A4', orientation: 'portrait' }, labelDefault: 'none', headerHeightMm: 0, footerHeightMm: 0, elements: [] };
+const NEW_LAYOUT = { name: '', paper: { size: 'A4', orientation: 'portrait' }, labelDefault: 'none', headerHeightMm: 0, footerHeightMm: 0, elements: [], pages: [] };
 // Items in "Preview pages" (as many as a job order might have).
 const PREVIEW_ITEMS = 3;
 // A header / footer turned on from the Items list starts this high.
@@ -72,6 +74,7 @@ const toPayload = ({ name, labelDefault, doc }) => ({
   headerHeightMm: doc.headerHeightMm,
   footerHeightMm: doc.footerHeightMm,
   elements: doc.elements,
+  pages: doc.pages,
 });
 
 const isOutside = (element, paper) =>
@@ -124,10 +127,12 @@ const Designer = ({ mode, initial, formData, onBack }) => {
   const [step, setStep] = useState(mode === 'create' ? 'setup' : 'design');
   const [name, setName] = useState(initial.name);
   const [labelDefault, setLabelDefault] = useState(initial.labelDefault);
-  const history = useLayoutHistory({ paper: initial.paper, headerHeightMm: initial.headerHeightMm, footerHeightMm: initial.footerHeightMm, elements: initial.elements });
+  const history = useLayoutHistory({ paper: initial.paper, headerHeightMm: initial.headerHeightMm, footerHeightMm: initial.footerHeightMm, elements: initial.elements, pages: initial.pages });
   const { doc } = history;
   const [savedSnapshot, setSavedSnapshot] = useState(() => (mode === 'clone' ? null : JSON.stringify(toPayload({ ...initial, doc: history.doc }))));
   const [selectedId, setSelectedId] = useState(null);
+  // The page shown: 0 = page 1 (the job order's), 1... = the extra pages.
+  const [pageIndex, setPageIndex] = useState(0);
   // Opens at real size, so text is readable; a bigger page scrolls in its area.
   const [zoomChoice, setZoomChoice] = useState('1');
   const [areaWidth, setAreaWidth] = useState(0);
@@ -145,8 +150,16 @@ const Designer = ({ mode, initial, formData, onBack }) => {
   const { canFormatText } = formData.settings;
   const paper = useMemo(() => paperOf(doc.paper, formData.paperSizes), [doc.paper, formData.paperSizes]);
   const resolve = useMemo(() => placeholderResolver(formData), [formData]);
-  const selected = doc.elements.find((e) => e.id === selectedId) || null;
-  const outsideCount = doc.elements.filter((e) => isOutside(e, paper)).length;
+  // Undo can take away the page shown.
+  const pageNumber = Math.min(pageIndex, doc.pages.length);
+  const extraPage = pageNumber > 0 ? doc.pages[pageNumber - 1] : null;
+  const elements = extraPage ? extraPage.elements : doc.elements;
+  const allElements = [...doc.elements, ...doc.pages.flatMap((page) => page.elements)];
+  // Page 1's items an extra page prints too (all of them, and those not hidden).
+  const repeatable = useMemo(() => (extraPage ? repeatedOn(doc, paper) : []), [doc, paper, extraPage]);
+  const repeated = extraPage ? repeatable.filter((e) => !extraPage.hiddenIds.includes(e.id)) : [];
+  const selected = elements.find((e) => e.id === selectedId) || null;
+  const outsideCount = allElements.filter((e) => isOutside(e, paper)).length;
 
   const snapshot = JSON.stringify(toPayload({ name, labelDefault, doc }));
   const isDirty = snapshot !== savedSnapshot;
@@ -193,15 +206,46 @@ const Designer = ({ mode, initial, formData, onBack }) => {
     });
   };
 
+  // Changes the shown page's elements.
+  const onPage = (d, update) => (pageNumber === 0
+    ? { ...d, elements: update(d.elements) }
+    : { ...d, pages: d.pages.map((page, i) => (i === pageNumber - 1 ? { ...page, elements: update(page.elements) } : page)) });
+
+  const showPage = (number) => {
+    setPageIndex(number);
+    setSelectedId(null);
+  };
+  // An item with an error: its page, then the item.
+  const goToElement = (id) => {
+    const index = doc.pages.findIndex((page) => page.elements.some((e) => e.id === id));
+    setPageIndex(index + 1);
+    setSelectedId(id);
+  };
+  const addPage = () => {
+    if (doc.pages.length >= EXTRA_PAGES_MAX) return toast.warning(`A layout can have at most ${EXTRA_PAGES_MAX} extra pages.`);
+    history.change((d) => ({ ...d, pages: [...d.pages, { id: newElementId(), hiddenIds: [], elements: [] }] }));
+    return showPage(doc.pages.length + 1);
+  };
+  const removePage = () => {
+    history.change((d) => ({ ...d, pages: d.pages.filter((_, i) => i !== pageNumber - 1) }));
+    showPage(pageNumber - 1);
+    toast.info(`Page ${pageNumber + 1} removed. Undo (Ctrl+Z) brings it back.`);
+  };
+  // Prints one of page 1's repeated items on this extra page, or not.
+  const showRepeated = (id, isShown) => history.change((d) => ({
+    ...d,
+    pages: d.pages.map((page, i) => (i === pageNumber - 1 ? { ...page, hiddenIds: isShown ? page.hiddenIds.filter((h) => h !== id) : [...page.hiddenIds, id] } : page)),
+  }));
+
   const addItem = (item, at = null) => {
     if (item.kind === 'header' || item.kind === 'footer') return turnOnBand(item.kind);
-    if (doc.elements.length >= ELEMENTS_MAX) return toast.warning(`A layout can have at most ${ELEMENTS_MAX} items.`);
-    const offset = (doc.elements.length % 10) * ADD_STEP_MM;
+    if (elements.length >= ELEMENTS_MAX) return toast.warning(`A page can have at most ${ELEMENTS_MAX} items.`);
+    const offset = (elements.length % 10) * ADD_STEP_MM;
     const spot = at || { x: ADD_SPOT_MM + offset, y: ADD_SPOT_MM + offset };
     // A new job order image takes the next number.
-    const imageNumber = Math.min(IMAGE_NUMBER_MAX, Math.max(0, ...doc.elements.filter((e) => e.type === 'image').map((e) => e.imageNumber)) + 1);
+    const imageNumber = Math.min(IMAGE_NUMBER_MAX, Math.max(0, ...allElements.filter((e) => e.type === 'image').map((e) => e.imageNumber)) + 1);
     const element = fitOnPage(createElement(item.kind, { ...spot, field: item.field, labelDefault, imageNumber }), paper);
-    history.change((d) => ({ ...d, elements: [...d.elements, element] }));
+    history.change((d) => onPage(d, (list) => [...list, element]));
     setSelectedId(element.id);
     return areaRef.current?.focus({ preventScroll: true });
   };
@@ -209,7 +253,7 @@ const Designer = ({ mode, initial, formData, onBack }) => {
   // An item moved into or out of the header / footer goes back to that
   // place's "Print on every page" (on in a band, off in between).
   const placedPatch = (element, patch) => {
-    if (!element || 'everyPage' in patch || typeof element.everyPage !== 'boolean') return patch;
+    if (!element || extraPage || 'everyPage' in patch || typeof element.everyPage !== 'boolean') return patch;
     const before = bandOf(element, doc, paper);
     return bandOf({ ...element, ...patch }, doc, paper) === before ? patch : { ...patch, everyPage: undefined };
   };
@@ -220,22 +264,26 @@ const Designer = ({ mode, initial, formData, onBack }) => {
   };
 
   const removeSelected = () => {
-    history.change((d) => ({ ...d, elements: d.elements.filter((e) => e.id !== selectedId) }));
+    history.change((d) => {
+      const next = onPage(d, (list) => list.filter((e) => e.id !== selectedId));
+      // Page 1's item: no longer hidden on the extra pages either.
+      return pageNumber > 0 ? next : { ...next, pages: next.pages.map((page) => ({ ...page, hiddenIds: page.hiddenIds.filter((h) => h !== selectedId) })) };
+    });
     forgetError(selectedId);
     setSelectedId(null);
   };
 
   const duplicateSelected = () => {
-    if (doc.elements.length >= ELEMENTS_MAX) return toast.warning(`A layout can have at most ${ELEMENTS_MAX} items.`);
+    if (elements.length >= ELEMENTS_MAX) return toast.warning(`A page can have at most ${ELEMENTS_MAX} items.`);
     const copy = fitOnPage({ ...structuredClone(selected), id: newElementId(), x: selected.x + ADD_STEP_MM, y: selected.y + ADD_STEP_MM }, paper);
-    history.change((d) => ({ ...d, elements: [...d.elements, copy] }));
+    history.change((d) => onPage(d, (list) => [...list, copy]));
     return setSelectedId(copy.id);
   };
 
-  const arrangeSelected = (where) => history.change((d) => {
-    const others = d.elements.filter((e) => e.id !== selectedId);
-    return { ...d, elements: where === 'front' ? [...others, selected] : [selected, ...others] };
-  });
+  const arrangeSelected = (where) => history.change((d) => onPage(d, (list) => {
+    const others = list.filter((e) => e.id !== selectedId);
+    return where === 'front' ? [...others, selected] : [selected, ...others];
+  }));
 
   const nudgeSelected = (dx, dy) => {
     const moved = fitOnPage({ ...selected, x: selected.x + dx, y: selected.y + dy }, paper);
@@ -269,7 +317,11 @@ const Designer = ({ mode, initial, formData, onBack }) => {
     });
   };
   const fitAllOnPage = () => {
-    history.change((d) => ({ ...d, elements: d.elements.map((e) => fitOnPage(e, paper)) }));
+    history.change((d) => ({
+      ...d,
+      elements: d.elements.map((e) => fitOnPage(e, paper)),
+      pages: d.pages.map((page) => ({ ...page, elements: page.elements.map((e) => fitOnPage(e, paper)) })),
+    }));
     setFormError('');
   };
 
@@ -304,13 +356,17 @@ const Designer = ({ mode, initial, formData, onBack }) => {
     }
   };
 
-  // Joi's "elements.3.x" and the service's "elements.<id>" both point at an item.
+  // Joi's "elements.3.x" / "pages.0.elements.3.x" and the service's
+  // "elements.<id>" all point at an item.
   const toElementErrors = (errors) => {
     const byId = {};
     for (const { field, message } of errors || []) {
-      const [list, ref] = field.split('.');
+      const parts = field.split('.');
+      const onExtra = parts[0] === 'pages' && parts[2] === 'elements';
+      const [list, ref] = onExtra ? parts.slice(2) : parts;
       if (list !== 'elements' || !ref) continue;
-      const id = /^\d+$/.test(ref) ? doc.elements[Number(ref)]?.id : ref;
+      const listed = onExtra ? doc.pages[Number(parts[1])]?.elements || [] : doc.elements;
+      const id = /^\d+$/.test(ref) ? listed[Number(ref)]?.id : ref;
       if (id && !byId[id]) byId[id] = message;
     }
     return byId;
@@ -342,7 +398,7 @@ const Designer = ({ mode, initial, formData, onBack }) => {
       const nameMessage = err.errors?.find((e) => e.field === 'name')?.message;
       if (nameMessage) setNameError(nameMessage);
       const firstId = Object.keys(byId)[0];
-      if (firstId) setSelectedId(firstId);
+      if (firstId) goToElement(firstId);
       setFormError(firstId ? `Some items need fixing. ${byId[firstId]}` : (nameMessage ? '' : err.message));
     } finally {
       setIsSaving(false);
@@ -427,7 +483,7 @@ const Designer = ({ mode, initial, formData, onBack }) => {
                 error={nameError}
               />
             </div>
-            <span className="text-sm text-gray-500">{describePaper(paper)} · {doc.elements.length} {doc.elements.length === 1 ? 'item' : 'items'}</span>
+            <span className="text-sm text-gray-500">{describePaper(paper)} · {elements.length} {elements.length === 1 ? 'item' : 'items'}{doc.pages.length > 0 && ` on page ${pageNumber + 1}`}</span>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -452,6 +508,24 @@ const Designer = ({ mode, initial, formData, onBack }) => {
         </Alert>
       )}
 
+      <div className="flex flex-wrap items-center gap-2">
+        <div role="tablist" aria-label="Pages" className="flex flex-wrap gap-1 rounded-lg bg-gray-100 p-1">
+          {[0, ...doc.pages.map((_, i) => i + 1)].map((number) => (
+            <button
+              key={number}
+              type="button"
+              role="tab"
+              aria-selected={number === pageNumber}
+              onClick={() => showPage(number)}
+              className={`rounded-md px-3 py-1 text-sm font-medium cursor-pointer ${number === pageNumber ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+            >
+              {number === 0 && doc.pages.length > 0 ? 'Page 1 · job order' : `Page ${number + 1}`}
+            </button>
+          ))}
+        </div>
+        <Button variant="ghost" size="sm" onClick={addPage} disabled={doc.pages.length >= EXTRA_PAGES_MAX}>+ Add page</Button>
+      </div>
+
       <div className={`grid gap-4 lg:h-[calc(100vh-12rem)] lg:min-h-[520px] ${gridColumns}`}>
         <SidePanel
           side="left"
@@ -474,13 +548,15 @@ const Designer = ({ mode, initial, formData, onBack }) => {
           <div className="mx-auto w-max">
             <DesignerCanvas
               paper={paper}
-              elements={doc.elements}
+              elements={elements}
+              repeated={repeated}
+              isExtraPage={!!extraPage}
               selectedId={selectedId}
               onSelect={setSelectedId}
               onBeginChange={history.beginDrag}
               onMove={(id, patch) => {
                 forgetError(id);
-                history.drag((d) => ({ ...d, elements: d.elements.map((e) => (e.id === id ? { ...e, ...placedPatch(e, patch) } : e)) }));
+                history.drag((d) => onPage(d, (list) => list.map((e) => (e.id === id ? { ...e, ...placedPatch(e, patch) } : e))));
               }}
               onDropItem={(item, x, y) => addItem(item, { x, y })}
               zoom={zoom}
@@ -510,6 +586,7 @@ const Designer = ({ mode, initial, formData, onBack }) => {
                 element={selected}
                 paper={paper}
                 bands={doc}
+                isExtraPage={!!extraPage}
                 sources={formData}
                 resolve={resolve}
                 canFormatText={canFormatText}
@@ -522,17 +599,44 @@ const Designer = ({ mode, initial, formData, onBack }) => {
           ) : (
             <div className="space-y-4">
               <div>
-                <h2 className="text-base font-semibold text-gray-900">Page</h2>
+                <h2 className="text-base font-semibold text-gray-900">{doc.pages.length > 0 ? `Page ${pageNumber + 1}` : 'Page'}</h2>
                 <p className="text-xs text-gray-500">Click an item on the page to change it.</p>
               </div>
+              {extraPage ? (
+                <section className="space-y-2" aria-label="This page">
+                  <p className="text-xs text-gray-500">
+                    Prints once, after the job order's pages. It shows page 1's items that print on every page (faded here) and its own items.
+                  </p>
+                  {repeatable.length > 0 ? (
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-medium text-gray-700">From page 1</h3>
+                      {repeatable.map((e) => (
+                        <Checkbox
+                          key={e.id}
+                          size="sm"
+                          name={`show-${e.id}`}
+                          label={elementName(e, resolve)}
+                          checked={!extraPage.hiddenIds.includes(e.id)}
+                          onChange={(event) => showRepeated(e.id, event.target.checked)}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-500">Page 1 has no items printed on every page.</p>
+                  )}
+                  <Button variant="outline" size="sm" onClick={removePage}>Remove this page</Button>
+                </section>
+              ) : doc.pages.length > 0 && (
+                <p className="text-xs text-gray-500">A long job order continues page 1 on more pages; the extra pages print once each after them.</p>
+              )}
               {Object.keys(elementErrors).length > 0 && (
                 <Alert variant="error">
                   <ul className="space-y-1">
                     {Object.entries(elementErrors).map(([id, message]) => {
-                      const element = doc.elements.find((e) => e.id === id);
+                      const element = allElements.find((e) => e.id === id);
                       return element && (
                         <li key={id}>
-                          <button type="button" className="text-left underline cursor-pointer" onClick={() => setSelectedId(id)}>{elementName(element, resolve)}</button>: {message}
+                          <button type="button" className="text-left underline cursor-pointer" onClick={() => goToElement(id)}>{elementName(element, resolve)}</button>: {message}
                         </li>
                       );
                     })}
@@ -575,7 +679,7 @@ const Designer = ({ mode, initial, formData, onBack }) => {
       />
 
       <div aria-hidden="true" style={{ position: 'fixed', left: -100000, top: 0, pointerEvents: 'none' }}>
-        <LayoutPage ref={exportRef} paper={paper} elements={doc.elements} resolve={resolve} canFormatText={canFormatText} logoUrl={formData.company.logoUrl} />
+        <LayoutPage ref={exportRef} paper={paper} elements={extraPage ? [...repeated, ...elements] : elements} resolve={resolve} canFormatText={canFormatText} logoUrl={formData.company.logoUrl} />
       </div>
     </div>
   );
@@ -614,6 +718,7 @@ const LayoutDesignerPage = ({ mode, layoutId, onBack }) => {
             footerHeightMm: saved.footerHeightMm || 0,
             paper,
             elements: saved.elements,
+            pages: saved.pages || [],
           },
         });
       })

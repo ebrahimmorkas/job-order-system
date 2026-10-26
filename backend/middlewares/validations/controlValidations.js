@@ -121,6 +121,11 @@ const controlSchema = Joi.object({
         then: Joi.boolean().default(false).label('Use this dropdown to pick the pricing unit'),
         otherwise: Joi.any().strip()
     }),
+    // "Show only when" a master (any of its values, or some) is picked on the item.
+    showWhen: Joi.object({
+        masterId: objectId('Master'),
+        valueIds: Joi.array().items(objectId('Value')).unique().default([]).label('Values')
+    }).allow(null).default(null).label('Show only when'),
     defaultChecked: Joi.when('type', {
         is: CONTROL_TYPES.CHECKBOX,
         then: Joi.boolean().default(false).label('Ticked by default'),

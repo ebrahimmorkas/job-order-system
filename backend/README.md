@@ -155,6 +155,17 @@ Fields the vendor adds to the job order form (`models/Control.js`): a
   `_id`) and `defaultOptionId` (optional). Dropdown: the same with at least 1
   choice, plus `isUnit` (see Per unit pricing). A price also has `chargedBy`
   (per unit pricing). The type never changes.
+- "Show only when" (`showWhen`, optional, any type): `{ masterId, valueIds }`
+  - the control is asked on a job order item only when a value of that master
+  is picked on it (`valueIds` empty = any value, else one of them). `null` =
+  always. Never on the quantity or the unit dropdown (dropped). The master and
+  values must exist (400 on `showWhen`). A master the job order form doesn't
+  offer (inactive, masters off) leaves the control asked always. On a job
+  order, answers to controls not asked on an item are dropped (not saved, not
+  counted in the total), and a required one is not required there. Deleting
+  the master sets `showWhen` to null; deleting values takes them out (none
+  left -> null). `GET /api/controls/form-data` gives the masters with their
+  values (inactive ones too, with `status`; none while masters are off).
 - Active / inactive, deleted softly (`status: 'D'`); a deleted label can be used again.
 - CompanyMaster (set by the platform owner; empty = no limit):
   - `assignedControls` - which types the vendor gets: `null` = all, `[]` =
@@ -563,11 +574,19 @@ designer; any logged-in user can print a job order with an active one.
   `everyPage` ("Print on every page", optional) says otherwise: false in the
   header = first page only, in the footer = last page only; true in between
   = at the same spot on every page (never moved).
+- Extra pages (`pages`, up to 10): `[{ id, hiddenIds, elements }]`, each
+  printed once after the job order's pages. It shows page 1's elements that
+  print on every page except `hiddenIds` (ids not on page 1 are dropped on
+  save) and its own `elements` (checked like page 1's; ids are unique over
+  every page, so errors stay `elements.<id>`; `everyPage` is dropped there).
+  Page numbers count every page.
 - Elements: `field` (a master, a control, or a job order / company field:
   number, date, delivery date, customer address, subtotal, discount
   (amount, "(10%)" when a percentage), tax, total, advance, balance, company
   name, address, tax numbers, work given, page number; per item: item no., job
-  order name, quantity, size, item amount; `showLabel`, `labelText`), `text`,
+  order name, quantity, size, item amount, price for one (`itemUnitPrice`:
+  the item amount / its quantity); `showLabel`, `labelText`; a price
+  control's `perOne`: its amount / the item's quantity), `text`,
   `line`, `rectangle`, `circle`, `table` (up to 30 x 10 cells, each typed
   text or a field; `repeatRow` - the row printed once for each item of the
   job order, null = none; `lines` `all` / `outside` / `rows` / `none`;
@@ -706,6 +725,7 @@ too (see Users logging in) - except Layout Master, which stays owner only.
 | PATCH | `/api/masters/:id/values/:valueId/status` | owner - `{ isActive }` |
 | GET | `/api/controls/for-job-order` | logged in - active controls of the assigned types with defaults and `maxLength`, for the job order form (also while Controls is off, with `fetchControlsEvenWhenBitIsOff`) |
 | GET / POST | `/api/controls` | owner - list (search, status, type, page, limit) / create |
+| GET | `/api/controls/form-data` | owner - the masters (with values) a control can be shown with ("Show only when") |
 | GET / PUT / DELETE | `/api/controls/:id` | owner - one control / save every field (same type) / delete |
 | PATCH | `/api/controls/:id/status` | owner - `{ isActive }` |
 | PATCH | `/api/controls/:id/move` | owner - `{ direction: up|down }` |

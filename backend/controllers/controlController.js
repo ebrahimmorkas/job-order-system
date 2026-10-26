@@ -31,6 +31,16 @@ const getControlsForJobOrder = async (req, res) => {
     }
 };
 
+// GET /api/controls/form-data
+const getFormData = async (req, res) => {
+    try {
+        const result = await controlService.getFormData({ vendorId: req.vendorId, ...vendorData(req) });
+        return sendResult(res, result);
+    } catch (err) {
+        logException('Error while fetching the control form', err);
+    }
+};
+
 // GET /api/controls
 const listControls = async (req, res) => {
     try {
@@ -125,6 +135,7 @@ const bulkUpdateControls = async (req, res) => {
 
 module.exports = {
     getControlsForJobOrder,
+    getFormData,
     listControls,
     getControl,
     createControl,

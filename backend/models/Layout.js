@@ -33,6 +33,11 @@ const layoutSchema = new mongoose.Schema({
     // Their shape is checked by middlewares/validations/layoutValidations.js
     // and services/layoutService.js.
     elements: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    // More pages, each printed once after the job order's pages (which
+    // the elements above make): { id, hiddenIds, elements }. Each shows the
+    // items above that print on every page, except hiddenIds, and its own
+    // elements (printed where they are placed).
+    pages: { type: [mongoose.Schema.Types.Mixed], default: [] },
     // Picked in advance when a job order is printed. At most one per vendor.
     isDefault: { type: Boolean, default: false }
 }, {

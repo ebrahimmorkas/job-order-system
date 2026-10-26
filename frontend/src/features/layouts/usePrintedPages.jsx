@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { TableRows } from './components/ElementView';
 import { PX_PER_MM, isRepeatingTable } from './layoutConstants';
-import { flowPages, printedTableOf } from './printFlow';
+import { printPages, printedTableOf } from './printFlow';
 
 /**
  * The pages a layout prints (printFlow.js). Each table with a repeated row is
@@ -10,7 +10,7 @@ import { flowPages, printedTableOf } from './printFlow';
  * taller); until then pages is null.
  *
  * @param {Object} params
- * @param {{ elements, headerHeightMm, footerHeightMm }|null} params.layout
+ * @param {{ elements, headerHeightMm, footerHeightMm, pages? }|null} params.layout
  * @param {{ widthMm, heightMm }|null} params.paper - As printed
  * @param {((field, place) => { label, value })|null} params.resolve
  * @param {number} params.itemCount - Items of the job order
@@ -20,7 +20,8 @@ import { flowPages, printedTableOf } from './printFlow';
 export const usePrintedPages = ({ layout, paper, resolve, itemCount, canFormatText }) => {
   const tables = useMemo(() => {
     if (!layout || !paper || !resolve) return null;
-    return new Map(layout.elements.filter(isRepeatingTable).map((element) => [element.id, { element, ...printedTableOf(element, resolve, itemCount) }]));
+    const all = [...layout.elements, ...(layout.pages || []).flatMap((page) => page.elements)];
+    return new Map(all.filter(isRepeatingTable).map((element) => [element.id, { element, ...printedTableOf(element, resolve, itemCount) }]));
   }, [layout, paper, resolve, itemCount]);
   // { tables, heights: id -> each row's height in mm } once drawn.
   const [measured, setMeasured] = useState(null);
@@ -40,7 +41,7 @@ export const usePrintedPages = ({ layout, paper, resolve, itemCount, canFormatTe
       colWidths: table.colWidths,
       rows: table.rows.map((row, i) => ({ ...row, heightMm: Math.max(table.designedRowMm, measured.heights.get(id)?.[i] ?? 0) })),
     }]));
-    return flowPages({ paper, elements: layout.elements, headerHeightMm: layout.headerHeightMm || 0, footerHeightMm: layout.footerHeightMm || 0 }, sized);
+    return printPages({ paper, elements: layout.elements, headerHeightMm: layout.headerHeightMm || 0, footerHeightMm: layout.footerHeightMm || 0, pages: layout.pages || [] }, sized);
   }, [tables, measured, paper, layout]);
 
   const measurer = tables && createPortal(

@@ -105,8 +105,19 @@ const FillFields = ({ fill, onChange }) => (
   </div>
 );
 
-const LabelFields = ({ field, defaultLabel, onChange }) => (
+// isPrice: a price control - it can show its price for one (÷ the item's quantity).
+const LabelFields = ({ field, defaultLabel, isPrice = false, onChange }) => (
   <div className="space-y-2">
+    {isPrice && (
+      <Checkbox
+        size="sm"
+        name="perOne"
+        label="Price for one"
+        description="The amount divided by the item's quantity."
+        checked={field.perOne === true}
+        onChange={(e) => onChange({ field: { ...field, perOne: e.target.checked } })}
+      />
+    )}
     <Checkbox
       size="sm"
       name="showLabel"
@@ -132,7 +143,7 @@ const NO_ROW_STYLE = { bold: false, fill: null };
 // Rows / columns, column widths, lines, what each cell shows, and the row
 // printed once for each item of the job order (with its row styles and
 // columns hidden when no item has a value).
-const TableFields = ({ element, fieldOptions, resolve, onChange }) => {
+const TableFields = ({ element, fieldOptions, resolve, isPriceField, onChange }) => {
   const { table } = element;
   const [cellAt, setCellAt] = useState({ row: 0, col: 0 });
   const row = Math.min(cellAt.row, table.rows - 1);
@@ -252,7 +263,7 @@ const TableFields = ({ element, fieldOptions, resolve, onChange }) => {
           onChange={(value) => setCell(value ? { text: '', field: { ...fieldFromKey(value), showLabel: false, labelText: null } } : { field: null })}
         />
         {cell.field ? (
-          <LabelFields field={cell.field} defaultLabel={resolve(cell.field).label} onChange={(patch, key) => setCell(patch, key)} />
+          <LabelFields field={cell.field} defaultLabel={resolve(cell.field).label} isPrice={isPriceField(cell.field)} onChange={(patch, key) => setCell(patch, key)} />
         ) : (
           <TextArea label="Text" rows={2} maxLength={TEXT_MAX_LENGTH} value={cell.text} onChange={(e) => setCell({ text: e.target.value }, 'cellText')} />
         )}
@@ -268,6 +279,7 @@ const TableFields = ({ element, fieldOptions, resolve, onChange }) => {
  * @param {Object} props.element
  * @param {{ widthMm, heightMm }} props.paper
  * @param {{ headerHeightMm: number, footerHeightMm: number }} props.bands
+ * @param {boolean} [props.isExtraPage] - On a page printed once (no "Print on every page")
  * @param {{ masters, controls, systemFields }} props.sources
  * @param {(field) => { label, value }} props.resolve
  * @param {boolean} props.canFormatText
@@ -276,7 +288,7 @@ const TableFields = ({ element, fieldOptions, resolve, onChange }) => {
  * @param {() => void} props.onDelete
  * @param {(where: 'front'|'back') => void} props.onArrange
  */
-const PropertiesPanel = ({ element, paper, bands, sources, resolve, canFormatText, onChange, onDuplicate, onDelete, onArrange }) => {
+const PropertiesPanel = ({ element, paper, bands, isExtraPage = false, sources, resolve, canFormatText, onChange, onDuplicate, onDelete, onArrange }) => {
   // Active masters / controls, plus an inactive one this item already shows.
   const usedIds = new Set([element.field, ...(element.table?.cells.flat().map((cell) => cell.field) || [])].filter(Boolean).map((field) => field.refId));
   const isOffered = (doc) => doc.status === 'A' || usedIds.has(doc._id);
@@ -286,8 +298,9 @@ const PropertiesPanel = ({ element, paper, bands, sources, resolve, canFormatTex
     ...sources.controls.filter(isOffered).map((c) => ({ value: `control:${c._id}`, label: `Control: ${c.label}${c.status === 'A' ? '' : ' (inactive)'}` })),
   ];
   const band = bandOf(element, bands, paper);
+  const isPriceField = (field) => field?.source === 'control' && sources.controls.some((control) => control._id === field.refId && control.isPrice);
   // A growing table in between always flows with the page.
-  const canRepeat = !(band === 'body' && isRepeatingTable(element));
+  const canRepeat = !isExtraPage && !(band === 'body' && isRepeatingTable(element));
   const hasText = ['field', 'text', 'table'].includes(element.type);
   const title = element.type === 'field' ? resolve(element.field).label : elementName(element, resolve);
 
@@ -318,7 +331,7 @@ const PropertiesPanel = ({ element, paper, bands, sources, resolve, canFormatTex
 
       {element.type === 'field' && (
         <Section title="Label">
-          <LabelFields field={element.field} defaultLabel={resolve(element.field).label} onChange={onChange} />
+          <LabelFields field={element.field} defaultLabel={resolve(element.field).label} isPrice={isPriceField(element.field)} onChange={onChange} />
         </Section>
       )}
 
@@ -330,7 +343,7 @@ const PropertiesPanel = ({ element, paper, bands, sources, resolve, canFormatTex
         <Dropdown label="Direction" aria-label="Direction" size="sm" options={DIRECTION_OPTIONS} value={element.direction || 'horizontal'} onChange={(value) => onChange({ direction: value })} />
       )}
 
-      {element.type === 'table' && <TableFields key={element.id} element={element} fieldOptions={fieldOptions} resolve={resolve} onChange={onChange} />}
+      {element.type === 'table' && <TableFields key={element.id} element={element} fieldOptions={fieldOptions} resolve={resolve} isPriceField={isPriceField} onChange={onChange} />}
 
       {['line', 'rectangle', 'circle', 'table'].includes(element.type) && (
         <StrokeFields stroke={element.stroke} onChange={onChange} title={element.type === 'table' ? 'Borders' : 'Line'} />

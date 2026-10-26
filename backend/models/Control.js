@@ -94,6 +94,17 @@ const controlSchema = new mongoose.Schema({
         type: Boolean,
         default: undefined
     },
+    // Shown on a job order item only when a value of this master is picked
+    // there (any value, or one of valueIds). null = always shown. Never on
+    // the quantity field or the unit dropdown. A master the job order form
+    // doesn't offer (inactive, feature off) leaves the control shown.
+    showWhen: {
+        type: new mongoose.Schema({
+            masterId: { type: mongoose.Types.ObjectId, required: true },
+            valueIds: { type: [mongoose.Types.ObjectId], default: [] }
+        }, { _id: false }),
+        default: null
+    },
     // Checkbox only: ticked on a new job order.
     defaultChecked: {
         type: Boolean,

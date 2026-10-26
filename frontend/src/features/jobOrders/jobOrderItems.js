@@ -17,6 +17,25 @@ export const itemLabelOf = (item, index, count) => {
   return item.name || '';
 };
 
+/**
+ * Whether a control is asked on an item ("Show only when", same as the
+ * backend utils/jobOrderItems.js): always without a tag, or when its master
+ * isn't on the form; else when a value of that master is picked on the item
+ * (any value, or one of the tagged ones).
+ * @param {Array<{ _id }>} masters - The form's masters
+ * @param {Object<string, string[]>} picks - masterId -> the value ids picked on the item
+ */
+export const isControlShown = (control, masters, picks) => {
+  const tag = control.showWhen;
+  if (!tag) return true;
+  if (!masters.some((master) => master._id === tag.masterId)) return true;
+  const picked = picks[tag.masterId] || [];
+  return tag.valueIds.length === 0 ? picked.length > 0 : picked.some((valueId) => tag.valueIds.includes(valueId));
+};
+
+/** The controls asked on an item, in order (isControlShown). */
+export const shownControlsOf = ({ controls, masters }, item) => controls.filter((control) => isControlShown(control, masters, item.picks));
+
 /** The vendor's quantity control (a text field ticked as the quantity), or undefined. */
 export const quantityControlOf = (controls) => controls.find((control) => control.type === 'textfield' && control.isQuantity);
 

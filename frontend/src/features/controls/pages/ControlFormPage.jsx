@@ -7,6 +7,7 @@ import Card from '../../../components/common/Card';
 import Alert from '../../../components/common/Alert';
 import Badge from '../../../components/common/Badge';
 import Spinner from '../../../components/common/Spinner';
+import Dropdown from '../../../components/common/DropDown';
 import ListItemsEditor, { checkItemName } from '../../../components/common/ListItemsEditor';
 import { BackIcon } from '../../../components/common/ActionIcons';
 import { useUnsavedChanges } from '../../../components/common/UnsavedChanges';
@@ -23,7 +24,7 @@ const OPTION_NOUNS = {
   radio: { singular: 'choice', plural: 'choices', owner: 'radio group' },
   dropdown: { singular: 'choice', plural: 'choices', owner: 'dropdown' },
 };
-const EMPTY_FIELDS = { label: '', isRequired: false, placeholder: '', defaultText: '', isPrice: false, isPriceIncludedInTax: false, isQuantity: false, chargedBy: 'unit', isUnit: false, defaultChecked: false };
+const EMPTY_FIELDS = { label: '', isRequired: false, placeholder: '', defaultText: '', isPrice: false, isPriceIncludedInTax: false, isQuantity: false, chargedBy: 'unit', isUnit: false, defaultChecked: false, showMasterId: '', showValueIds: [] };
 // A unit's settings as typed ('' = not set).
 const UNIT_FIELDS = ['measuredAs', 'rate', 'roundUpTo', 'minimumSize', 'wastagePercent'];
 const textOf = (value) => (value === null || value === undefined ? '' : String(value));
@@ -39,6 +40,8 @@ const toFields = (control) => ({
   chargedBy: control.chargedBy || 'unit',
   isUnit: !!control.isUnit,
   defaultChecked: !!control.defaultChecked,
+  showMasterId: control.showWhen?.masterId || '',
+  showValueIds: control.showWhen?.valueIds || [],
 });
 
 // What gets saved, as one string - compared with the loaded one to know
@@ -91,6 +94,8 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  // The masters it can be shown with ("Show only when"); none while masters are off.
+  const [tagMasters, setTagMasters] = useState([]);
   // Saving, or details only: every field is off.
   const isLocked = isSaving || readOnly;
 
@@ -115,6 +120,16 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
       .finally(() => !cancelled && setIsLoading(false));
     return () => { cancelled = true; };
   }, [mode, knownLimits]);
+
+  useEffect(() => {
+    let cancelled = false;
+    controlsApi
+      .getFormData()
+      .then(({ masters }) => !cancelled && setTagMasters(masters))
+      // Without them the form works as before (no "Show only when").
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (mode === 'create') return undefined;
@@ -173,6 +188,16 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
   const optionMax = (isDropdown ? limits?.maxLength.dropdownOption : limits?.maxLength.radioOption) ?? null;
   const optionsAllowed = (isDropdown ? limits?.dropdownOptionsAllowed : limits?.optionsAllowed) ?? null;
   const optionNoun = OPTION_NOUNS[type] || OPTION_NOUNS.radio;
+  // "Show only when": not for the quantity or the unit (every item has them).
+  const canTag = tagMasters.length > 0 && !isQuantity && !isUnit;
+  const tagMaster = tagMasters.find((master) => master._id === fields.showMasterId) || null;
+  // Active ones, plus an inactive one already picked.
+  const tagMasterOptions = tagMasters
+    .filter((master) => master.status === 'A' || master._id === fields.showMasterId)
+    .map((master) => ({ value: master._id, label: master.status === 'A' ? master.name : `${master.name} (inactive)` }));
+  const tagValueOptions = (tagMaster?.values || [])
+    .filter((value) => value.status === 'A' || fields.showValueIds.includes(value._id))
+    .map((value) => ({ value: value._id, label: value.status === 'A' ? value.name : `${value.name} (inactive)` }));
 
   const clearError = (field) => {
     if (fieldErrors[field]) setFieldErrors((prev) => ({ ...prev, [field]: '' }));
@@ -248,6 +273,7 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
     if (isPrice && isPerRateOn) payload.chargedBy = fields.chargedBy;
     if (isCheckbox) payload.defaultChecked = fields.defaultChecked;
     if (isDropdown && isPerRateOn) payload.isUnit = fields.isUnit;
+    payload.showWhen = canTag && fields.showMasterId ? { masterId: fields.showMasterId, valueIds: fields.showValueIds } : null;
     if (isChoice) {
       payload.options = optionsToSave.map(({ _id, name, isDefault, ...unit }) => ({
         ...(_id && { _id }),
@@ -277,7 +303,7 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
       const errors = toFieldErrors(err.errors);
       setFieldErrors(errors);
       // A message not tied to one field (e.g. the limit) goes on top.
-      if (!['label', 'placeholder', 'defaultText', 'options', 'isQuantity', 'isUnit'].some((field) => errors[field])) setFormError(err.message);
+      if (!['label', 'placeholder', 'defaultText', 'options', 'isQuantity', 'isUnit', 'showWhen'].some((field) => errors[field])) setFormError(err.message);
       setIsSaving(false);
     }
   };
@@ -520,6 +546,39 @@ const ControlFormPage = ({ mode, controlId, limits: knownLimits = null, onDone, 
               {isUnit && (
                 <Card variant="outlined" title="Unit settings" subtitle="How each unit is measured, its rate and how its size is charged.">
                   <UnitOptionsEditor options={options} onChange={setUnit} errors={fieldErrors} disabled={isLocked} />
+                </Card>
+              )}
+
+              {canTag && (
+                <Card variant="outlined" title="Show only when" subtitle="Optional. Ask this on an item only when a master value is picked there.">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Dropdown
+                      label="Master"
+                      name="showMasterId"
+                      aria-label="Show only when this master is picked"
+                      options={[{ value: '', label: 'Always show' }, ...tagMasterOptions]}
+                      value={fields.showMasterId}
+                      onChange={(value) => { setFields((prev) => ({ ...prev, showMasterId: value || '', showValueIds: [] })); clearError('showWhen'); }}
+                      searchable
+                      disabled={isLocked}
+                      error={fieldErrors.showWhen}
+                    />
+                    {fields.showMasterId && (
+                      <Dropdown
+                        label="Values"
+                        name="showValueIds"
+                        aria-label="Show only with these values"
+                        options={tagValueOptions}
+                        multiple
+                        value={fields.showValueIds}
+                        onChange={(value) => { setField('showValueIds', value || []); clearError('showWhen'); }}
+                        placeholder="Any value"
+                        helperText="Empty = any value of the master."
+                        searchable
+                        disabled={isLocked}
+                      />
+                    )}
+                  </div>
                 </Card>
               )}
 

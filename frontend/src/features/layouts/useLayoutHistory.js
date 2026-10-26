@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useReducer } from 'react';
 
-// The design being edited ({ paper, elements }) with undo / redo. A drag or
+// The design being edited ({ paper, elements, pages }) with undo / redo. A drag or
 // a run of typing into one box makes a single undo step.
 
 const STEPS_MAX = 100;
@@ -50,9 +50,12 @@ export const useLayoutHistory = (initialDoc) => {
     reset: (doc) => dispatch({ type: 'reset', doc }),
   }), []);
 
-  /** Changes one element: patch merges into it. */
+  /** Changes one element, on any page (ids are unique over them): patch merges into it. */
   const changeElement = useCallback(
-    (id, patch, mergeKey = null) => actions.change((doc) => ({ ...doc, elements: doc.elements.map((e) => (e.id === id ? { ...e, ...patch } : e)) }), mergeKey && `${id}:${mergeKey}`),
+    (id, patch, mergeKey = null) => actions.change((doc) => {
+      const patched = (elements) => (elements.some((e) => e.id === id) ? elements.map((e) => (e.id === id ? { ...e, ...patch } : e)) : elements);
+      return { ...doc, elements: patched(doc.elements), pages: (doc.pages || []).map((page) => ({ ...page, elements: patched(page.elements) })) };
+    }, mergeKey && `${id}:${mergeKey}`),
     [actions],
   );
 

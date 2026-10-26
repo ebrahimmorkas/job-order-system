@@ -109,10 +109,12 @@ const DistanceGuides = ({ element, elements, paper, zoom }) => {
  * @param {string|null} props.logoUrl
  * @param {number} [props.headerHeightMm] - The header band (printed on every page), shaded
  * @param {number} [props.footerHeightMm] - The footer band, shaded
+ * @param {Array} [props.repeated] - An extra page: page 1's items printed here too, shown faded (not changed here)
+ * @param {boolean} [props.isExtraPage]
  */
 const DesignerCanvas = ({
   paper, elements, selectedId, onSelect, onBeginChange, onMove, onDropItem, zoom, onZoomChange, resolve, canFormatText, logoUrl,
-  headerHeightMm = 0, footerHeightMm = 0,
+  headerHeightMm = 0, footerHeightMm = 0, repeated = [], isExtraPage = false,
 }) => {
   const pageRef = useRef(null);
   const outerRef = useRef(null);
@@ -246,8 +248,8 @@ const DesignerCanvas = ({
         }}
       >
         {[
-          { key: 'header', height: headerHeightMm, label: 'Header · prints on every page', spot: { top: 0, borderBottom: `${1 / zoom}px dashed #6366f1` } },
-          { key: 'footer', height: footerHeightMm, label: 'Footer · prints on every page', spot: { bottom: 0, borderTop: `${1 / zoom}px dashed #6366f1` } },
+          { key: 'header', height: headerHeightMm, label: isExtraPage ? 'Header' : 'Header · prints on every page', spot: { top: 0, borderBottom: `${1 / zoom}px dashed #6366f1` } },
+          { key: 'footer', height: footerHeightMm, label: isExtraPage ? 'Footer' : 'Footer · prints on every page', spot: { bottom: 0, borderTop: `${1 / zoom}px dashed #6366f1` } },
         ].filter((band) => band.height > 0).map((band) => (
           <div
             key={band.key}
@@ -268,6 +270,17 @@ const DesignerCanvas = ({
             >
               {band.label}
             </span>
+          </div>
+        ))}
+        {repeated.map((element) => (
+          <div
+            key={element.id}
+            data-repeated-id={element.id}
+            aria-hidden="true"
+            title="From page 1"
+            style={{ position: 'absolute', left: `${element.x}mm`, top: `${element.y}mm`, width: `${element.width}mm`, height: `${element.height}mm`, opacity: 0.4, pointerEvents: 'none' }}
+          >
+            <ElementView element={element} resolve={resolve} canFormatText={canFormatText} logoUrl={logoUrl} isDesigner />
           </div>
         ))}
         {elements.map((element) => {

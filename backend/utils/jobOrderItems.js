@@ -35,7 +35,27 @@ const withItemLabel = (text, itemLabel) => {
     }
 };
 
+// Whether a control is asked on an item (Control.showWhen): always without a
+// tag, or when its master isn't offered on the form (offeredMasterIds);
+// else when a value of that master is picked on the item (any value, or one
+// of the tagged ones). picked: masterId -> the value ids picked.
+const isControlShown = (control, offeredMasterIds, picked) => {
+    try {
+        const tag = control.showWhen;
+        if (!tag) return true;
+        const masterId = String(tag.masterId);
+        if (!offeredMasterIds.has(masterId)) return true;
+        const values = (picked.get(masterId) || []).map(String);
+        if (tag.valueIds.length === 0) return values.length > 0;
+        const tagged = new Set(tag.valueIds.map(String));
+        return values.some((valueId) => tagged.has(valueId));
+    } catch (err) {
+        throw err;
+    }
+};
+
 module.exports = {
+    isControlShown,
     itemLabelOf,
     mastersOfItems,
     withItemLabel

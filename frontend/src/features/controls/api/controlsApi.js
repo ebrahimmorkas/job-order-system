@@ -21,6 +21,9 @@ export const listControls = ({ search, status, type, page, limit } = {}, { signa
 /** @returns {Promise<{ control: Object, limits: Object }>} */
 export const getControl = (id) => apiRequest(`${BASE}/${id}`);
 
+/** The masters a control can be shown with: { masters: [{ _id, name, status, values: [{ _id, name, status }] }] } */
+export const getFormData = () => apiRequest(`${BASE}/form-data`);
+
 /**
  * data: { type, label, isRequired, placeholder?, defaultText? (text types),
  * defaultChecked? (checkbox), options? [{ _id?, name, isDefault }] (radio) }

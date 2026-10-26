@@ -126,6 +126,11 @@ Each section's code is downloaded the first time it is opened
   available (the tax feature on and one country's tax details filled in).
   A text field that isn't a price can be ticked "This is a quantity field"
   (whole numbers only; one per vendor; a "Quantity" badge in the list).
+  "Show only when" (with masters on; not for the quantity or the unit): a
+  master and, optionally, some of its values - the job order form then asks
+  the control on an item only when such a value is picked there (hidden
+  ones are not saved, counted or required; `jobOrders/jobOrderItems.js`
+  `shownControlsOf`).
   With per unit pricing on, one dropdown can be ticked "Use this dropdown to
   pick the pricing unit" (a "Pricing unit" badge): each choice is a unit
   with how it is measured (one number / length x width / length x width x
@@ -222,7 +227,15 @@ Each section's code is downloaded the first time it is opened
   the room (kept in the browser). The page settings set the header and
   footer heights (shaded bands on the page; what is inside prints on every
   page). Preview pages shows the layout printed for a chosen number of
-  items. Export downloads the template as PDF, PNG or JPEG. Leaving with unsaved changes asks first.
+  items. Export downloads the page shown as PDF, PNG or JPEG. Leaving with unsaved changes asks first.
+  Pages: tabs above the page ("Page 1 · job order", "Page 2"...) and "+ Add
+  page" (up to 10 extra). An extra page prints once after the job order's
+  pages: page 1's items printed on every page show faded on it (its page
+  settings list them under "From page 1" to untick any for that page), and
+  its own items are added and moved as usual ("Remove this page"; undo
+  brings it back). A price control field (and a table cell) can tick "Price
+  for one" (its amount / the item's quantity); "Price for one" is also an
+  item field.
 - **Company Settings** - tabs: General (company name, login tagline, logo -
   the menu and browser tab update at once), Job Orders (automatic numbers,
   ask the customer address, where to use master short names, price on a job

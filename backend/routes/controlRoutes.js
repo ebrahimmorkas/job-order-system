@@ -30,6 +30,7 @@ router.get('/', can('view'), validate(v.listControlsQuerySchema, 'query'), contr
 router.post('/', can('create'), validate(v.controlSchema), controlController.createControl);
 // Above '/:id', so "bulk" is never read as an id.
 router.post('/bulk', can(bulkPermission), validate(v.bulkControlsSchema), controlController.bulkUpdateControls);
+router.get('/form-data', can('view'), controlController.getFormData);
 
 router.get('/:id', can('details'), byId, controlController.getControl);
 router.put('/:id', can('edit'), byId, validate(v.controlSchema), controlController.updateControl);

@@ -17,7 +17,7 @@ import { computeTotals, measurementsOf, roundTo } from '../jobOrderTotals';
 import { summaryRowsOf } from '../summaryRows';
 import { PRICE_PATTERN, QUANTITY_PATTERN, MEASUREMENT_PATTERN, CHOICE_TYPES } from '../../controls/controlTypes';
 import {
-  RATE_TIMES_QUANTITY, quantityOf, priceAmountOf, workedTotalOf, unitControlOf, itemPricingOf, chargeOf,
+  RATE_TIMES_QUANTITY, quantityOf, priceAmountOf, workedTotalOf, unitControlOf, itemPricingOf, chargeOf, shownControlsOf,
 } from '../jobOrderItems';
 import { taxLabel } from '../../companySettings/taxRules';
 import * as jobOrdersApi from '../api/jobOrdersApi';
@@ -234,7 +234,7 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
       const quantity = isRateTimesQuantity ? quantityOf(parts.controls, item.answers) : 1;
       const pricing = itemPricingOf(parts.controls, item, isPerRateOn);
       const controls = [];
-      for (const control of parts.controls) {
+      for (const control of shownControlsOf(parts, item)) {
         const answer = item.answers[control._id];
         const base = { controlId: control._id, type: control.type, label: control.label };
         if (control.type === 'checkbox') controls.push({ ...base, checked: answer.checked });
@@ -445,7 +445,7 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
         const text = (item.measurements[name] || '').trim();
         if (text && measurementOf(text) === null) errors[`${prefix}measurements.${name}`] = 'Enter a number more than 0 with at most 3 decimals, e.g. 2.5';
       }
-      for (const control of parts.controls) {
+      for (const control of shownControlsOf(parts, item)) {
         const answer = item.answers[control._id];
         const field = `${prefix}controls.${control._id}`;
         const isUnit = !!unitControl && control._id === unitControl._id;
@@ -510,7 +510,7 @@ const JobOrderFormPage = ({ mode, jobOrderId, onDone, onBack }) => {
               : [];
             return { masterId: master._id, valueIds, assignments };
           }),
-          controls: parts.controls.map((control) => {
+          controls: shownControlsOf(parts, item).map((control) => {
             const answer = item.answers[control._id];
             if (control.type === 'checkbox') return { controlId: control._id, checked: answer.checked };
             if (CHOICE_TYPES.includes(control.type)) {

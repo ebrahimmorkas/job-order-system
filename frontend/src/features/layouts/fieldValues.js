@@ -34,6 +34,7 @@ const SYSTEM_LABELS = {
   itemQuantity: 'Quantity',
   itemSize: 'Size',
   itemAmount: 'Item amount',
+  itemUnitPrice: 'Price for one',
 };
 
 const byId = (docs) => new Map((docs || []).map((doc) => [doc._id, doc]));
@@ -64,7 +65,7 @@ export const placeholderResolver = ({ masters, controls, systemFields }) => {
     if (!label) return { label: 'Removed', value: '[removed]', isMissing: true };
     if (field.key === 'pageNumber') return { label, value: pageText(page) };
     if (field.key === 'itemNumber' && itemIndex !== undefined) return { label, value: String(itemIndex + 1) };
-    return { label, value: `[${label}]` };
+    return { label, value: field.perOne ? `[${label} for one]` : `[${label}]` };
   };
 };
 
@@ -146,7 +147,11 @@ export const jobOrderResolver = (jobOrder, { masters, controls, company, setting
     if (field.source === 'control') {
       const answer = item.controls.find((c) => c.controlId === field.refId);
       if (!answer) return '';
-      if (answer.isPrice) return answer.amount === null || answer.amount === undefined ? '' : money(answer.amount);
+      if (answer.isPrice) {
+        if (answer.amount === null || answer.amount === undefined) return '';
+        // "Price for one": divided by the item's quantity.
+        return money(field.perOne ? answer.amount / (item.quantity || 1) : answer.amount);
+      }
       if (answer.type === 'checkbox') return answer.checked === null || answer.checked === undefined ? '' : (answer.checked ? 'Yes' : 'No');
       if (answer.type === 'radio' || answer.type === 'dropdown') return answer.optionName || '';
       return answer.text || '';
@@ -156,9 +161,12 @@ export const jobOrderResolver = (jobOrder, { masters, controls, company, setting
       case 'itemName': return item.name || '';
       case 'itemQuantity': return item.quantity ? String(item.quantity) : '';
       case 'itemSize': return item.chargeBy === 'unit' && item.unit && item.size !== null && item.size !== undefined ? sizeTextOf(item) : '';
-      case 'itemAmount': {
+      case 'itemAmount':
+      case 'itemUnitPrice': {
         const prices = item.controls.filter((c) => c.isPrice && c.amount !== null && c.amount !== undefined);
-        return prices.length > 0 ? money(prices.reduce((sum, c) => sum + c.amount, 0)) : '';
+        if (prices.length === 0) return '';
+        const amount = prices.reduce((sum, c) => sum + c.amount, 0);
+        return money(field.key === 'itemUnitPrice' ? amount / (item.quantity || 1) : amount);
       }
       case 'workDetails': return workLinesOf(item, printWork, settings.useShortNames).join('\n');
       default: return '';

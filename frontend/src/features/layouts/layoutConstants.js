@@ -11,6 +11,8 @@ export const CUSTOM_PAPER = 'custom';
 export const CUSTOM_PAPER_MIN_MM = 50;
 export const CUSTOM_PAPER_MAX_MM = 1500;
 export const ELEMENTS_MAX = 300;
+/** Pages added after the job order's own (each prints once). */
+export const EXTRA_PAGES_MAX = 10;
 export const TABLE_ROWS_MAX = 30;
 export const TABLE_COLS_MAX = 10;
 export const FONT_SIZE_MIN = 6;
@@ -24,7 +26,7 @@ export const MIN_SIZE_MM = 2;
 export const BODY_MIN_MM = 20;
 
 /** Fields of one item (the backend's ITEM_FIELD_KEYS): per item in a repeated table row. */
-export const ITEM_FIELD_KEYS = ['itemNumber', 'itemName', 'itemQuantity', 'itemSize', 'itemAmount'];
+export const ITEM_FIELD_KEYS = ['itemNumber', 'itemName', 'itemQuantity', 'itemSize', 'itemAmount', 'itemUnitPrice'];
 
 /** Which lines a table draws (the backend's TABLE_LINES). */
 export const TABLE_LINES = [
@@ -159,6 +161,18 @@ export const isRepeatingTable = (element) => element.type === 'table' && Number.
 export const printsOnEveryPage = (element, band) => {
   if (band === 'body' && isRepeatingTable(element)) return false;
   return typeof element.everyPage === 'boolean' ? element.everyPage : band !== 'body';
+};
+
+/**
+ * Page 1's items an extra page shows (those printed on every page), except
+ * the ones hidden there.
+ * @param {{ elements, headerHeightMm, footerHeightMm }} layout
+ * @param {{ hiddenIds: string[] }|null} [page] - null: all of them
+ */
+export const repeatedOn = (layout, paper, page = null) => {
+  const bands = { headerHeightMm: layout.headerHeightMm || 0, footerHeightMm: layout.footerHeightMm || 0 };
+  const hidden = new Set(page?.hiddenIds || []);
+  return layout.elements.filter((element) => printsOnEveryPage(element, bandOf(element, bands, paper)) && !hidden.has(element.id));
 };
 
 /** Keeps an element inside the page: smaller first if needed, then moved in. */
