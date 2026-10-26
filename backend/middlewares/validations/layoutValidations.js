@@ -91,7 +91,9 @@ const element = Joi.object({
     table: requiredFor([ELEMENT_TYPES.TABLE], table),
     imageNumber: requiredFor([ELEMENT_TYPES.IMAGE], Joi.number().integer().min(1).max(MAX_IMAGES_PER_REQUEST).label('Image number')),
     // 'contain' when left out (the service sets it).
-    fit: onlyFor([ELEMENT_TYPES.IMAGE], Joi.string().valid(...IMAGE_FITS).label('Image fit'))
+    fit: onlyFor([ELEMENT_TYPES.IMAGE], Joi.string().valid(...IMAGE_FITS).label('Image fit')),
+    // "Print on every page"; left out = on inside the header / footer, off in between.
+    everyPage: Joi.boolean().label('Print on every page')
 }).label('Element');
 
 const paper = Joi.object({

@@ -88,6 +88,7 @@ const Dropdown = ({
   const dropdownRef = useRef(null);
   const menuRef = useRef(null);
   const searchInputRef = useRef(null);
+  const comboRef = useRef(null);
 
   // Determine if component is controlled
   const isControlled = value !== undefined;
@@ -173,12 +174,21 @@ const Dropdown = ({
     };
   }, [isOpen, updateMenuPosition]);
 
-  // Focus search input when dropdown opens
+  // Focus the search input when the dropdown opens, so typing searches at
+  // once. The menu is drawn only once it is placed (menuStyle), so this waits
+  // for that.
+  const isMenuShown = !!menuStyle;
   useEffect(() => {
-    if (isOpen && searchable && searchInputRef.current) {
-      searchInputRef.current.focus();
+    if (isOpen && isMenuShown && searchable && searchInputRef.current) {
+      searchInputRef.current.focus({ preventScroll: true });
     }
-  }, [isOpen, searchable]);
+  }, [isOpen, isMenuShown, searchable]);
+
+  // Closed from the keyboard or by picking: focus goes back to the dropdown
+  // (the search input it was in is gone).
+  const focusTrigger = () => {
+    if (searchable) comboRef.current?.focus({ preventScroll: true });
+  };
 
   // Keyboard navigation - only while open.
   useEffect(() => {
@@ -205,6 +215,7 @@ const Dropdown = ({
         case 'Escape':
           setIsOpen(false);
           updateSearchTerm('');
+          focusTrigger();
           break;
         default:
           break;
@@ -232,6 +243,7 @@ const Dropdown = ({
     } else {
       newValue = option.value;
       setIsOpen(false);
+      focusTrigger();
     }
 
     // Update internal state for uncontrolled component
@@ -444,6 +456,7 @@ const Dropdown = ({
       <div className="relative" ref={dropdownRef}>
         {/* Selected Value Display */}
         <div
+          ref={comboRef}
           onClick={toggleDropdown}
           onKeyDown={(e) => {
             // Keyboard users open it like a native select. Once open, the

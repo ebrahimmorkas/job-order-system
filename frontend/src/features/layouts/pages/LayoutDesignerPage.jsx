@@ -22,7 +22,7 @@ import { usePrintedPages } from '../usePrintedPages';
 import { placeholderResolver } from '../fieldValues';
 import { EXPORT_FORMATS, exportPage } from '../exportLayout';
 import {
-  BODY_MIN_MM, CUSTOM_PAPER, ELEMENTS_MAX, IMAGE_NUMBER_MAX, NAME_MAX_LENGTH, PX_PER_MM, createElement, describePaper, elementName, fitOnPage, newElementId, paperOf,
+  BODY_MIN_MM, CUSTOM_PAPER, ELEMENTS_MAX, IMAGE_NUMBER_MAX, NAME_MAX_LENGTH, PX_PER_MM, bandOf, createElement, describePaper, elementName, fitOnPage, newElementId, paperOf,
 } from '../layoutConstants';
 import * as layoutsApi from '../api/layoutsApi';
 
@@ -49,6 +49,8 @@ const COPY_SUFFIX = ' (copy)';
 const NEW_LAYOUT = { name: '', paper: { size: 'A4', orientation: 'portrait' }, labelDefault: 'none', headerHeightMm: 0, footerHeightMm: 0, elements: [] };
 // Items in "Preview pages" (as many as a job order might have).
 const PREVIEW_ITEMS = 3;
+// A header / footer turned on from the Items list starts this high.
+const BAND_DEFAULT_MM = { header: 25, footer: 15 };
 const PREVIEW_ITEMS_MAX = 50;
 // The preview's page width on screen.
 const PREVIEW_WIDTH_PX = 560;
@@ -192,6 +194,7 @@ const Designer = ({ mode, initial, formData, onBack }) => {
   };
 
   const addItem = (item, at = null) => {
+    if (item.kind === 'header' || item.kind === 'footer') return turnOnBand(item.kind);
     if (doc.elements.length >= ELEMENTS_MAX) return toast.warning(`A layout can have at most ${ELEMENTS_MAX} items.`);
     const offset = (doc.elements.length % 10) * ADD_STEP_MM;
     const spot = at || { x: ADD_SPOT_MM + offset, y: ADD_SPOT_MM + offset };
@@ -203,9 +206,17 @@ const Designer = ({ mode, initial, formData, onBack }) => {
     return areaRef.current?.focus({ preventScroll: true });
   };
 
+  // An item moved into or out of the header / footer goes back to that
+  // place's "Print on every page" (on in a band, off in between).
+  const placedPatch = (element, patch) => {
+    if (!element || 'everyPage' in patch || typeof element.everyPage !== 'boolean') return patch;
+    const before = bandOf(element, doc, paper);
+    return bandOf({ ...element, ...patch }, doc, paper) === before ? patch : { ...patch, everyPage: undefined };
+  };
+
   const changeSelected = (patch, mergeKey) => {
     forgetError(selectedId);
-    history.changeElement(selectedId, patch, mergeKey);
+    history.changeElement(selectedId, placedPatch(selected, patch), mergeKey);
   };
 
   const removeSelected = () => {
@@ -237,6 +248,25 @@ const Designer = ({ mode, initial, formData, onBack }) => {
   const changeBand = (key, value) => {
     if (typeof value !== 'number' || Number.isNaN(value) || value < 0) return;
     history.change((d) => ({ ...d, [key]: Math.round(value * 10) / 10 }), key);
+  };
+  // From the Items list: turns the band on (if off) and shows its height in
+  // the page settings.
+  const turnOnBand = (which) => {
+    const key = which === 'header' ? 'headerHeightMm' : 'footerHeightMm';
+    const other = which === 'header' ? doc.footerHeightMm : doc.headerHeightMm;
+    if (!doc[key]) {
+      const height = Math.min(BAND_DEFAULT_MM[which], bandMax(other));
+      if (height <= 0) return toast.warning(`No room for a ${which}: keep at least ${BODY_MIN_MM} mm between the header and footer.`);
+      history.change((d) => ({ ...d, [key]: height }));
+    }
+    setSelectedId(null);
+    if (!panels.settings) togglePanel('settings');
+    // Once the page settings show: bring the height box into view.
+    return requestAnimationFrame(() => {
+      const input = document.querySelector(`input[name="${key}"]`);
+      input?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      input?.focus({ preventScroll: true });
+    });
   };
   const fitAllOnPage = () => {
     history.change((d) => ({ ...d, elements: d.elements.map((e) => fitOnPage(e, paper)) }));
@@ -450,7 +480,7 @@ const Designer = ({ mode, initial, formData, onBack }) => {
               onBeginChange={history.beginDrag}
               onMove={(id, patch) => {
                 forgetError(id);
-                history.drag((d) => ({ ...d, elements: d.elements.map((e) => (e.id === id ? { ...e, ...patch } : e)) }));
+                history.drag((d) => ({ ...d, elements: d.elements.map((e) => (e.id === id ? { ...e, ...placedPatch(e, patch) } : e)) }));
               }}
               onDropItem={(item, x, y) => addItem(item, { x, y })}
               zoom={zoom}
@@ -479,6 +509,7 @@ const Designer = ({ mode, initial, formData, onBack }) => {
                 key={selected.id}
                 element={selected}
                 paper={paper}
+                bands={doc}
                 sources={formData}
                 resolve={resolve}
                 canFormatText={canFormatText}
@@ -519,11 +550,11 @@ const Designer = ({ mode, initial, formData, onBack }) => {
               <section className="space-y-2">
                 <h3 className="text-sm font-medium text-gray-700">Header and footer</h3>
                 <p className="text-xs text-gray-500">
-                  What lies inside the top (header) or bottom (footer) band prints on every page. A job order with many items continues on more pages between them.
+                  What lies inside the top (header) or bottom (footer) band prints on every page (untick "Print on every page" on an item for the first / last page only). A job order with many items continues on more pages between them.
                 </p>
                 <div className="grid grid-cols-2 gap-2">
-                  <NumberField label="Header height" unit="mm" min={0} max={bandMax(doc.footerHeightMm)} step={1} value={doc.headerHeightMm} onChange={(value) => changeBand('headerHeightMm', value)} />
-                  <NumberField label="Footer height" unit="mm" min={0} max={bandMax(doc.headerHeightMm)} step={1} value={doc.footerHeightMm} onChange={(value) => changeBand('footerHeightMm', value)} />
+                  <NumberField label="Header height" name="headerHeightMm" unit="mm" min={0} max={bandMax(doc.footerHeightMm)} step={1} value={doc.headerHeightMm} onChange={(value) => changeBand('headerHeightMm', value)} />
+                  <NumberField label="Footer height" name="footerHeightMm" unit="mm" min={0} max={bandMax(doc.headerHeightMm)} step={1} value={doc.footerHeightMm} onChange={(value) => changeBand('footerHeightMm', value)} />
                 </div>
                 <p className="text-xs text-gray-500">0 = none. Keep at least {BODY_MIN_MM} mm between them.</p>
               </section>

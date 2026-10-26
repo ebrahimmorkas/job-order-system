@@ -2,8 +2,9 @@ import { useId, useState } from 'react';
 
 // A small number box with a label and an optional unit ("mm"). While typing,
 // only a valid number within min..max is passed on; leaving the box shows
-// the value in use again. allowEmpty: clearing the box passes null.
-const NumberField = ({ label, value, onChange, min = null, max = null, step = 1, unit = '', allowEmpty = false, placeholder, disabled = false, className = '' }) => {
+// the value in use again. allowEmpty: clearing the box passes null. name: the
+// input's name (optional).
+const NumberField = ({ label, name, value, onChange, min = null, max = null, step = 1, unit = '', allowEmpty = false, placeholder, disabled = false, className = '' }) => {
   const id = useId();
   // What is typed, while the box is being edited.
   const [draft, setDraft] = useState(null);
@@ -23,6 +24,7 @@ const NumberField = ({ label, value, onChange, min = null, max = null, step = 1,
       <div className="flex items-center rounded-md border border-gray-300 bg-white focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500">
         <input
           id={id}
+          name={name}
           type="number"
           inputMode="decimal"
           value={draft ?? value ?? ''}

@@ -150,6 +150,17 @@ export const bandOf = (element, { headerHeightMm = 0, footerHeightMm = 0 }, pape
 /** A table with a row printed once for each item. */
 export const isRepeatingTable = (element) => element.type === 'table' && Number.isInteger(element.table.repeatRow);
 
+/**
+ * Whether an item prints on every page ("Print on every page"): as set
+ * (everyPage), else yes inside the header / footer and no in between. A
+ * growing table in between always flows.
+ * @param {'header'|'footer'|'body'} band - bandOf the item
+ */
+export const printsOnEveryPage = (element, band) => {
+  if (band === 'body' && isRepeatingTable(element)) return false;
+  return typeof element.everyPage === 'boolean' ? element.everyPage : band !== 'body';
+};
+
 /** Keeps an element inside the page: smaller first if needed, then moved in. */
 export const fitOnPage = (element, paper) => {
   const width = Math.min(element.width, paper.widthMm);

@@ -9,10 +9,18 @@ import ColorField from '../../../components/common/ColorField';
 import { CopyIcon, TrashIcon } from '../../../components/common/ActionIcons';
 import {
   CUSTOM_PAPER_MAX_MM, DEFAULT_STROKE, DEFAULT_STYLE, ELEMENT_LABELS, FONT_FAMILIES, FONT_SIZE_MAX, FONT_SIZE_MIN,
-  IMAGE_FITS, IMAGE_NUMBER_MAX, ITEM_FIELD_KEYS, MIN_SIZE_MM, elementName, STROKE_WIDTH_MAX, TABLE_COLS_MAX, TABLE_LINES, TABLE_ROWS_MAX,
+  IMAGE_FITS, IMAGE_NUMBER_MAX, ITEM_FIELD_KEYS, MIN_SIZE_MM, bandOf, elementName, isRepeatingTable, printsOnEveryPage, STROKE_WIDTH_MAX, TABLE_COLS_MAX,
+  TABLE_LINES, TABLE_ROWS_MAX,
 } from '../layoutConstants';
 
 const LABEL_MAX_LENGTH = 60;
+
+// What "Print on every page" means where the item is.
+const EVERY_PAGE_HINTS = {
+  header: 'In the header. Unticked: the first page only.',
+  footer: 'In the footer. Unticked: the last page only.',
+  body: 'Ticked: at this spot on every page, never moved down.',
+};
 const TEXT_MAX_LENGTH = 1000;
 
 const FONT_OPTIONS = FONT_FAMILIES.map(({ value, label }) => ({ value, label }));
@@ -259,6 +267,7 @@ const TableFields = ({ element, fieldOptions, resolve, onChange }) => {
  * @param {Object} props
  * @param {Object} props.element
  * @param {{ widthMm, heightMm }} props.paper
+ * @param {{ headerHeightMm: number, footerHeightMm: number }} props.bands
  * @param {{ masters, controls, systemFields }} props.sources
  * @param {(field) => { label, value }} props.resolve
  * @param {boolean} props.canFormatText
@@ -267,12 +276,18 @@ const TableFields = ({ element, fieldOptions, resolve, onChange }) => {
  * @param {() => void} props.onDelete
  * @param {(where: 'front'|'back') => void} props.onArrange
  */
-const PropertiesPanel = ({ element, paper, sources, resolve, canFormatText, onChange, onDuplicate, onDelete, onArrange }) => {
+const PropertiesPanel = ({ element, paper, bands, sources, resolve, canFormatText, onChange, onDuplicate, onDelete, onArrange }) => {
+  // Active masters / controls, plus an inactive one this item already shows.
+  const usedIds = new Set([element.field, ...(element.table?.cells.flat().map((cell) => cell.field) || [])].filter(Boolean).map((field) => field.refId));
+  const isOffered = (doc) => doc.status === 'A' || usedIds.has(doc._id);
   const fieldOptions = [
     ...sources.systemFields.map((f) => ({ value: `system:${f.key}`, label: ITEM_FIELD_KEYS.includes(f.key) ? `Item: ${f.label}` : f.label })),
-    ...sources.masters.map((m) => ({ value: `master:${m._id}`, label: `Master: ${m.name}` })),
-    ...sources.controls.map((c) => ({ value: `control:${c._id}`, label: `Control: ${c.label}` })),
+    ...sources.masters.filter(isOffered).map((m) => ({ value: `master:${m._id}`, label: `Master: ${m.name}${m.status === 'A' ? '' : ' (inactive)'}` })),
+    ...sources.controls.filter(isOffered).map((c) => ({ value: `control:${c._id}`, label: `Control: ${c.label}${c.status === 'A' ? '' : ' (inactive)'}` })),
   ];
+  const band = bandOf(element, bands, paper);
+  // A growing table in between always flows with the page.
+  const canRepeat = !(band === 'body' && isRepeatingTable(element));
   const hasText = ['field', 'text', 'table'].includes(element.type);
   const title = element.type === 'field' ? resolve(element.field).label : elementName(element, resolve);
 
@@ -289,6 +304,17 @@ const PropertiesPanel = ({ element, paper, sources, resolve, canFormatText, onCh
         <NumberField label="Width" unit="mm" min={MIN_SIZE_MM} max={Math.min(CUSTOM_PAPER_MAX_MM, paper.widthMm - element.x)} step={0.5} value={element.width} onChange={(value) => onChange({ width: value }, 'width')} />
         <NumberField label="Height" unit="mm" min={MIN_SIZE_MM} max={Math.min(CUSTOM_PAPER_MAX_MM, paper.heightMm - element.y)} step={0.5} value={element.height} onChange={(value) => onChange({ height: value }, 'height')} />
       </div>
+
+      {canRepeat && (
+        <Checkbox
+          size="sm"
+          name="everyPage"
+          label="Print on every page"
+          description={EVERY_PAGE_HINTS[band]}
+          checked={printsOnEveryPage(element, band)}
+          onChange={(e) => onChange({ everyPage: e.target.checked })}
+        />
+      )}
 
       {element.type === 'field' && (
         <Section title="Label">

@@ -9,6 +9,7 @@ import SearchInput from '../../../components/common/SearchInput';
 import Pagination from '../../../components/common/Pagination';
 import EmptyState from '../../../components/common/EmptyState';
 import ConfirmDialog from '../../../components/common/ConfirmDialog';
+import Modal from '../../../components/common/Modal';
 import IconButton from '../../../components/common/IconButton';
 import { ViewIcon, EditIcon, PrintIcon, TrashIcon, PlusIcon } from '../../../components/common/ActionIcons';
 import { useToast } from '../../../components/common/Toast';
@@ -16,6 +17,7 @@ import { useDebouncedValue } from '../../../utils/useDebouncedValue';
 import { useAccess } from '../../access/hooks/useAccess';
 import { formatMoney } from '../jobOrderTotals';
 import StepBadge from '../components/StepBadge';
+import StepChanger from '../../myWork/components/StepChanger';
 import * as jobOrdersApi from '../api/jobOrdersApi';
 
 const PAGE_SIZE = 25;
@@ -25,7 +27,8 @@ const formatDate = (value) => new Date(value).toLocaleDateString('en-IN', { day:
 /**
  * The vendor's job orders, newest first: search by number, customer
  * (name, phone, email) or place, page through, view, print, edit and cancel (each only with its
- * permission; print also needs Layout Master).
+ * permission; print also needs Layout Master). With steps on, Edit can move a
+ * job order's own step from its row ("Change step" opens a popup).
  *
  * @param {Object} props
  * @param {() => void} props.onCreate
@@ -51,6 +54,7 @@ const JobOrdersListPage = ({ onCreate, onView, onEdit, onPrint }) => {
   const [loadedKey, setLoadedKey] = useState(null);
   const [toCancel, setToCancel] = useState(null); // the job order
   const [isCancelling, setIsCancelling] = useState(false);
+  const [stepOf, setStepOf] = useState(null); // the job order whose step is being changed
 
   // A new search starts again from page 1.
   const [lastSearch, setLastSearch] = useState(debouncedSearch);
@@ -115,12 +119,17 @@ const JobOrdersListPage = ({ onCreate, onView, onEdit, onPrint }) => {
     {
       key: 'jobNames',
       label: 'Job name',
-      // Each item's job name on its own line (a name used twice shows once).
-      render: ({ jobNames }) => (jobNames?.length > 0 ? (
-        <div className="min-w-0 break-words text-gray-900">
-          {jobNames.map((name) => <p key={name}>{name}</p>)}
-        </div>
-      ) : <span className="text-gray-400">-</span>),
+      // One item: its name. Several: each on its own line, numbered by item
+      // ("2. -" for an item without a name).
+      render: ({ jobNames = [] }) => {
+        if (!jobNames.some(Boolean)) return <span className="text-gray-400">-</span>;
+        if (jobNames.length === 1) return <p className="min-w-32 break-words text-gray-900">{jobNames[0]}</p>;
+        return (
+          <div className="min-w-32 break-words text-gray-900">
+            {jobNames.map((name, index) => <p key={index}>{index + 1}. {name || <span className="text-gray-400">-</span>}</p>)}
+          </div>
+        );
+      },
     },
     {
       key: 'customer',
@@ -164,7 +173,21 @@ const JobOrdersListPage = ({ onCreate, onView, onEdit, onPrint }) => {
       key: 'step',
       label: 'Step',
       width: '130px',
-      render: ({ step }) => <StepBadge step={step} />,
+      render: (jobOrder) => (
+        <div className="flex flex-col items-start gap-1">
+          <StepBadge step={jobOrder.step} />
+          {canEdit && data.steps?.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setStepOf(jobOrder)}
+              aria-label={`Change step for ${jobOrder.jobOrderNumber}`}
+              className="text-xs font-medium text-indigo-600 hover:text-indigo-700 cursor-pointer"
+            >
+              Change step
+            </button>
+          )}
+        </div>
+      ),
     }] : []),
     {
       key: 'work',
@@ -256,6 +279,24 @@ const JobOrdersListPage = ({ onCreate, onView, onEdit, onPrint }) => {
         onConfirm={confirmCancel}
         onCancel={() => setToCancel(null)}
       />
+
+      <Modal isOpen={!!stepOf} onClose={() => setStepOf(null)} title={stepOf ? `Step of ${stepOf.jobOrderNumber}` : ''} size="sm">
+        {stepOf && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              Now: <StepBadge step={stepOf.step} />
+            </div>
+            <p className="text-xs text-gray-500">The step of the whole job order. The workers' own steps don't change.</p>
+            <StepChanger
+              jobOrderId={stepOf._id}
+              work={{ itemId: 'jobOrder', valueId: stepOf._id, valueName: `Job order ${stepOf.jobOrderNumber}`, step: stepOf.step }}
+              steps={data?.steps || []}
+              onSave={(stepData) => jobOrdersApi.setJobOrderStep(stepOf._id, stepData)}
+              onChanged={() => { setStepOf(null); setReloadKey((n) => n + 1); }}
+            />
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };

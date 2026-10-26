@@ -559,10 +559,14 @@ designer; any logged-in user can print a job order with an active one.
   `headerHeightMm` / `footerHeightMm` (0 = none; together they must leave at
   least 20 mm of the page) and up to 300 `elements`. Sizes and places are in
   millimetres from the page's top-left; font sizes in points. Elements lying
-  wholly inside the header or footer band print on every page.
+  wholly inside the header or footer band print on every page. An element's
+  `everyPage` ("Print on every page", optional) says otherwise: false in the
+  header = first page only, in the footer = last page only; true in between
+  = at the same spot on every page (never moved).
 - Elements: `field` (a master, a control, or a job order / company field:
-  number, date, customer address, subtotal, tax, total, company name,
-  address, tax numbers, work given, page number; per item: item no., job
+  number, date, delivery date, customer address, subtotal, discount
+  (amount, "(10%)" when a percentage), tax, total, advance, balance, company
+  name, address, tax numbers, work given, page number; per item: item no., job
   order name, quantity, size, item amount; `showLabel`, `labelText`), `text`,
   `line`, `rectangle`, `circle`, `table` (up to 30 x 10 cells, each typed
   text or a field; `repeatRow` - the row printed once for each item of the
@@ -730,7 +734,7 @@ too (see Users logging in) - except Layout Master, which stays owner only.
 | GET / PUT / DELETE | `/api/customers/:id` | owner (users: Details / Edit / Delete), Customers on - one customer / save `{ name, phone, email, address: { countryId, stateId, cityId, postalCode, address } }` / delete |
 | POST | `/api/customers/bulk` | owner (users: Customers Delete), Customers on - `{ action: delete, ids }` |
 | GET | `/api/job-orders/form-data` | owner (users: Create or Edit) - everything the job order form needs (see Job orders) |
-| GET / POST | `/api/job-orders` | owner - list, newest first (search number, job name, customer name / phone / email or place, page, limit), each with `jobNames` / create |
+| GET / POST | `/api/job-orders` | owner - list, newest first (search number, job name, customer name / phone / email or place, page, limit), each with `jobNames` (one per item, in order, null for none), `isStepsOn` and `steps` (to change the step from the list) / create |
 | GET / PUT / DELETE | `/api/job-orders/:id` | owner - one job order / save it (worked out again) / cancel it |
 
 `POST` / `PUT /api/job-orders` take `{ jobOrderNumber, customer: { name, phone,

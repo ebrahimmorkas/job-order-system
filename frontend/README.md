@@ -133,8 +133,10 @@ Each section's code is downloaded the first time it is opened
   wastage %. A price then says how it is charged: per unit, per running
   length of the edge, or per piece.
 - **Job Orders** - the list (newest first, search by number, job name,
-  customer or place; the Job name column shows each item's job name on its
-  own line; the Customer column shows name, phone and place; view / print /
+  customer or place; the Job name column shows the job name, or - with
+  several items - each item's on its own line numbered "1. Round", "2. -";
+  with steps on, Edit can "Change step" of a job order from its row (a
+  popup); the Customer column shows name, phone and place; view / print /
   edit / cancel; Back on a print opened from the list returns to the list)
   and the job order form: the number (only when typed by hand), the
   customer - with Customers on, "Find a saved customer" (type any part of
@@ -198,7 +200,9 @@ Each section's code is downloaded the first time it is opened
   status switch, copy / edit / delete, bulk actions, layouts usage pill). New
   layout: name, paper (A3 / A4 / A5 / Letter / Legal portrait or landscape, or
   a custom width and height) and which labels show by default. Then the
-  designer: items on the left (job order fields, masters, controls, text,
+  designer: items on the left (Page: Header / Footer - click to turn the
+  band on and set its height; job order fields; masters and controls - the
+  active ones; text,
   line, rectangle, circle, table, logo and - with image upload on - "Job
   order image": Image 1, Image 2... each prints that image of the job order,
   so a layout with 2 prints 2 even when the job order has 4 - drag onto the
@@ -208,7 +212,9 @@ Each section's code is downloaded the first time it is opened
   bigger than its area scrolls inside it; the selected item shows how far it
   is from the left, right, top and bottom of the page, or of the table it
   sits in), and the selected item's settings on the
-  right (place and size, label on / off and its text, table cells, the row
+  right (place and size, "Print on every page" - on in the header / footer,
+  off for the first / last page only; on in between = same spot on every
+  page -, label on / off and its text, table cells, the row
   repeated for each item, row bold / colour, table lines, a column hidden when
   no item has a value, line and fill, and - when allowed - font, size, bold, italic, underline, alignment,
   colour). Each side panel has a fold button on its canvas side: folded, it
@@ -280,7 +286,7 @@ To try a second vendor on the same computer:
 - `src/components/common/` - the reusable building blocks every module uses:
   Accordion, Alert, Autocomplete, Avatar, Badge, Breadcrumbs, BulkActionBar,
   ActionIcons, Button, Card, Checkbox, ColorField (colour picker with its code), ConfirmDialog (optional cancelLabel), DatePicker, DefaultChoice,
-  Divider, Dropdown, EmptyState, FileUpload, Form, HtmlEditor, IconButton,
+  Divider, Dropdown (searchable: the cursor starts in its search box), EmptyState, FileUpload, Form, HtmlEditor, IconButton,
   ImageUploader (a grid of images with add / remove, checking type, size and count; a usage pill when the count is limited),
   InputField, ListItemsEditor (an ordered, editable list of named items with a
   default), Menu, Modal, NumberField (a small number box with a unit), Pagination,

@@ -1,5 +1,5 @@
 import { fieldText } from './fieldValues';
-import { bandOf } from './layoutConstants';
+import { bandOf, printsOnEveryPage } from './layoutConstants';
 
 // How a layout prints a job order on one or more pages.
 //
@@ -8,7 +8,10 @@ import { bandOf } from './layoutConstants';
 //   below the table's bottom moves down by as much. A rectangle or an up-down
 //   line drawn around the table stretches instead.
 // - The header band (top) and footer band (bottom) print on every page; the
-//   rest flows between them. When it runs past the footer, a new page starts:
+//   rest flows between them. An item can say otherwise (everyPage): one in
+//   the header unticked prints on the first page only, one in the footer on
+//   the last page only, and one in between ticked prints at the same spot on
+//   every page and never moves. When the flow runs past the footer, a new page starts:
 //   a growing table breaks between rows and repeats its rows above the
 //   repeated row (its heading) on the new page; anything else that would be
 //   cut moves to the new page whole (unless it is taller than a page).
@@ -80,9 +83,19 @@ const pieceOf = (block, y, height, rows) => {
 export const flowPages = ({ paper, elements, headerHeightMm = 0, footerHeightMm = 0 }, tables) => {
   const bands = { headerHeightMm, footerHeightMm };
   const order = new Map(elements.map((element, index) => [element.id, index]));
-  const fixed = elements.filter((element) => bandOf(element, bands, paper) !== 'body')
-    .map((element) => (tables.has(element.id) ? { ...element, printTable: tablePart(tables.get(element.id), tables.get(element.id).rows) } : element));
-  const body = elements.filter((element) => bandOf(element, bands, paper) === 'body');
+  const withRows = (element) => (tables.has(element.id) ? { ...element, printTable: tablePart(tables.get(element.id), tables.get(element.id).rows) } : element);
+  // Where each item prints: every page, the first / last only, or in the flow.
+  const placeOf = (element) => {
+    const band = bandOf(element, bands, paper);
+    if (printsOnEveryPage(element, band)) return 'every';
+    if (band === 'header') return 'first';
+    if (band === 'footer') return 'last';
+    return 'flow';
+  };
+  const placed = { every: [], first: [], last: [], flow: [] };
+  for (const element of elements) placed[placeOf(element)].push(element);
+  const fixed = placed.every.map(withRows);
+  const body = placed.flow;
 
   // How much each growing table grows, and what moves down or stretches.
   const growing = body.filter((element) => tables.has(element.id))
@@ -176,5 +189,11 @@ export const flowPages = ({ paper, elements, headerHeightMm = 0, footerHeightMm 
     start = cut;
   }
   if (pages.length === 0) pages.push([]);
-  return pages.map((page) => [...fixed, ...page].sort((a, b) => order.get(a.id) - order.get(b.id)));
+  const last = pages.length - 1;
+  return pages.map((page, index) => [
+    ...fixed,
+    ...(index === 0 ? placed.first.map(withRows) : []),
+    ...(index === last ? placed.last.map(withRows) : []),
+    ...page,
+  ].sort((a, b) => order.get(a.id) - order.get(b.id)));
 };

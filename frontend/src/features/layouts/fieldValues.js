@@ -13,13 +13,17 @@ import { ITEM_FIELD_KEYS } from './layoutConstants';
 const SYSTEM_LABELS = {
   jobOrderNumber: 'Job order number',
   jobOrderDate: 'Date',
+  deliveryDate: 'Delivery date',
   customerName: 'Customer name',
   customerPhone: 'Customer phone',
   customerEmail: 'Customer email',
   customerAddress: 'Customer address',
   subtotal: 'Subtotal',
+  discount: 'Discount',
   taxSummary: 'Tax',
   total: 'Total',
+  advance: 'Advance',
+  balance: 'Balance',
   companyName: 'Company name',
   companyAddress: 'Company address',
   companyTaxIds: 'Company tax numbers',
@@ -113,13 +117,21 @@ export const jobOrderResolver = (jobOrder, { masters, controls, company, setting
   const SYSTEM_VALUES = {
     jobOrderNumber: () => jobOrder.jobOrderNumber,
     jobOrderDate: () => formatDate(jobOrder.createdAt),
+    deliveryDate: () => (jobOrder.deliveryAt ? formatDate(jobOrder.deliveryAt) : ''),
     customerName: () => jobOrder.customer?.name || '',
     customerPhone: () => jobOrder.customer?.phone || '',
     customerEmail: () => jobOrder.customer?.email || '',
     customerAddress: () => customerLineOf(jobOrder.customer),
     subtotal: () => money(jobOrder.subtotal),
+    discount: () => {
+      const { discount } = jobOrder;
+      if (!discount?.amount) return '';
+      return discount.type === 'percent' ? `${money(discount.amount)} (${discount.value}%)` : money(discount.amount);
+    },
     taxSummary: () => (jobOrder.tax?.isApplied ? jobOrder.tax.components.map((c) => `${c.label} ${c.rate}%: ${money(c.amount)}`).join('\n') : ''),
     total: () => money(jobOrder.total),
+    advance: () => (jobOrder.advance === null || jobOrder.advance === undefined ? '' : money(jobOrder.advance)),
+    balance: () => (jobOrder.balance === null || jobOrder.balance === undefined ? '' : money(jobOrder.balance)),
     companyName: () => company.name,
     companyAddress: () => companyHere.address,
     companyTaxIds: () => companyHere.taxIds.map((t) => `${t.label}: ${t.value}`).join('\n'),

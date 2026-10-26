@@ -854,9 +854,10 @@ const workSummaryOf = (items = []) => {
 };
 
 // GET /api/job-orders - newest first; search by number, job name, customer
-// name / phone / email or place; each with its items' job names (each once)
-// and how its work is going (workSummaryOf). isStepsOn: the job order's own
-// step can be shown.
+// name / phone / email or place; each with its items' job names (one per
+// item, in order; null when an item has none) and how its work is going
+// (workSummaryOf). isStepsOn: the job order's own step can be shown; steps:
+// the vendor's steps to move it to from the list (none while steps are off).
 const listJobOrders = async ({ vendorId, search, page, limit, websiteMasterData, companyMasterData }) => {
     try {
         const filter = { vendorId, status: 'A' };
@@ -871,11 +872,12 @@ const listJobOrders = async ({ vendorId, search, page, limit, websiteMasterData,
         return common.returnResult(true, 200, 'Job orders fetched successfully.', {
             jobOrders: jobOrders.map(({ items = [], ...jobOrder }) => ({
                 ...jobOrder,
-                jobNames: [...new Set(items.map((item) => item.name).filter(Boolean))],
+                jobNames: items.map((item) => item.name || null),
                 work: workSummaryOf(items)
             })),
             pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
-            isStepsOn: stepService.isStepsOn(websiteMasterData, companyMasterData)
+            isStepsOn: stepService.isStepsOn(websiteMasterData, companyMasterData),
+            steps: stepService.stepsOf(websiteMasterData, companyMasterData)
         });
     } catch (err) {
         throw err;

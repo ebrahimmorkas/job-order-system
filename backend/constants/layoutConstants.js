@@ -46,13 +46,18 @@ const FIELD_SOURCE_VALUES = Object.values(FIELD_SOURCES);
 const SYSTEM_FIELDS = {
     jobOrderNumber: 'Job order number',
     jobOrderDate: 'Date',
+    deliveryDate: 'Delivery date',
     customerName: 'Customer name',
     customerPhone: 'Customer phone',
     customerEmail: 'Customer email',
     customerAddress: 'Customer address',
     subtotal: 'Subtotal',
+    // The amount taken off, with the % when given as one: "50.00 (10%)".
+    discount: 'Discount',
     taxSummary: 'Tax',
     total: 'Total',
+    advance: 'Advance',
+    balance: 'Balance',
     companyName: 'Company name',
     companyAddress: 'Company address',
     companyTaxIds: 'Company tax numbers',
