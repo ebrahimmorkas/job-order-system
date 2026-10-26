@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import SearchInput from '../../../components/common/SearchInput';
-import { PALETTE_DRAG_TYPE } from '../layoutConstants';
+import { ITEM_FIELD_KEYS, PALETTE_DRAG_TYPE } from '../layoutConstants';
 
 const SHAPES = [
   { kind: 'text', label: 'Text', hint: 'Words you type' },
@@ -13,8 +13,8 @@ const SHAPES = [
 const JOB_ORDER_IMAGE = { kind: 'image', label: 'Job order image', hint: 'An image added to the job order: Image 1, Image 2...' };
 
 /**
- * What can go on the page, in groups: job order fields, masters, controls,
- * shapes. Drag an item onto the page, or click it to add it.
+ * What can go on the page, in groups: job order fields, each item's own
+ * fields, masters, controls, shapes. Drag an item onto the page, or click it to add it.
  *
  * @param {Object} props
  * @param {{ masters, controls, systemFields, settings }} props.sources
@@ -24,8 +24,10 @@ const ElementPalette = ({ sources, onAdd }) => {
   const [search, setSearch] = useState('');
   const query = search.trim().toLowerCase();
 
+  const fieldOf = (f) => ({ kind: 'field', field: { source: 'system', key: f.key }, label: f.label });
   const groups = [
-    { title: 'Job order', items: sources.systemFields.map((f) => ({ kind: 'field', field: { source: 'system', key: f.key }, label: f.label })) },
+    { title: 'Job order', items: sources.systemFields.filter((f) => !ITEM_FIELD_KEYS.includes(f.key)).map(fieldOf) },
+    { title: 'Item', items: sources.systemFields.filter((f) => ITEM_FIELD_KEYS.includes(f.key)).map((f) => ({ ...fieldOf(f), hint: 'Best in a table row repeated for each item' })) },
     { title: 'Masters', items: sources.masters.map((m) => ({ kind: 'field', field: { source: 'master', refId: m._id }, label: m.name })) },
     { title: 'Controls', items: sources.controls.map((c) => ({ kind: 'field', field: { source: 'control', refId: c._id }, label: c.label })) },
     { title: 'Shapes & more', items: sources.settings?.canPlaceJobOrderImages ? [...SHAPES, JOB_ORDER_IMAGE] : SHAPES },

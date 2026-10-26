@@ -4,7 +4,7 @@ const {
     ORIENTATIONS, CUSTOM_PAPER_MIN_MM, CUSTOM_PAPER_MAX_MM, LABEL_DEFAULTS, ELEMENT_TYPES, ELEMENT_TYPE_VALUES, IMAGE_FITS,
     FIELD_SOURCES, FIELD_SOURCE_VALUES, SYSTEM_FIELD_KEYS, FONT_FAMILIES, TEXT_ALIGNS, FONT_SIZE_MIN, FONT_SIZE_MAX,
     STROKE_WIDTH_MAX, ELEMENTS_MAX, TEXT_MAX_LENGTH, LABEL_MAX_LENGTH, TABLE_ROWS_MAX, TABLE_COLS_MAX,
-    COLOR_PATTERN, ELEMENT_ID_PATTERN
+    COLOR_PATTERN, ELEMENT_ID_PATTERN, TABLE_LINES
 } = require('../../constants/layoutConstants');
 const { MAX_IMAGES_PER_REQUEST } = require('../../constants/storageConstants');
 
@@ -47,6 +47,11 @@ const stroke = Joi.object({
 }).label('Line');
 
 // rows x cols cells, each typed text or a field; colWidths are shares of the width.
+// repeatRow: the row printed once for each item of the job order (null =
+// none) - the table then grows and what is below it moves down. lines: which
+// lines it draws. rowStyles: per row, bold text and a background colour.
+// hideEmptyCols: per column, left out when no item has a value in the
+// repeated row (otherwise "-").
 const table = Joi.object({
     rows: Joi.number().integer().min(1).max(TABLE_ROWS_MAX).required().label('Rows'),
     cols: Joi.number().integer().min(1).max(TABLE_COLS_MAX).required().label('Columns'),
@@ -54,10 +59,19 @@ const table = Joi.object({
     cells: Joi.array().items(Joi.array().items(Joi.object({
         text: Joi.string().max(TEXT_MAX_LENGTH).allow('').default(''),
         field: fieldRef.allow(null).default(null)
-    })).max(TABLE_COLS_MAX)).max(TABLE_ROWS_MAX).required().label('Cells')
+    })).max(TABLE_COLS_MAX)).max(TABLE_ROWS_MAX).required().label('Cells'),
+    repeatRow: Joi.number().integer().min(0).max(TABLE_ROWS_MAX - 1).allow(null).default(null).label('Row repeated for each item'),
+    lines: Joi.string().valid(...TABLE_LINES).default(TABLE_LINES[0]).label('Lines'),
+    rowStyles: Joi.array().items(Joi.object({
+        bold: Joi.boolean().default(false),
+        fill: color('Row colour').allow(null).default(null)
+    })).max(TABLE_ROWS_MAX).label('Row styles'),
+    hideEmptyCols: Joi.array().items(Joi.boolean()).max(TABLE_COLS_MAX).label('Hide empty columns')
 }).custom((value, helpers) => {
-    const fits = value.colWidths.length === value.cols && value.cells.length === value.rows && value.cells.every((row) => row.length === value.cols);
-    return fits ? value : helpers.message('The table\'s cells do not match its rows and columns');
+    const fits = value.colWidths.length === value.cols && value.cells.length === value.rows && value.cells.every((row) => row.length === value.cols)
+        && (!value.rowStyles || value.rowStyles.length === value.rows) && (!value.hideEmptyCols || value.hideEmptyCols.length === value.cols);
+    if (!fits) return helpers.message('The table\'s cells do not match its rows and columns');
+    return value.repeatRow === null || value.repeatRow < value.rows ? value : helpers.message('The row repeated for each item is not in the table');
 }).label('Table');
 
 const element = Joi.object({
@@ -94,6 +108,9 @@ const layoutBody = {
     name: Joi.string().trim().min(LAYOUT_NAME_MIN_LENGTH).max(LAYOUT_NAME_MAX_LENGTH).required().label('Name'),
     paper,
     labelDefault: Joi.string().valid(...LABEL_DEFAULTS).default('none').label('Show labels'),
+    // Repeat on every printed page (0 = none).
+    headerHeightMm: mm('Header height').default(0),
+    footerHeightMm: mm('Footer height').default(0),
     elements: Joi.array().items(element).max(ELEMENTS_MAX).default([]).label('Elements')
         .messages({ 'array.max': `A layout can have at most ${ELEMENTS_MAX} items` })
 };

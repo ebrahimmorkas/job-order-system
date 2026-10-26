@@ -10,7 +10,7 @@ const { SHORT_NAME_PLACES } = require('../constants/jobOrderConstants');
 const { jobOrderSettingsOf } = require('./companySettingsService');
 const { FEATURE_FLAGS } = require('../constants/featureConstants');
 const {
-    PAPER_SIZES, CUSTOM_PAPER, ELEMENT_TYPES, IMAGE_FITS, FIELD_SOURCES, SYSTEM_FIELDS, SYSTEM_FIELD_KEYS
+    PAPER_SIZES, CUSTOM_PAPER, ELEMENT_TYPES, IMAGE_FITS, FIELD_SOURCES, SYSTEM_FIELDS, SYSTEM_FIELD_KEYS, BODY_MIN_MM
 } = require('../constants/layoutConstants');
 
 // The vendor's print layouts (Layout Master). Every function is scoped by
@@ -25,7 +25,7 @@ const {
 // null = no limit). One active layout is the default for printing.
 
 const LIVE = { $in: LIVE_STATUSES };
-const LAYOUT_FIELDS = '_id name paper labelDefault elements isDefault status createdAt updatedAt';
+const LAYOUT_FIELDS = '_id name paper labelDefault headerHeightMm footerHeightMm elements isDefault status createdAt updatedAt';
 // An item may touch the page edge (rounding of the designer's millimetres).
 const EDGE_TOLERANCE_MM = 0.01;
 
@@ -72,6 +72,9 @@ const checkLayout = ({ data, sources, settings }) => {
         const isKnown = (field) => !field || field.source === FIELD_SOURCES.SYSTEM || known.has(field.refId);
         const ids = new Set();
         const elements = [];
+        if (data.headerHeightMm + data.footerHeightMm > paper.heightMm - BODY_MIN_MM) {
+            errors.push({ field: 'headerHeightMm', message: `The header and footer leave too little room: keep at least ${BODY_MIN_MM} mm between them.` });
+        }
 
         for (const source of data.elements) {
             const field = `elements.${source.id}`;
@@ -95,7 +98,10 @@ const checkLayout = ({ data, sources, settings }) => {
             if (!settings.canFormatText) delete element.style;
             elements.push(element);
         }
-        return { errors, doc: { name: data.name, paper, labelDefault: data.labelDefault, elements } };
+        return {
+            errors,
+            doc: { name: data.name, paper, labelDefault: data.labelDefault, headerHeightMm: data.headerHeightMm, footerHeightMm: data.footerHeightMm, elements }
+        };
     } catch (err) {
         throw err;
     }

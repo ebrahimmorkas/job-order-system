@@ -9,7 +9,7 @@ import ColorField from '../../../components/common/ColorField';
 import { CopyIcon, TrashIcon } from '../../../components/common/ActionIcons';
 import {
   CUSTOM_PAPER_MAX_MM, DEFAULT_STROKE, DEFAULT_STYLE, ELEMENT_LABELS, FONT_FAMILIES, FONT_SIZE_MAX, FONT_SIZE_MIN,
-  IMAGE_FITS, IMAGE_NUMBER_MAX, MIN_SIZE_MM, elementName, STROKE_WIDTH_MAX, TABLE_COLS_MAX, TABLE_ROWS_MAX,
+  IMAGE_FITS, IMAGE_NUMBER_MAX, ITEM_FIELD_KEYS, MIN_SIZE_MM, elementName, STROKE_WIDTH_MAX, TABLE_COLS_MAX, TABLE_LINES, TABLE_ROWS_MAX,
 } from '../layoutConstants';
 
 const LABEL_MAX_LENGTH = 60;
@@ -85,14 +85,14 @@ const StrokeFields = ({ stroke, onChange, title = 'Line' }) => {
         <ColorField label="Colour" value={s.color} onChange={(value) => set({ color: value }, 'strokeColor')} />
         <NumberField label="Thickness" unit="pt" min={0} max={STROKE_WIDTH_MAX} step={0.25} value={s.width} onChange={(value) => set({ width: value }, 'strokeWidth')} />
       </div>
-      <Checkbox size="sm" label="Dashed" checked={s.dashed} onChange={(e) => set({ dashed: e.target.checked })} />
+      <Checkbox size="sm" name="strokeDashed" label="Dashed" checked={s.dashed} onChange={(e) => set({ dashed: e.target.checked })} />
     </Section>
   );
 };
 
 const FillFields = ({ fill, onChange }) => (
   <div className="space-y-2">
-    <Checkbox size="sm" label="Fill" checked={!!fill} onChange={(e) => onChange({ fill: e.target.checked ? '#eef2ff' : null })} />
+    <Checkbox size="sm" name="fill" label="Fill" checked={!!fill} onChange={(e) => onChange({ fill: e.target.checked ? '#eef2ff' : null })} />
     {fill && <ColorField label="Fill colour" value={fill} onChange={(value) => onChange({ fill: value }, 'fill')} />}
   </div>
 );
@@ -101,6 +101,7 @@ const LabelFields = ({ field, defaultLabel, onChange }) => (
   <div className="space-y-2">
     <Checkbox
       size="sm"
+      name="showLabel"
       label="Show label"
       description={`"${defaultLabel}: value" instead of "value"`}
       checked={field.showLabel}
@@ -118,7 +119,11 @@ const LabelFields = ({ field, defaultLabel, onChange }) => (
   </div>
 );
 
-// Rows / columns, column widths and what each cell shows.
+const NO_ROW_STYLE = { bold: false, fill: null };
+
+// Rows / columns, column widths, lines, what each cell shows, and the row
+// printed once for each item of the job order (with its row styles and
+// columns hidden when no item has a value).
 const TableFields = ({ element, fieldOptions, resolve, onChange }) => {
   const { table } = element;
   const [cellAt, setCellAt] = useState({ row: 0, col: 0 });
@@ -126,11 +131,21 @@ const TableFields = ({ element, fieldOptions, resolve, onChange }) => {
   const col = Math.min(cellAt.col, table.cols - 1);
   const cell = table.cells[row][col];
   const setTable = (patch, key) => onChange({ table: { ...table, ...patch } }, key);
+  const repeatRow = Number.isInteger(table.repeatRow) ? table.repeatRow : null;
+  const rowStyleOf = (r) => table.rowStyles?.[r] || NO_ROW_STYLE;
+  const rowStyle = rowStyleOf(row);
+  const setRowStyle = (patch, key) => setTable({ rowStyles: Array.from({ length: table.rows }, (_, r) => (r === row ? { ...rowStyle, ...patch } : rowStyleOf(r))) }, key);
+  // The column of the picked cell can hide when its repeated cell is a field.
+  const canHideCol = repeatRow !== null && !!table.cells[repeatRow][col].field;
+  const setHideCol = (isHidden) => setTable({ hideEmptyCols: Array.from({ length: table.cols }, (_, c) => (c === col ? isHidden : !!table.hideEmptyCols?.[c])) });
 
   const resize = (rows, cols) => {
     const cells = Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (__, c) => table.cells[r]?.[c] || { text: '', field: null }));
     const colWidths = Array.from({ length: cols }, (_, c) => table.colWidths[c] || 1);
-    setTable({ rows, cols, cells, colWidths });
+    const patch = { rows, cols, cells, colWidths, repeatRow: repeatRow !== null && repeatRow < rows ? repeatRow : null };
+    if (table.rowStyles) patch.rowStyles = Array.from({ length: rows }, (_, r) => rowStyleOf(r));
+    if (table.hideEmptyCols) patch.hideEmptyCols = Array.from({ length: cols }, (_, c) => !!table.hideEmptyCols[c]);
+    setTable(patch);
   };
   const setCell = (patch, key) => {
     const cells = table.cells.map((cells, r) => (r === row ? cells.map((c, i) => (i === col ? { ...c, ...patch } : c)) : cells));
@@ -163,23 +178,60 @@ const TableFields = ({ element, fieldOptions, resolve, onChange }) => {
         <div className="grid gap-0.5" style={{ gridTemplateColumns: `repeat(${table.cols}, minmax(0, 1fr))` }}>
           {table.cells.flatMap((cells, r) => cells.map((c, i) => {
             const isPicked = r === row && i === col;
+            const isRepeat = r === repeatRow;
             const shown = c.field ? resolve(c.field).label : c.text;
+            let look = 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50';
+            if (isPicked) look = 'border-indigo-500 bg-indigo-50 text-indigo-700';
+            else if (isRepeat) look = 'border-dashed border-indigo-400 bg-indigo-50/60 text-indigo-700 hover:bg-indigo-50';
             return (
               <button
                 key={`${r}-${i}`}
                 type="button"
                 onClick={() => setCellAt({ row: r, col: i })}
-                aria-label={`Cell row ${r + 1} column ${i + 1}`}
+                aria-label={`Cell row ${r + 1} column ${i + 1}${isRepeat ? ' (repeats for each item)' : ''}`}
                 aria-pressed={isPicked}
-                title={shown || 'Empty'}
-                className={`h-7 truncate rounded border px-1 text-[11px] cursor-pointer ${isPicked ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'} ${c.field ? 'italic' : ''}`}
+                title={`${shown || 'Empty'}${isRepeat ? ' - repeats for each item' : ''}`}
+                className={`h-7 truncate rounded border px-1 text-[11px] cursor-pointer ${look} ${c.field ? 'italic' : ''}`}
               >
                 {shown || '·'}
               </button>
             );
           }))}
         </div>
+        {repeatRow !== null && (
+          <p className="mt-1 text-xs text-indigo-700">
+            Row {repeatRow + 1} prints once for each item. The table grows and what is below it moves down; rows above it repeat on a new page.
+          </p>
+        )}
       </div>
+      <Dropdown label="Lines" aria-label="Table lines" size="sm" options={TABLE_LINES} value={table.lines || 'all'} onChange={(value) => setTable({ lines: value || 'all' })} />
+      <div className="space-y-2 rounded-md bg-gray-50 p-2">
+        <p className="text-xs font-medium text-gray-700">Row {row + 1}</p>
+        <Checkbox
+          size="sm"
+          name="repeatRow"
+          label="Repeat this row for each item"
+          description="One row per item of the job order, e.g. Job order name and Cutting."
+          checked={repeatRow === row}
+          onChange={(e) => setTable({ repeatRow: e.target.checked ? row : null })}
+        />
+        <Checkbox size="sm" name="rowBold" label="Bold" checked={rowStyle.bold} onChange={(e) => setRowStyle({ bold: e.target.checked })} />
+        <Checkbox size="sm" name="rowFill" label="Background colour" checked={!!rowStyle.fill} onChange={(e) => setRowStyle({ fill: e.target.checked ? '#eef2ff' : null })} />
+        {rowStyle.fill && <ColorField label="Row colour" value={rowStyle.fill} onChange={(value) => setRowStyle({ fill: value }, `rowFill-${row}`)} />}
+      </div>
+      {canHideCol && (
+        <div className="space-y-2 rounded-md bg-gray-50 p-2">
+          <p className="text-xs font-medium text-gray-700">Column {col + 1}</p>
+          <Checkbox
+            size="sm"
+            name="hideEmptyCol"
+            label="Hide when no item has a value"
+            description={'Otherwise an empty value prints "-".'}
+            checked={!!table.hideEmptyCols?.[col]}
+            onChange={(e) => setHideCol(e.target.checked)}
+          />
+        </div>
+      )}
       <div className="space-y-2 rounded-md bg-gray-50 p-2">
         <p className="text-xs font-medium text-gray-700">Row {row + 1}, column {col + 1}</p>
         <Dropdown
@@ -217,7 +269,7 @@ const TableFields = ({ element, fieldOptions, resolve, onChange }) => {
  */
 const PropertiesPanel = ({ element, paper, sources, resolve, canFormatText, onChange, onDuplicate, onDelete, onArrange }) => {
   const fieldOptions = [
-    ...sources.systemFields.map((f) => ({ value: `system:${f.key}`, label: f.label })),
+    ...sources.systemFields.map((f) => ({ value: `system:${f.key}`, label: ITEM_FIELD_KEYS.includes(f.key) ? `Item: ${f.label}` : f.label })),
     ...sources.masters.map((m) => ({ value: `master:${m._id}`, label: `Master: ${m.name}` })),
     ...sources.controls.map((c) => ({ value: `control:${c._id}`, label: `Control: ${c.label}` })),
   ];

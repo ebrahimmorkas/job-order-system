@@ -1,9 +1,14 @@
 import { formatMoney } from '../jobOrders/jobOrderTotals';
-import { customerLineOf, masterLabelOf } from '../jobOrders/summaryRows';
+import { customerLineOf, masterLabelOf, sizeTextOf } from '../jobOrders/summaryRows';
 import { formatDueAt } from '../jobOrders/workTime';
+import { ITEM_FIELD_KEYS } from './layoutConstants';
 
 // What a field on a layout shows: { label, value }. In the designer the value
 // is a placeholder ("[Cutting]"); printing a job order fills in its values.
+// A resolver takes the field and where it is printed: { itemIndex } in a
+// table row repeated for each item (that item's value), { page } for the page
+// number. Without itemIndex a master, control or item field shows every
+// item's value, one per line ("1. Round"), or just the value with one item.
 
 const SYSTEM_LABELS = {
   jobOrderNumber: 'Job order number',
@@ -19,12 +24,21 @@ const SYSTEM_LABELS = {
   companyAddress: 'Company address',
   companyTaxIds: 'Company tax numbers',
   workDetails: 'Work given',
+  pageNumber: 'Page number',
+  itemNumber: 'Item no.',
+  itemName: 'Job order name',
+  itemQuantity: 'Quantity',
+  itemSize: 'Size',
+  itemAmount: 'Item amount',
 };
 
 const byId = (docs) => new Map((docs || []).map((doc) => [doc._id, doc]));
 
-/** The text of a field: "label: value", or the value alone. */
+const pageText = (page) => `Page ${page?.number ?? 1} of ${page?.count ?? 1}`;
+
+/** The text of a field: "label: value", or the value alone; nothing at all when it has no value. */
 export const fieldText = (field, { label, value }) => {
+  if (!value) return '';
   if (!field.showLabel) return value;
   const shown = field.labelText || label;
   return shown ? `${shown}: ${value}` : value;
@@ -38,12 +52,15 @@ export const placeholderResolver = ({ masters, controls, systemFields }) => {
   const masterById = byId(masters);
   const controlById = byId(controls);
   const systemByKey = new Map((systemFields || []).map((f) => [f.key, f.label]));
-  return (field) => {
+  return (field, { itemIndex, page } = {}) => {
     let label;
     if (field.source === 'master') label = masterById.get(field.refId)?.name;
     else if (field.source === 'control') label = controlById.get(field.refId)?.label;
     else label = systemByKey.get(field.key) || SYSTEM_LABELS[field.key];
-    return label ? { label, value: `[${label}]` } : { label: 'Removed', value: '[removed]', isMissing: true };
+    if (!label) return { label: 'Removed', value: '[removed]', isMissing: true };
+    if (field.key === 'pageNumber') return { label, value: pageText(page) };
+    if (field.key === 'itemNumber' && itemIndex !== undefined) return { label, value: String(itemIndex + 1) };
+    return { label, value: `[${label}]` };
   };
 };
 
@@ -63,10 +80,10 @@ const personLineOf = (person, value, printWork) => {
   return parts.join(' · ');
 };
 
-// The "Work given" field: each value with work, then a line per person.
-const workDetailsOf = (jobOrder, printWork, useShortNames) => {
+// The "Work given" of one item: each value with work, then a line per person.
+const workLinesOf = (item, printWork, useShortNames) => {
   const lines = [];
-  for (const master of jobOrder.masters) {
+  for (const master of item.masters) {
     for (const value of master.values) {
       if (!value.assignedTo?.length) continue;
       lines.push(`${value.name} (${masterLabelOf(master, useShortNames)})`);
@@ -76,22 +93,22 @@ const workDetailsOf = (jobOrder, printWork, useShortNames) => {
       }
     }
   }
-  return lines.join('\n');
+  return lines;
 };
 
 /**
  * A job order's real values.
- * @param {Object} jobOrder - As saved (models/JobOrder.js)
- * @param {{ masters, controls, company: { name, byCountry }, settings: { useShortNames } }} printData
+ * @param {Object} jobOrder - As saved (models/JobOrder.js), with its items
+ * @param {{ masters, controls, company: { name, byCountry }, settings: { useShortNames, printWork } }} printData
  */
 export const jobOrderResolver = (jobOrder, { masters, controls, company, settings }) => {
   const masterNames = byId(masters);
   const controlNames = byId(controls);
-  const pickedById = new Map(jobOrder.masters.map((m) => [m.masterId, m]));
-  const answerById = new Map(jobOrder.controls.map((c) => [c.controlId, c]));
+  const items = jobOrder.items || [];
   const money = (amount) => formatMoney(amount, jobOrder.currency);
   const countryId = jobOrder.tax?.countryId || jobOrder.customer?.countryId || Object.keys(company.byCountry || {})[0];
   const companyHere = company.byCountry?.[countryId] || { address: '', taxIds: [] };
+  const printWork = settings.printWork || {};
 
   const SYSTEM_VALUES = {
     jobOrderNumber: () => jobOrder.jobOrderNumber,
@@ -106,27 +123,67 @@ export const jobOrderResolver = (jobOrder, { masters, controls, company, setting
     companyName: () => company.name,
     companyAddress: () => companyHere.address,
     companyTaxIds: () => companyHere.taxIds.map((t) => `${t.label}: ${t.value}`).join('\n'),
-    workDetails: () => workDetailsOf(jobOrder, settings.printWork || {}, settings.useShortNames),
   };
 
-  return (field) => {
+  // A master / control / item field's value on one item ('' = none).
+  const itemValueOf = (field, item, index) => {
     if (field.source === 'master') {
-      const picked = pickedById.get(field.refId);
-      const named = picked || masterNames.get(field.refId);
-      return {
-        label: named ? masterLabelOf(named, settings.useShortNames) : '',
-        value: picked ? picked.values.map((v) => v.name).join(', ') : '',
-      };
+      const picked = item.masters.find((m) => m.masterId === field.refId);
+      return picked ? picked.values.map((v) => v.name).join(', ') : '';
     }
     if (field.source === 'control') {
-      const answer = answerById.get(field.refId);
-      const label = answer?.label || controlNames.get(field.refId)?.label || '';
-      if (!answer) return { label, value: '' };
-      if (answer.isPrice) return { label, value: answer.amount === null ? '' : money(answer.amount) };
-      if (answer.type === 'checkbox') return { label, value: answer.checked === null ? '' : (answer.checked ? 'Yes' : 'No') };
-      if (answer.type === 'radio') return { label, value: answer.optionName || '' };
-      return { label, value: answer.text || '' };
+      const answer = item.controls.find((c) => c.controlId === field.refId);
+      if (!answer) return '';
+      if (answer.isPrice) return answer.amount === null || answer.amount === undefined ? '' : money(answer.amount);
+      if (answer.type === 'checkbox') return answer.checked === null || answer.checked === undefined ? '' : (answer.checked ? 'Yes' : 'No');
+      if (answer.type === 'radio' || answer.type === 'dropdown') return answer.optionName || '';
+      return answer.text || '';
     }
-    return { label: SYSTEM_LABELS[field.key], value: SYSTEM_VALUES[field.key]?.() || '' };
+    switch (field.key) {
+      case 'itemNumber': return String(index + 1);
+      case 'itemName': return item.name || '';
+      case 'itemQuantity': return item.quantity ? String(item.quantity) : '';
+      case 'itemSize': return item.chargeBy === 'unit' && item.unit && item.size !== null && item.size !== undefined ? sizeTextOf(item) : '';
+      case 'itemAmount': {
+        const prices = item.controls.filter((c) => c.isPrice && c.amount !== null && c.amount !== undefined);
+        return prices.length > 0 ? money(prices.reduce((sum, c) => sum + c.amount, 0)) : '';
+      }
+      case 'workDetails': return workLinesOf(item, printWork, settings.useShortNames).join('\n');
+      default: return '';
+    }
+  };
+
+  // Every item's value: just the value with one item, else "1. Round" lines
+  // (items without a value left out). Work given goes under each item's name.
+  const allItemsValueOf = (field) => {
+    if (items.length === 1) return itemValueOf(field, items[0], 0);
+    const lines = [];
+    items.forEach((item, index) => {
+      const value = itemValueOf(field, item, index);
+      if (!value) return;
+      if (field.key === 'workDetails') lines.push(`Item ${index + 1}${item.name ? ` · ${item.name}` : ''}`, ...value.split('\n').map((line) => `  ${line}`));
+      else lines.push(`${index + 1}. ${value}`);
+    });
+    return lines.join('\n');
+  };
+
+  const labelOf = (field) => {
+    if (field.source === 'master') {
+      const named = items.flatMap((item) => item.masters).find((m) => m.masterId === field.refId) || masterNames.get(field.refId);
+      return named ? masterLabelOf(named, settings.useShortNames) : '';
+    }
+    if (field.source === 'control') {
+      return items.flatMap((item) => item.controls).find((c) => c.controlId === field.refId)?.label || controlNames.get(field.refId)?.label || '';
+    }
+    return SYSTEM_LABELS[field.key];
+  };
+
+  return (field, { itemIndex, page } = {}) => {
+    const label = labelOf(field);
+    if (field.key === 'pageNumber') return { label, value: pageText(page) };
+    const isPerItem = field.source !== 'system' || ITEM_FIELD_KEYS.includes(field.key) || field.key === 'workDetails';
+    if (!isPerItem) return { label, value: SYSTEM_VALUES[field.key]?.() || '' };
+    if (itemIndex !== undefined) return { label, value: items[itemIndex] ? itemValueOf(field, items[itemIndex], itemIndex) : '' };
+    return { label, value: allItemsValueOf(field) };
   };
 };

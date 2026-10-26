@@ -176,8 +176,13 @@ Each section's code is downloaded the first time it is opened
   and users with Edit (the workers' own steps don't change) - and the list
   a Step column. Leaving with unsaved changes asks first. With Layout
   Master on, the view has Print: pick a layout (the default first), see the
-  job order in it (the first item for now), then Print (the page at the layout's paper size) or
-  Download PDF / PNG / JPEG.
+  job order in it (every item: a table row set to repeat prints once per
+  item, the table grows and what is below it moves down; what doesn't fit
+  continues on more pages, with the header / footer and the table's heading
+  rows repeated - `layouts/printFlow.js`, `layouts/usePrintedPages.jsx`),
+  then Print (the pages at the layout's paper size) or Download PDF (all
+  pages) / PNG / JPEG (one file per page). A field outside a table shows
+  every item's value, one "1. value" line each.
 - **Customers** (`features/customers`, only while the feature is on) -
   saved from job orders with a phone or an email (one per phone / email).
   The list (latest job order first, search by name, phone, email or address,
@@ -201,12 +206,15 @@ Each section's code is downloaded the first time it is opened
   bigger than its area scrolls inside it; the selected item shows how far it
   is from the left, right, top and bottom of the page, or of the table it
   sits in), and the selected item's settings on the
-  right (place and size, label on / off and its text, table cells, line and
-  fill, and - when allowed - font, size, bold, italic, underline, alignment,
+  right (place and size, label on / off and its text, table cells, the row
+  repeated for each item, row bold / colour, table lines, a column hidden when
+  no item has a value, line and fill, and - when allowed - font, size, bold, italic, underline, alignment,
   colour). Each side panel has a fold button on its canvas side: folded, it
   becomes a slim strip (with the button to open it again) and the page gets
-  the room (kept in the browser). Export downloads the template as PDF,
-  PNG or JPEG. Leaving with unsaved changes asks first.
+  the room (kept in the browser). The page settings set the header and
+  footer heights (shaded bands on the page; what is inside prints on every
+  page). Preview pages shows the layout printed for a chosen number of
+  items. Export downloads the template as PDF, PNG or JPEG. Leaving with unsaved changes asks first.
 - **Company Settings** - tabs: General (company name, login tagline, logo -
   the menu and browser tab update at once), Job Orders (automatic numbers,
   ask the customer address, where to use master short names, price on a job

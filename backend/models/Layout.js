@@ -25,6 +25,10 @@ const layoutSchema = new mongoose.Schema({
     },
     // Which fields show their label when dropped (each can be changed).
     labelDefault: { type: String, enum: LABEL_DEFAULTS, default: 'none' },
+    // The header (top) and footer (bottom) bands: what lies inside them is
+    // printed on every page. 0 = none.
+    headerHeightMm: { type: Number, default: 0 },
+    footerHeightMm: { type: Number, default: 0 },
     // The elements, bottom to top: { id, type, x, y, width, height, ... }.
     // Their shape is checked by middlewares/validations/layoutValidations.js
     // and services/layoutService.js.

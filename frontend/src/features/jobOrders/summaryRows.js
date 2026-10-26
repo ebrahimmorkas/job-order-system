@@ -28,7 +28,7 @@ const valueTextOf = (value) => {
 
 // "2.3 × 4.1 = 9.43 sq ft (charged 11.25 sq ft)": the size of one piece of
 // a per unit item (an empty measurement counts as 1).
-const sizeTextOf = (item) => {
+export const sizeTextOf = (item) => {
   const { unit } = item;
   const names = measurementsOf(unit.measuredAs);
   const measured = names.map((name) => formatSize(item.measurements?.[name] ?? 1));

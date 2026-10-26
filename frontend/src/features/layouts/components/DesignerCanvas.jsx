@@ -107,8 +107,13 @@ const DistanceGuides = ({ element, elements, paper, zoom }) => {
  * @param {(field) => { label, value }} props.resolve
  * @param {boolean} props.canFormatText
  * @param {string|null} props.logoUrl
+ * @param {number} [props.headerHeightMm] - The header band (printed on every page), shaded
+ * @param {number} [props.footerHeightMm] - The footer band, shaded
  */
-const DesignerCanvas = ({ paper, elements, selectedId, onSelect, onBeginChange, onMove, onDropItem, zoom, onZoomChange, resolve, canFormatText, logoUrl }) => {
+const DesignerCanvas = ({
+  paper, elements, selectedId, onSelect, onBeginChange, onMove, onDropItem, zoom, onZoomChange, resolve, canFormatText, logoUrl,
+  headerHeightMm = 0, footerHeightMm = 0,
+}) => {
   const pageRef = useRef(null);
   const outerRef = useRef(null);
   const pxPerMm = PX_PER_MM * zoom;
@@ -240,6 +245,31 @@ const DesignerCanvas = ({ paper, elements, selectedId, onSelect, onBeginChange, 
           userSelect: 'none',
         }}
       >
+        {[
+          { key: 'header', height: headerHeightMm, label: 'Header · prints on every page', spot: { top: 0, borderBottom: `${1 / zoom}px dashed #6366f1` } },
+          { key: 'footer', height: footerHeightMm, label: 'Footer · prints on every page', spot: { bottom: 0, borderTop: `${1 / zoom}px dashed #6366f1` } },
+        ].filter((band) => band.height > 0).map((band) => (
+          <div
+            key={band.key}
+            data-band={band.key}
+            aria-hidden="true"
+            style={{ position: 'absolute', left: 0, right: 0, height: `${band.height}mm`, background: 'rgba(99, 102, 241, 0.05)', pointerEvents: 'none', ...band.spot }}
+          >
+            <span
+              style={{
+                position: 'absolute',
+                right: 4 / zoom,
+                [band.key === 'header' ? 'bottom' : 'top']: 2 / zoom,
+                color: '#6366f1',
+                fontFamily: 'Inter, "Segoe UI", Arial, sans-serif',
+                fontSize: 9 / zoom,
+                fontWeight: 600,
+              }}
+            >
+              {band.label}
+            </span>
+          </div>
+        ))}
         {elements.map((element) => {
           const isSelected = element.id === selectedId;
           return (

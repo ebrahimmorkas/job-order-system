@@ -551,13 +551,19 @@ designer; any logged-in user can print a job order with an active one.
   `Letter`, `Legal` portrait / landscape, or `custom` 50 - 1500 mm each way;
   `widthMm` / `heightMm` are saved as printed), `labelDefault` (`none`,
   `masters`, `controls`, `both` - which dropped fields show "name: value")
-  and up to 300 `elements`. Sizes and places are in millimetres from the
-  page's top-left; font sizes in points.
+  `headerHeightMm` / `footerHeightMm` (0 = none; together they must leave at
+  least 20 mm of the page) and up to 300 `elements`. Sizes and places are in
+  millimetres from the page's top-left; font sizes in points. Elements lying
+  wholly inside the header or footer band print on every page.
 - Elements: `field` (a master, a control, or a job order / company field:
   number, date, customer address, subtotal, tax, total, company name,
-  address, tax numbers, work given; `showLabel`, `labelText`), `text`, `line`,
-  `rectangle`, `circle`, `table` (up to 30 x 10 cells, each typed text or
-  a field), `logo` (the Company Settings logo) and `image` (one of the job
+  address, tax numbers, work given, page number; per item: item no., job
+  order name, quantity, size, item amount; `showLabel`, `labelText`), `text`,
+  `line`, `rectangle`, `circle`, `table` (up to 30 x 10 cells, each typed
+  text or a field; `repeatRow` - the row printed once for each item of the
+  job order, null = none; `lines` `all` / `outside` / `rows` / `none`;
+  `rowStyles` `[{ bold, fill }]` one per row; `hideEmptyCols` one per column:
+  left out when no item has a value, otherwise "-"), `logo` (the Company Settings logo) and `image` (one of the job
   order's images: `imageNumber` 1 = its first, `fit` `contain` / `cover`;
   empty when the job order has fewer). Every element must be on the page and
   every master / control must still exist. The form-data's
@@ -738,9 +744,10 @@ and `advance`. `PATCH /api/my-work/:id/step` takes
 `{ itemId, valueId, stepKey, percent, holdReason }`.
 
 `POST` / `PUT /api/layouts` take `{ name, paper: { size, orientation } | { size:
-'custom', widthMm, heightMm }, labelDefault, elements }`. Field errors are
-named `name`, `paper.*` and `elements.<elementId>` (an item off the page or a
-master / control that is gone).
+'custom', widthMm, heightMm }, labelDefault, headerHeightMm, footerHeightMm,
+elements }`. Field errors are named `name`, `paper.*`, `headerHeightMm` (header
+and footer leave too little room) and `elements.<elementId>` (an item off the
+page or a master / control that is gone).
 
 `POST` / `PUT /api/roles` take `{ name, type (create only), modules: [{ module,
 permissions }] }` or `{ ..., masters: [{ masterId, isWholeMaster, valueIds }] }`.

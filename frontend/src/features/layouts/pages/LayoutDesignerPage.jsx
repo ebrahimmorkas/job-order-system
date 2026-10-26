@@ -6,6 +6,8 @@ import Spinner from '../../../components/common/Spinner';
 import Menu from '../../../components/common/Menu';
 import Dropdown from '../../../components/common/DropDown';
 import InputField from '../../../components/common/InputField';
+import NumberField from '../../../components/common/NumberField';
+import Modal from '../../../components/common/Modal';
 import { BackIcon } from '../../../components/common/ActionIcons';
 import { useToast } from '../../../components/common/Toast';
 import { useUnsavedChanges } from '../../../components/common/UnsavedChanges';
@@ -16,10 +18,11 @@ import SidePanel from '../components/SidePanel';
 import PaperSetup from '../components/PaperSetup';
 import LayoutPage from '../components/LayoutPage';
 import { useLayoutHistory } from '../useLayoutHistory';
+import { usePrintedPages } from '../usePrintedPages';
 import { placeholderResolver } from '../fieldValues';
 import { EXPORT_FORMATS, exportPage } from '../exportLayout';
 import {
-  CUSTOM_PAPER, ELEMENTS_MAX, IMAGE_NUMBER_MAX, NAME_MAX_LENGTH, PX_PER_MM, createElement, describePaper, elementName, fitOnPage, newElementId, paperOf,
+  BODY_MIN_MM, CUSTOM_PAPER, ELEMENTS_MAX, IMAGE_NUMBER_MAX, NAME_MAX_LENGTH, PX_PER_MM, createElement, describePaper, elementName, fitOnPage, newElementId, paperOf,
 } from '../layoutConstants';
 import * as layoutsApi from '../api/layoutsApi';
 
@@ -43,7 +46,12 @@ const GRID_COLUMNS = {
   '': 'lg:grid-cols-[2.75rem_minmax(0,1fr)_2.75rem]',
 };
 const COPY_SUFFIX = ' (copy)';
-const NEW_LAYOUT = { name: '', paper: { size: 'A4', orientation: 'portrait' }, labelDefault: 'none', elements: [] };
+const NEW_LAYOUT = { name: '', paper: { size: 'A4', orientation: 'portrait' }, labelDefault: 'none', headerHeightMm: 0, footerHeightMm: 0, elements: [] };
+// Items in "Preview pages" (as many as a job order might have).
+const PREVIEW_ITEMS = 3;
+const PREVIEW_ITEMS_MAX = 50;
+// The preview's page width on screen.
+const PREVIEW_WIDTH_PX = 560;
 const ZOOM_OPTIONS = [
   { value: 'fit', label: 'Fit' },
   ...[0.5, 0.75, 1, 1.25, 1.5, 2].map((z) => ({ value: String(z), label: `${z * 100}%` })),
@@ -59,6 +67,8 @@ const toPayload = ({ name, labelDefault, doc }) => ({
     ? { size: CUSTOM_PAPER, widthMm: doc.paper.widthMm, heightMm: doc.paper.heightMm }
     : { size: doc.paper.size, orientation: doc.paper.orientation },
   labelDefault,
+  headerHeightMm: doc.headerHeightMm,
+  footerHeightMm: doc.footerHeightMm,
   elements: doc.elements,
 });
 
@@ -66,6 +76,42 @@ const isOutside = (element, paper) =>
   element.x + element.width > paper.widthMm + 0.01 || element.y + element.height > paper.heightMm + 0.01;
 
 const isTyping = (target) => target.closest('input, textarea, select, [contenteditable="true"], [role="listbox"]');
+
+/**
+ * The layout as it prints a job order of some items, with placeholders: the
+ * table rows repeated for each item, what moves down, the pages.
+ */
+const PagesPreview = ({ isOpen, onClose, doc, paper, resolve, canFormatText, logoUrl }) => {
+  const [itemCount, setItemCount] = useState(PREVIEW_ITEMS);
+  const { pages, measurer } = usePrintedPages({ layout: isOpen ? doc : null, paper, resolve, itemCount, canFormatText });
+  const scale = Math.min(1, PREVIEW_WIDTH_PX / (paper.widthMm * PX_PER_MM));
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Preview pages" size="xl">
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="w-40">
+            <NumberField label="Items in the job order" min={1} max={PREVIEW_ITEMS_MAX} value={itemCount} onChange={(value) => Number.isInteger(value) && value >= 1 && setItemCount(Math.min(PREVIEW_ITEMS_MAX, value))} />
+          </div>
+          {pages && <p className="pb-2 text-sm text-gray-500">{pages.length} {pages.length === 1 ? 'page' : 'pages'}</p>}
+        </div>
+        <p className="text-xs text-gray-500">Fields show their names in brackets. A table row set to repeat prints once for each item.</p>
+        <div className="max-h-[65vh] space-y-4 overflow-y-auto rounded-lg bg-gray-100 p-4">
+          {pages?.map((elements, index) => (
+            <div key={index} data-preview-page={index + 1}>
+              <p className="mb-1 text-center text-xs text-gray-500">Page {index + 1} of {pages.length}</p>
+              <div className="mx-auto shadow-md ring-1 ring-gray-300" style={{ width: paper.widthMm * PX_PER_MM * scale, height: paper.heightMm * PX_PER_MM * scale }}>
+                <div style={{ transform: `scale(${scale})`, transformOrigin: '0 0' }}>
+                  <LayoutPage paper={paper} elements={elements} resolve={resolve} canFormatText={canFormatText} logoUrl={logoUrl} page={{ number: index + 1, count: pages.length }} />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      {measurer}
+    </Modal>
+  );
+};
 
 /**
  * The designer, once everything it needs is loaded.
@@ -76,7 +122,7 @@ const Designer = ({ mode, initial, formData, onBack }) => {
   const [step, setStep] = useState(mode === 'create' ? 'setup' : 'design');
   const [name, setName] = useState(initial.name);
   const [labelDefault, setLabelDefault] = useState(initial.labelDefault);
-  const history = useLayoutHistory({ paper: initial.paper, elements: initial.elements });
+  const history = useLayoutHistory({ paper: initial.paper, headerHeightMm: initial.headerHeightMm, footerHeightMm: initial.footerHeightMm, elements: initial.elements });
   const { doc } = history;
   const [savedSnapshot, setSavedSnapshot] = useState(() => (mode === 'clone' ? null : JSON.stringify(toPayload({ ...initial, doc: history.doc }))));
   const [selectedId, setSelectedId] = useState(null);
@@ -90,6 +136,7 @@ const Designer = ({ mode, initial, formData, onBack }) => {
   // Server errors per element id.
   const [elementErrors, setElementErrors] = useState({});
   const [panels, setPanels] = useState(readPanels);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const areaRef = useRef(null);
   const exportRef = useRef(null);
 
@@ -185,6 +232,12 @@ const Designer = ({ mode, initial, formData, onBack }) => {
   };
 
   const changePaper = (next) => history.change((d) => ({ ...d, paper: next }), 'paper');
+  // Header / footer heights: whole page minus the room kept between them.
+  const bandMax = (other) => Math.max(0, Math.floor(paper.heightMm - BODY_MIN_MM - other));
+  const changeBand = (key, value) => {
+    if (typeof value !== 'number' || Number.isNaN(value) || value < 0) return;
+    history.change((d) => ({ ...d, [key]: Math.round(value * 10) / 10 }), key);
+  };
   const fitAllOnPage = () => {
     history.change((d) => ({ ...d, elements: d.elements.map((e) => fitOnPage(e, paper)) }));
     setFormError('');
@@ -353,6 +406,7 @@ const Designer = ({ mode, initial, formData, onBack }) => {
           <div className="w-24">
             <Dropdown size="sm" options={zoomOptions} value={zoomChoice} onChange={(value) => setZoomChoice(value)} aria-label="Zoom" />
           </div>
+          <Button variant="outline" size="sm" onClick={() => setIsPreviewOpen(true)}>Preview pages</Button>
           <Menu align="right" width="w-48" trigger={<Button variant="outline" size="sm" loading={exporting !== null} loadingText="Exporting...">Export</Button>} items={exportItems} />
           <Button size="sm" onClick={save} loading={isSaving} loadingText="Saving...">{layoutId ? 'Save' : 'Create layout'}</Button>
         </div>
@@ -401,6 +455,8 @@ const Designer = ({ mode, initial, formData, onBack }) => {
               onDropItem={(item, x, y) => addItem(item, { x, y })}
               zoom={zoom}
               onZoomChange={(value) => setZoomChoice(String(Math.min(ZOOM_MAX, value)))}
+              headerHeightMm={doc.headerHeightMm}
+              footerHeightMm={doc.footerHeightMm}
               resolve={resolve}
               canFormatText={canFormatText}
               logoUrl={formData.company.logoUrl}
@@ -460,11 +516,32 @@ const Designer = ({ mode, initial, formData, onBack }) => {
                 onLabelDefaultChange={setLabelDefault}
                 isCompact
               />
+              <section className="space-y-2">
+                <h3 className="text-sm font-medium text-gray-700">Header and footer</h3>
+                <p className="text-xs text-gray-500">
+                  What lies inside the top (header) or bottom (footer) band prints on every page. A job order with many items continues on more pages between them.
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <NumberField label="Header height" unit="mm" min={0} max={bandMax(doc.footerHeightMm)} step={1} value={doc.headerHeightMm} onChange={(value) => changeBand('headerHeightMm', value)} />
+                  <NumberField label="Footer height" unit="mm" min={0} max={bandMax(doc.headerHeightMm)} step={1} value={doc.footerHeightMm} onChange={(value) => changeBand('footerHeightMm', value)} />
+                </div>
+                <p className="text-xs text-gray-500">0 = none. Keep at least {BODY_MIN_MM} mm between them.</p>
+              </section>
               {!canFormatText && <p className="text-xs text-gray-500">Text formatting (font, size, bold...) is not part of your plan.</p>}
             </div>
           )}
         </SidePanel>
       </div>
+
+      <PagesPreview
+        isOpen={isPreviewOpen}
+        onClose={() => setIsPreviewOpen(false)}
+        doc={doc}
+        paper={paper}
+        resolve={resolve}
+        canFormatText={canFormatText}
+        logoUrl={formData.company.logoUrl}
+      />
 
       <div aria-hidden="true" style={{ position: 'fixed', left: -100000, top: 0, pointerEvents: 'none' }}>
         <LayoutPage ref={exportRef} paper={paper} elements={doc.elements} resolve={resolve} canFormatText={canFormatText} logoUrl={formData.company.logoUrl} />
@@ -502,6 +579,8 @@ const LayoutDesignerPage = ({ mode, layoutId, onBack }) => {
             id: mode === 'edit' ? layoutId : null,
             name: mode === 'clone' ? `${base}${COPY_SUFFIX}` : saved.name,
             labelDefault: saved.labelDefault,
+            headerHeightMm: saved.headerHeightMm || 0,
+            footerHeightMm: saved.footerHeightMm || 0,
             paper,
             elements: saved.elements,
           },

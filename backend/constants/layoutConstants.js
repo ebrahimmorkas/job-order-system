@@ -57,9 +57,26 @@ const SYSTEM_FIELDS = {
     companyAddress: 'Company address',
     companyTaxIds: 'Company tax numbers',
     // Every value's work: who, step, start and due (Company Settings says which).
-    workDetails: 'Work given'
+    workDetails: 'Work given',
+    // "Page 1 of 2" - for a header or footer.
+    pageNumber: 'Page number',
+    // One item's own details (ITEM_FIELD_KEYS): in a table row repeated for
+    // each item, the value of that item; elsewhere every item's, one per line.
+    itemNumber: 'Item no.',
+    itemName: 'Job order name',
+    itemQuantity: 'Quantity',
+    itemSize: 'Size',
+    itemAmount: 'Item amount'
 };
 const SYSTEM_FIELD_KEYS = Object.keys(SYSTEM_FIELDS);
+const ITEM_FIELD_KEYS = ['itemNumber', 'itemName', 'itemQuantity', 'itemSize', 'itemAmount'];
+
+// Which lines a table draws: every cell, only its outside, only across
+// (between rows), or none.
+const TABLE_LINES = ['all', 'outside', 'rows', 'none'];
+// The header (top) and footer (bottom) bands repeat on every printed page;
+// between them at least this much is left for the rest.
+const BODY_MIN_MM = 20;
 
 const FONT_FAMILIES = ['sans', 'serif', 'mono'];
 const TEXT_ALIGNS = ['left', 'center', 'right'];
@@ -93,6 +110,9 @@ module.exports = {
     FIELD_SOURCE_VALUES,
     SYSTEM_FIELDS,
     SYSTEM_FIELD_KEYS,
+    ITEM_FIELD_KEYS,
+    TABLE_LINES,
+    BODY_MIN_MM,
     FONT_FAMILIES,
     TEXT_ALIGNS,
     FONT_SIZE_MIN,

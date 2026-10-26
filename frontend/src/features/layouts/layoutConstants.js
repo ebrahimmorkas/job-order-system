@@ -20,6 +20,19 @@ export const STROKE_WIDTH_MAX = 10;
 export const IMAGE_NUMBER_MAX = 50;
 /** Smallest item side in the designer. */
 export const MIN_SIZE_MM = 2;
+/** Room left between the header and footer bands. */
+export const BODY_MIN_MM = 20;
+
+/** Fields of one item (the backend's ITEM_FIELD_KEYS): per item in a repeated table row. */
+export const ITEM_FIELD_KEYS = ['itemNumber', 'itemName', 'itemQuantity', 'itemSize', 'itemAmount'];
+
+/** Which lines a table draws (the backend's TABLE_LINES). */
+export const TABLE_LINES = [
+  { value: 'all', label: 'All lines' },
+  { value: 'outside', label: 'Outside only' },
+  { value: 'rows', label: 'Across only (between rows)' },
+  { value: 'none', label: 'No lines' },
+];
 
 export const LABEL_DEFAULTS = [
   { value: 'masters', label: 'Masters' },
@@ -116,7 +129,7 @@ export const createElement = (kind, { x = 10, y = 10, field = null, labelDefault
         width: 100,
         height: 24,
         stroke: { ...DEFAULT_STROKE, width: 0.5 },
-        table: { rows: 3, cols: 2, colWidths: [1, 1], cells: Array.from({ length: 3 }, () => [{ text: '', field: null }, { text: '', field: null }]) },
+        table: { rows: 3, cols: 2, colWidths: [1, 1], cells: Array.from({ length: 3 }, () => [{ text: '', field: null }, { text: '', field: null }]), repeatRow: null, lines: 'all' },
       };
     case 'logo':
       return { ...base, width: 40, height: 20 };
@@ -126,6 +139,16 @@ export const createElement = (kind, { x = 10, y = 10, field = null, labelDefault
       throw new Error(`Unknown element kind: ${kind}`);
   }
 };
+
+/** Which band an element is in: 'header' (inside the top band), 'footer' (inside the bottom band) or 'body'. */
+export const bandOf = (element, { headerHeightMm = 0, footerHeightMm = 0 }, paper) => {
+  if (headerHeightMm > 0 && element.y + element.height <= headerHeightMm + 0.01) return 'header';
+  if (footerHeightMm > 0 && element.y >= paper.heightMm - footerHeightMm - 0.01) return 'footer';
+  return 'body';
+};
+
+/** A table with a row printed once for each item. */
+export const isRepeatingTable = (element) => element.type === 'table' && Number.isInteger(element.table.repeatRow);
 
 /** Keeps an element inside the page: smaller first if needed, then moved in. */
 export const fitOnPage = (element, paper) => {
