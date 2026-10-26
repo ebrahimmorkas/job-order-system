@@ -116,7 +116,10 @@ Services" with the values Polishing, Cutting, Edging.
   (optional, unique the same way), `isMultiselectAllowed`, `isRequired` (a
   job order can't be saved without a value picked), `isRoleProvided` ("Role
   will be provided for this master": a master role can use it; it can't be
-  unticked, and the master can't be deleted, while a role uses it),
+  unticked while a role uses it. Deleting a master roles or users use needs
+  `removeFromRoles` - said yes to the alert listing them, from
+  `POST /api/masters/role-usage` - and it then leaves those roles and users'
+  extra / taken-away access; the roles stay, even with no master left),
   `defaultValueId`
   (the value picked in advance on a new job order - optional, one active
   value; cleared when that value is made inactive or deleted), `precedence`
@@ -262,7 +265,9 @@ only while RBAC is on (WebsiteMaster and CompanyMaster `isRBACFeatureOn`).
 - Active / inactive, deleted softly. `numberOfRoleCreationAllowed` counts
   active + inactive roles (null = no limit).
 - A deleted master value leaves every role; a master entry left with no value
-  is removed.
+  is removed. A deleted master leaves every role (when deleted with
+  `removeFromRoles`). A master role may have no master: it then gives
+  nothing until one is added.
 
 ## Users
 
@@ -288,8 +293,8 @@ account. A user can't deactivate or delete themselves.
     of a module each (the same modules / options as a module role);
   - `extraMasters: [{ masterId, isWholeMaster, valueIds, startDate, endDate }]`
     - role-provided masters, whole or some values, view only (like a master
-    role). Deleted values leave it; a master used here can't be deleted or
-    unticked.
+    role). Deleted values and deleted masters leave it; a master used here
+    can't be unticked.
   While the bit is off, saving a user leaves their extras untouched.
 - Taken away from what the roles give, for this user only (saved with or
   without extra access allowed; extras still count on top):
@@ -686,9 +691,10 @@ too (see Users logging in) - except Layout Master, which stays owner only.
 | PATCH | `/api/job-orders/:id/step` | owner (users: Edit on job orders), steps on - the job order's own step `{ stepKey, percent (In progress), holdReason (Hold) }` |
 | GET | `/api/masters/for-job-order` | logged in - active masters with their active values and default, for the job order form |
 | GET / POST | `/api/masters` | owner - list (search, status, page, limit) / create with values |
-| GET / PUT / DELETE | `/api/masters/:id` | owner - one master with its values / save details and the full values list / delete |
+| GET / PUT / DELETE | `/api/masters/:id` | owner - one master with its values / save details and the full values list / delete (`?removeFromRoles=true` when roles or users use it, else 409) |
+| POST | `/api/masters/role-usage` | owner - `{ ids }` -> `{ roles, users }`: names of the roles / users using those masters (for the delete alert) |
 | PATCH | `/api/masters/:id/status` | owner - `{ isActive }` |
-| POST | `/api/masters/bulk` | owner - `{ action: activate|deactivate|delete, ids }` |
+| POST | `/api/masters/bulk` | owner - `{ action: activate|deactivate|delete, ids, removeFromRoles }` |
 | PATCH | `/api/masters/:id/default` | owner - `{ valueId }` (null = no default), an active value |
 | PATCH | `/api/masters/:id/move` | owner - `{ direction: up|down }`, one place in the whole list |
 | PATCH | `/api/masters/:id/values/:valueId/move` | owner - `{ direction: up|down }`, one place inside the master |

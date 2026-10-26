@@ -88,7 +88,7 @@ const checkRole = ({ type, data, availableModules, roleMasters }) => {
             return { errors, doc: { modules, masters: [] } };
         }
 
-        if (data.masters.length === 0) errors.push({ field: 'masters', message: 'Add at least one master' });
+        // No master is allowed: the role then gives nothing (e.g. its only master was deleted).
         const known = new Map(roleMasters.map((master) => [idOf(master._id), master]));
         const masters = [];
         for (const entry of data.masters) {

@@ -73,7 +73,7 @@ const namesOf = (docs, noun) => {
 
 // A master given in roles, or as a user's extra access, can't stop being
 // role-provided or be deleted: a 409 naming them, or null when unused.
-const usedByRolesResult = async ({ vendorId, id, action }) => {
+const usedByRolesResult = async ({ vendorId, id, action, isDelete = false }) => {
     try {
         const [roles, users] = await Promise.all([
             Role.find({ vendorId, status: LIVE, 'masters.masterId': id }).select('name').limit(4).lean(),
@@ -81,8 +81,39 @@ const usedByRolesResult = async ({ vendorId, id, action }) => {
         ]);
         const usedBy = [namesOf(roles, 'role'), namesOf(users, 'user')].filter(Boolean);
         if (usedBy.length === 0) return null;
-        const message = `This master is used by ${usedBy.join(' and ')}. Remove it from them first, then ${action}.`;
+        const message = isDelete
+            ? `This master is used by ${usedBy.join(' and ')}. Deleting it removes it from them (the roles stay) - ${action}.`
+            : `This master is used by ${usedBy.join(' and ')}. Remove it from them first, then ${action}.`;
         return common.returnResult(false, 409, message, { errors: [{ field: 'isRoleProvided', message }] });
+    } catch (err) {
+        throw err;
+    }
+};
+
+// Who uses some masters (for the alert before deleting them): role names and
+// names of users given them as extra access, each sorted.
+const roleUsageOf = async ({ vendorId, ids }) => {
+    try {
+        const [roles, users] = await Promise.all([
+            Role.find({ vendorId, status: LIVE, 'masters.masterId': { $in: ids } }).select('name').sort({ name: 1 }).lean(),
+            User.find({ vendorId, role: ROLES.USER, status: LIVE, 'extraMasters.masterId': { $in: ids } }).select('name').sort({ name: 1 }).lean()
+        ]);
+        return common.returnResult(true, 200, 'Master usage fetched.', { roles: roles.map((role) => role.name), users: users.map((user) => user.name) });
+    } catch (err) {
+        throw err;
+    }
+};
+
+// A deleted master leaves every role and every user's extra / taken-away
+// access. The roles stay, even when left with no master.
+const removeMasterFromRoles = async ({ vendorId, userId, id }) => {
+    try {
+        await Role.updateMany({ vendorId, status: LIVE, 'masters.masterId': id }, { $pull: { masters: { masterId: id } } }, { auditUserId: userId });
+        await User.updateMany(
+            { vendorId, role: ROLES.USER, $or: [{ 'extraMasters.masterId': id }, { 'revokedMasters.masterId': id }] },
+            { $pull: { extraMasters: { masterId: id }, revokedMasters: { masterId: id } } },
+            { auditUserId: userId }
+        );
     } catch (err) {
         throw err;
     }
@@ -333,13 +364,27 @@ const setMasterStatus = async ({ vendorId, userId, id, isActive }) => {
     }
 };
 
-// DELETE /api/masters/:id - soft delete, with all its values.
-const deleteMaster = async ({ vendorId, userId, id }) => {
+// POST /api/masters/role-usage - the roles / users using these masters.
+const getRoleUsage = async ({ vendorId, ids }) => {
     try {
-        const used = await usedByRolesResult({ vendorId, id, action: 'delete it' });
-        if (used) return used;
+        return await roleUsageOf({ vendorId, ids });
+    } catch (err) {
+        throw err;
+    }
+};
+
+// DELETE /api/masters/:id - soft delete, with all its values. A master used in
+// roles (or users' extra access) needs removeFromRoles (said yes to the alert):
+// it then leaves them, and the roles stay.
+const deleteMaster = async ({ vendorId, userId, id, removeFromRoles = false }) => {
+    try {
+        if (!removeFromRoles) {
+            const used = await usedByRolesResult({ vendorId, id, action: 'confirm the delete', isDelete: true });
+            if (used) return used;
+        }
         const result = await common.softDelete(Master, id, userId, vendorId);
         if (!result.isSuccess) return result.statusCode === 404 ? common.returnResult(false, 404, 'Master not found.') : result;
+        await removeMasterFromRoles({ vendorId, userId, id });
         await MasterValue.updateMany(
             { vendorId, masterId: id, status: LIVE },
             { $set: { status: 'D', deletedBy: userId, deletedDate: new Date() } },
@@ -357,11 +402,12 @@ const BULK_ACTIONS = {
     delete: deleteMaster
 };
 
-// POST /api/masters/bulk - each master on its own; meta.results says how each went.
-const bulkUpdateMasters = async ({ vendorId, userId, action, ids }) => {
+// POST /api/masters/bulk - each master on its own; meta.results says how each
+// went. removeFromRoles: as for one delete.
+const bulkUpdateMasters = async ({ vendorId, userId, action, ids, removeFromRoles }) => {
     try {
         const run = BULK_ACTIONS[action];
-        return await common.runBulkOperation(ids, (id) => run({ vendorId, userId, id }));
+        return await common.runBulkOperation(ids, (id) => run({ vendorId, userId, id, removeFromRoles }));
     } catch (err) {
         throw err;
     }
@@ -486,6 +532,7 @@ module.exports = {
     createMaster,
     updateMaster,
     setMasterStatus,
+    getRoleUsage,
     deleteMaster,
     bulkUpdateMasters,
     moveMaster,

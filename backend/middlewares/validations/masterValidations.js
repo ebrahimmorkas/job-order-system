@@ -88,9 +88,21 @@ const defaultValueSchema = Joi.object({
     valueId: objectId('Value id').allow(null)
 });
 
-// POST /api/masters/bulk
+// POST /api/masters/bulk - removeFromRoles: deleting also takes the masters
+// out of the roles / users using them (after the alert).
 const bulkMastersSchema = Joi.object({
     action: Joi.string().valid('activate', 'deactivate', 'delete').required().label('Action'),
+    ids: Joi.array().items(objectId('Master id')).min(1).max(MASTER_LIST_MAX_PAGE_SIZE).unique().required().label('Masters'),
+    removeFromRoles: Joi.boolean().default(false).label('Remove from roles')
+});
+
+// DELETE /api/masters/:id?removeFromRoles=true
+const deleteMasterQuerySchema = Joi.object({
+    removeFromRoles: Joi.boolean().default(false).label('Remove from roles')
+});
+
+// POST /api/masters/role-usage - the roles / users using these masters.
+const roleUsageSchema = Joi.object({
     ids: Joi.array().items(objectId('Master id')).min(1).max(MASTER_LIST_MAX_PAGE_SIZE).unique().required().label('Masters')
 });
 
@@ -108,5 +120,7 @@ module.exports = {
     statusSchema,
     defaultValueSchema,
     bulkMastersSchema,
+    deleteMasterQuerySchema,
+    roleUsageSchema,
     moveSchema
 };

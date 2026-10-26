@@ -93,7 +93,8 @@ Each section's code is downloaded the first time it is opened
   once); create, copy and
   edit, where every change waits for Save and leaving with unsaved changes
   asks first. With RBAC on, a master can be ticked "Role will be provided for
-  this master".
+  this master". Deleting (one or several) first names the roles / users using
+  the masters; saying yes takes the masters out of them (the roles stay).
 - **Users** (only while RBAC is on) - the list (search, role and status
   filters, roles shown as chips - amber before they start, struck through once
   ended - and "+N extra", status switch, bulk actions, users usage pill) and
@@ -115,7 +116,8 @@ Each section's code is downloaded the first time it is opened
   Edit for Company Settings - ticking anything ticks View, ticking Edit ticks
   Details, unticking Details unticks Edit; All ticks every option of a
   module, the All in the header every option of every module); a master role adds role
-  masters, each "Whole master" or some of its values.
+  masters, each "Whole master" or some of its values (or none: the role then
+  gives no access until one is added).
 - **Controls** - fields the vendor adds to the job order (text field, text
   area, checkbox, radio buttons, dropdown), only the types assigned to the vendor: the
   same list as Masters plus a type filter and a usage pill per limited type;

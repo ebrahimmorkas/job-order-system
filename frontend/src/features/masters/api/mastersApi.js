@@ -35,10 +35,19 @@ export const setMasterStatus = (id, isActive) => apiRequest(`${BASE}/${id}/statu
 /** One place up or down in the whole list. direction: 'up' | 'down' */
 export const moveMaster = (id, direction) => apiRequest(`${BASE}/${id}/move`, { method: 'PATCH', body: { direction } });
 
-export const deleteMaster = (id) => apiRequest(`${BASE}/${id}`, { method: 'DELETE' });
+/** The roles / users using these masters: { roles: [name], users: [name] } */
+export const getRoleUsage = (ids) => apiRequest(`${BASE}/role-usage`, { method: 'POST', body: { ids } });
 
-/** action: 'activate' | 'deactivate' | 'delete' -> { results, successCount, failureCount } */
-export const bulkUpdateMasters = (action, ids) => apiRequest(`${BASE}/bulk`, { method: 'POST', body: { action, ids } });
+/** removeFromRoles: also take it out of the roles / users using it (the roles stay). */
+export const deleteMaster = (id, { removeFromRoles = false } = {}) =>
+  apiRequest(`${BASE}/${id}${removeFromRoles ? '?removeFromRoles=true' : ''}`, { method: 'DELETE' });
+
+/**
+ * action: 'activate' | 'deactivate' | 'delete' -> { results, successCount, failureCount }
+ * removeFromRoles: as for deleteMaster.
+ */
+export const bulkUpdateMasters = (action, ids, { removeFromRoles = false } = {}) =>
+  apiRequest(`${BASE}/bulk`, { method: 'POST', body: { action, ids, removeFromRoles } });
 
 // The values popup on the list - saved straight away.
 export const setValueStatus = (id, valueId, isActive) =>

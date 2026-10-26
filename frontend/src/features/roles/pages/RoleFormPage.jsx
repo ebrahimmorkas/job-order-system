@@ -135,7 +135,6 @@ const RoleFormPage = ({ mode, roleId, onDone, onBack, readOnly = false, onEdit =
       if (role.modules.length === 0) errors.modules = 'Add at least one module';
       for (const m of role.modules) if (m.permissions.length === 0) errors[`modules.${m.module}`] = 'Tick at least one option';
     } else {
-      if (role.masters.length === 0) errors.masters = 'Add at least one master';
       for (const m of role.masters) {
         if (!m.isWholeMaster && m.valueIds.length === 0) errors[`masters.${m.masterId}`] = 'Pick at least one value, or tick "Whole master"';
       }
@@ -409,6 +408,9 @@ const RoleFormPage = ({ mode, roleId, onDone, onBack, readOnly = false, onEdit =
                     </div>
                   );
                 })}
+                {role.masters.length === 0 && options.masters.length > 0 && (
+                  <p className="text-sm text-amber-700">No master added: this role gives no access until one is added.</p>
+                )}
                 {fieldErrors.masters && <p className="text-sm text-red-600" role="alert">{fieldErrors.masters}</p>}
               </div>
             </Card>

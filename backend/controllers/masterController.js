@@ -82,10 +82,20 @@ const setMasterStatus = async (req, res) => {
 // DELETE /api/masters/:id
 const deleteMaster = async (req, res) => {
     try {
-        const result = await masterService.deleteMaster({ vendorId: req.vendorId, userId: req.user._id, id: req.params.id });
+        const result = await masterService.deleteMaster({ vendorId: req.vendorId, userId: req.user._id, id: req.params.id, removeFromRoles: req.query.removeFromRoles });
         return respond(res, result, { vendorId: req.vendorId, masterId: req.params.id });
     } catch (err) {
         logException('Error while deleting the master', err);
+    }
+};
+
+// POST /api/masters/role-usage
+const getRoleUsage = async (req, res) => {
+    try {
+        const result = await masterService.getRoleUsage({ vendorId: req.vendorId, ids: req.body.ids });
+        return sendResult(res, result);
+    } catch (err) {
+        logException('Error while fetching master usage', err);
     }
 };
 
@@ -164,6 +174,7 @@ module.exports = {
     createMaster,
     updateMaster,
     setMasterStatus,
+    getRoleUsage,
     deleteMaster,
     bulkUpdateMasters,
     moveMaster,

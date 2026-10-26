@@ -29,13 +29,14 @@ router.get('/', can('view'), validate(v.listMastersQuerySchema, 'query'), master
 router.post('/', can('create'), validate(v.createMasterSchema), masterController.createMaster);
 // Above '/:id', so "bulk" is never read as an id.
 router.post('/bulk', can(bulkPermission), validate(v.bulkMastersSchema), masterController.bulkUpdateMasters);
+router.post('/role-usage', can('delete'), validate(v.roleUsageSchema), masterController.getRoleUsage);
 
 router.get('/:id', can('details'), byId, masterController.getMaster);
 router.put('/:id', can('edit'), byId, validate(v.updateMasterSchema), masterController.updateMaster);
 router.patch('/:id/status', can('edit'), byId, validate(v.statusSchema), masterController.setMasterStatus);
 router.patch('/:id/move', can('edit'), byId, validate(v.moveSchema), masterController.moveMaster);
 router.patch('/:id/default', can('edit'), byId, validate(v.defaultValueSchema), masterController.setDefaultValue);
-router.delete('/:id', can('delete'), byId, masterController.deleteMaster);
+router.delete('/:id', can('delete'), byId, validate(v.deleteMasterQuerySchema, 'query'), masterController.deleteMaster);
 
 // The values popup on the list; everything else about values is saved with the master (PUT /:id).
 router.patch('/:id/values/:valueId/status', can('edit'), byValueId, validate(v.statusSchema), masterController.setValueStatus);

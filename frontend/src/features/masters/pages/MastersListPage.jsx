@@ -26,6 +26,12 @@ const STATUS_OPTIONS = [
   { value: 'I', label: 'Inactive' },
 ];
 
+// "A", "B" and "C"
+const namesText = (names) => {
+  const quoted = names.map((name) => `“${name}”`);
+  return quoted.length > 1 ? `${quoted.slice(0, -1).join(', ')} and ${quoted.at(-1)}` : quoted[0];
+};
+
 const BULK_LABELS = {
   activate: 'marked as active',
   deactivate: 'marked as inactive',
@@ -66,7 +72,7 @@ const MastersListPage = ({ onCreate, onView, onEdit, onClone }) => {
   const [selectedKeys, setSelectedKeys] = useState([]);
   const [busyId, setBusyId] = useState(null);
   const [bulkAction, setBulkAction] = useState(null);
-  const [toDelete, setToDelete] = useState(null); // { ids, label }
+  const [toDelete, setToDelete] = useState(null); // { ids, label, usage: { roles, users } }
   const [isDeleting, setIsDeleting] = useState(false);
   const [valuesOf, setValuesOf] = useState(null); // the master whose values popup is open
 
@@ -140,8 +146,8 @@ const MastersListPage = ({ onCreate, onView, onEdit, onClone }) => {
   const total = data?.pagination.total || 0;
   const rowIndex = new Map((data?.masters || []).map((master, i) => [master._id, firstIndex + i]));
 
-  const runBulk = async (action, ids) => {
-    const result = await mastersApi.bulkUpdateMasters(action, ids);
+  const runBulk = async (action, ids, options) => {
+    const result = await mastersApi.bulkUpdateMasters(action, ids, options);
     if (result.failureCount === 0) {
       toast.success(`${result.successCount} ${result.successCount === 1 ? 'master' : 'masters'} ${BULK_LABELS[action]}.`);
     } else {
@@ -161,15 +167,27 @@ const MastersListPage = ({ onCreate, onView, onEdit, onClone }) => {
     }
   };
 
+  // The delete alert says first which roles / users use the masters.
+  const askDelete = async (ids, label) => {
+    try {
+      const usage = await mastersApi.getRoleUsage(ids);
+      setToDelete({ ids, label, usage });
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
   const confirmDelete = async () => {
     setIsDeleting(true);
+    // Said yes to the alert: the masters also leave the roles / users using them.
+    const options = { removeFromRoles: true };
     try {
       if (toDelete.ids.length === 1) {
-        await mastersApi.deleteMaster(toDelete.ids[0]);
+        await mastersApi.deleteMaster(toDelete.ids[0], options);
         toast.success(`"${toDelete.label}" deleted.`);
         reload();
       } else {
-        await runBulk('delete', toDelete.ids);
+        await runBulk('delete', toDelete.ids, options);
       }
     } catch (err) {
       toast.error(err.message);
@@ -283,7 +301,7 @@ const MastersListPage = ({ onCreate, onView, onEdit, onClone }) => {
                 disabled={isBusy || !canCreate}
               />
             )}
-            {mayDelete && <IconButton label={`Delete "${master.name}"`} icon={TrashIcon} variant="danger" onClick={() => setToDelete({ ids: [master._id], label: master.name })} disabled={isBusy} />}
+            {mayDelete && <IconButton label={`Delete "${master.name}"`} icon={TrashIcon} variant="danger" onClick={() => askDelete([master._id], master.name)} disabled={isBusy} />}
           </div>
         );
       },
@@ -332,7 +350,7 @@ const MastersListPage = ({ onCreate, onView, onEdit, onClone }) => {
           actions={[
             mayEdit && { key: 'activate', label: `Mark active (${selectedCount})`, variant: 'outline', onClick: () => handleBulkStatus('activate'), loading: bulkAction === 'activate', disabled: bulkAction !== null },
             mayEdit && { key: 'deactivate', label: `Mark inactive (${selectedCount})`, variant: 'outline', onClick: () => handleBulkStatus('deactivate'), loading: bulkAction === 'deactivate', disabled: bulkAction !== null },
-            mayDelete && { key: 'delete', label: `Delete (${selectedCount})`, variant: 'danger', onClick: () => setToDelete({ ids: selectedKeys, label: `${selectedCount} masters` }), disabled: bulkAction !== null },
+            mayDelete && { key: 'delete', label: `Delete (${selectedCount})`, variant: 'danger', onClick: () => askDelete(selectedKeys, `${selectedCount} masters`), disabled: bulkAction !== null },
           ].filter(Boolean)}
         />
       )}
@@ -364,7 +382,20 @@ const MastersListPage = ({ onCreate, onView, onEdit, onClone }) => {
       <ConfirmDialog
         isOpen={!!toDelete}
         title={toDelete?.ids.length > 1 ? `Delete ${toDelete.ids.length} masters?` : 'Delete master?'}
-        message={toDelete && <>“{toDelete.label}” and all {toDelete.ids.length > 1 ? 'their' : 'its'} values will no longer be offered on new job orders.</>}
+        message={toDelete && (
+          <div className="space-y-3">
+            <p>“{toDelete.label}” and all {toDelete.ids.length > 1 ? 'their' : 'its'} values will no longer be offered on new job orders.</p>
+            {(toDelete.usage.roles.length > 0 || toDelete.usage.users.length > 0) && (
+              <Alert variant="warning">
+                {toDelete.ids.length > 1 ? 'These masters are' : 'This master is'} used
+                {toDelete.usage.roles.length > 0 && <> in the {toDelete.usage.roles.length > 1 ? 'roles' : 'role'} {namesText(toDelete.usage.roles)}</>}
+                {toDelete.usage.roles.length > 0 && toDelete.usage.users.length > 0 && ' and'}
+                {toDelete.usage.users.length > 0 && <> as extra access of {toDelete.usage.users.length > 1 ? 'the users' : 'the user'} {namesText(toDelete.usage.users)}</>}
+                . Deleting takes {toDelete.ids.length > 1 ? 'them' : 'it'} out of these; the roles stay.
+              </Alert>
+            )}
+          </div>
+        )}
         confirmLabel="Delete"
         loading={isDeleting}
         onConfirm={confirmDelete}
