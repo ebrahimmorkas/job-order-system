@@ -5,6 +5,7 @@ const { verifyAccessToken } = require('../utils/token');
 // Live updates carry encoded ids, like every response.
 const { encodeIds } = require('../utils/idEncryption');
 const logger = require('../utils/logger');
+const { resolveDomain, hostnameFromHeaders } = require('../utils/requestDomain');
 const { ROLES } = require('../constants/roleConstants');
 
 // Live updates for the open pages over socket.io (path /socket.io). A page
@@ -31,7 +32,7 @@ const rooms = {
 // The same checks as middlewares/vendorDetection.js + authenticate.js.
 const authenticateSocket = async (socket, next) => {
     try {
-        const domain = String(socket.handshake.headers.host || '').replace(/:\d+$/, '').toLowerCase();
+        const domain = resolveDomain(hostnameFromHeaders(socket.handshake.headers));
         const token = socket.handshake.auth?.token;
         let decoded = null;
         try {

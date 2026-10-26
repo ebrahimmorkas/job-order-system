@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node --watch server.js",
     "start": "node server.js",
-    "seed": "node seeds/seedVendor.js && node seeds/seedWebsiteMaster.js && node seeds/seedLocationMasters.js && node seeds/seedTaxMaster.js && node seeds/seedCompanyMaster.js && node seeds/seedCompanySettings.js && node seeds/seedUser.js"
+    "seed": "node seeds/seedVendor.js && node seeds/seedWebsiteMaster.js && node seeds/seedLocationMasters.js && node seeds/seedTaxMaster.js && node seeds/seedCompanyMaster.js && node seeds/seedCompanySettings.js && node seeds/seedUser.js",
+    "seed:stage": "node --env-file=.env.stage seeds/seedVendor.js && node --env-file=.env.stage seeds/seedWebsiteMaster.js && node --env-file=.env.stage seeds/seedLocationMasters.js && node --env-file=.env.stage seeds/seedTaxMaster.js && node --env-file=.env.stage seeds/seedCompanyMaster.js && node --env-file=.env.stage seeds/seedCompanySettings.js && node --env-file=.env.stage seeds/seedUser.js"
   },
   "keywords": [],
   "author": "",

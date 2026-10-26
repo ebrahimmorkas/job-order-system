@@ -1,0 +1,54 @@
+# Render Blueprint - the stage backend API (Express + socket.io).
+# The frontend is deployed separately on Vercel (see vercel.json), which
+# forwards /api, /socket.io and /uploads to this service.
+#
+# Secrets and addresses (sync: false) are NOT written here - Render asks for
+# them when the Blueprint is created, and they are changed later in the
+# dashboard under Environment.
+services:
+  - type: web
+    name: job-order-stage-api
+    runtime: node
+    plan: free
+    region: singapore
+    branch: stage
+    rootDir: backend
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: IS_REDIS_SERVER_ON
+        value: "0"
+      - key: TRUST_PROXY
+        value: "true"
+      - key: ACCESS_TOKEN_EXPIRY
+        value: 15m
+      - key: REFRESH_TOKEN_EXPIRY
+        value: 30d
+      - key: SALT_ROUNDS
+        value: "12"
+      - key: MONGODB_URI
+        sync: false
+      - key: CLIENT_URL
+        sync: false
+      - key: DEFAULT_VENDOR_DOMAIN
+        sync: false
+      - key: ID_ENCRYPTION_KEY
+        sync: false
+      - key: ID_ENCRYPTION_IV
+        sync: false
+      - key: CREDENTIALS_ENCRYPTION_KEY
+        sync: false
+      - key: ACCESS_TOKEN_SECRET
+        sync: false
+      - key: REFRESH_TOKEN_SECRET
+        sync: false
+      - key: COOKIE_SECRET
+        sync: false

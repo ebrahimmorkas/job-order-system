@@ -682,6 +682,29 @@ Every upload is checked by its content (not its name or the browser's type):
 JPEG, PNG, WebP or GIF only, up to the vendor's `maxImageUploadSizeMB`. The
 uploader's file name is never used. Replacing an image deletes the old file.
 
+## Stage deployment (branch `stage`)
+
+- Frontend on Vercel (`vercel.json` at the repo root), backend on Render
+  (`render.yaml`, a Blueprint), database on MongoDB Atlas. Production stays on
+  the VPS with its own MongoDB.
+- The browser only talks to the Vercel address: Vercel forwards `/api`,
+  `/socket.io` (live updates, over long-polling) and `/uploads` to Render. So
+  the login cookie is the page's own and there is no CORS.
+- The vendor is found from the domain the visitor opened: `TRUST_PROXY=true`
+  makes `req.hostname` read X-Forwarded-Host (`utils/requestDomain.js`; the
+  live updates read it the same way). A request that still arrives on
+  Render's own address uses `DEFAULT_VENDOR_DOMAIN`.
+- `GET /healthz` (no vendor needed) is Render's health check. On Render the
+  server calls it itself every 10 minutes so the free plan never sleeps
+  (`services/keepAliveService.js`; `KEEP_ALIVE_ENABLED=0` turns it off).
+- Render's disk is wiped on every deploy, so stage stores images on
+  Cloudinary, not `local`.
+- Seeds and scripts run from this computer against Atlas with a git-ignored
+  `backend/.env.stage` (the same keys as Render): `node --env-file=.env.stage
+  seeds/seedVendor.js <domain>` - its values win over `.env`.
+  `npm run seed:stage` runs every seed that way (SEED_VENDOR_DOMAIN and
+  SEED_ADMIN_PASSWORD in `.env.stage`).
+
 ## Main endpoints
 
 Where a row says owner, a user whose roles give that module's permission may

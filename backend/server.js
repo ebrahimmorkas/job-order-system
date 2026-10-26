@@ -37,6 +37,7 @@ const serviceStatusWatcher = require('./services/serviceStatusWatcher');
 const notificationRoutes = require('./routes/notificationRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const realtimeService = require('./services/realtimeService');
+const keepAliveService = require('./services/keepAliveService');
 const overdueWatcher = require('./services/overdueWatcher');
 const { REALTIME_EVENTS } = require('./constants/notificationConstants');
 const storageProviderConfig = require('./config/storageProviderConfig');
@@ -52,11 +53,24 @@ const PORT = process.env.PORT || 5000;
 // Behind a reverse proxy (nginx) every request arrives from the proxy's own
 // address. TRUST_PROXY tells Express how many proxies to trust, so req.ip is
 // the real visitor's address (login limits and logs depend on it). Leave it
-// unset when there is no proxy, or anyone could fake their IP.
+// unset when there is no proxy, or anyone could fake their IP. On stage
+// (Vercel -> Render) it is 'true': req.hostname then reads X-Forwarded-Host,
+// the domain the visitor opened (see utils/requestDomain.js).
 if (process.env.TRUST_PROXY) {
     const value = process.env.TRUST_PROXY;
-    app.set('trust proxy', /^\d+$/.test(value) ? Number(value) : value);
+    app.set('trust proxy', value === 'true' ? true : /^\d+$/.test(value) ? Number(value) : value);
 }
+
+// Lets the hosting platform (Render) check the server is up, and the
+// keep-alive ping keep it awake. Above vendorDetection: it is called on the
+// server's own address, which is no vendor's domain.
+app.get('/healthz', (req, res) => {
+    try {
+        res.status(200).json({ success: true, message: 'OK' });
+    } catch (error) {
+        logger.logException('Exception in health check', error);
+    }
+});
 
 // Must be the first middleware mounted - every downstream middleware,
 // controller, and service needs to run inside its AsyncLocalStorage context
@@ -148,6 +162,8 @@ serviceStatusWatcher.onChange(({ vendorId }) => (vendorId
     : realtimeService.toEveryone(REALTIME_EVENTS.SERVICE_STATUS_CHANGED, {})));
 // Work past its due time is announced to the owner.
 overdueWatcher.start();
+// Stops Render's free plan from putting the server to sleep (does nothing elsewhere).
+keepAliveService.start();
 
 // On stop (Ctrl+C, or SIGTERM from pm2/docker/systemd): stop taking new
 // requests, let the ones in progress finish, then close MongoDB and Redis

@@ -1,6 +1,7 @@
 const Vendor = require('../models/Vendor');
 const logger = require('../utils/logger.js');
 const common = require('../utils/common');
+const { resolveDomain } = require('../utils/requestDomain');
 
 // Finds the vendor from the domain the request arrived on and sets
 // req.vendorId / req.vendorData for everything after it. Only an active
@@ -8,7 +9,7 @@ const common = require('../utils/common');
 // 404 as an unknown domain.
 const vendorDetection = async (req, res, next) => {
     try {
-        const domain = req.hostname.toLowerCase();
+        const domain = resolveDomain(req.hostname);
         const vendor = await Vendor.findOne({ domain, status: 'A' }).lean();
         if (!vendor) {
             logger.logInfo(0, 1, 'No active vendor for this domain', { domain });
